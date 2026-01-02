@@ -1,0 +1,37 @@
+name: Validate Kaori Claim Schemas
+
+on:
+  pull_request:
+    paths:
+      - "schemas/**"
+      - "meta/**"
+      - "tools/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "schemas/**"
+      - "meta/**"
+      - "tools/**"
+
+jobs:
+  validate-claims:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml jsonschema
+
+      - name: Validate Kaori claims
+        run: |
+          python tools/validate_claims.py

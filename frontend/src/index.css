@@ -1,0 +1,72 @@
+:root {
+  --bg-dark: #0a0a0c;
+  --bg-card: #141419;
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0a0;
+  --accent-primary: #00f2ff;
+  --accent-secondary: #7000ff;
+  --success: #00ff9d;
+  --warning: #ffb700;
+  --error: #ff3366;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+#root {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+h1, h2, h3 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Utilities */
+.card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge.verified { background: rgba(0, 255, 157, 0.1); color: var(--success); border: 1px solid rgba(0, 255, 157, 0.2); }
+.badge.pending { background: rgba(255, 183, 0, 0.1); color: var(--warning); border: 1px solid rgba(255, 183, 0, 0.2); }
+.badge.investigating { background: rgba(112, 0, 255, 0.1); color: var(--accent-secondary); border: 1px solid rgba(112, 0, 255, 0.2); }
+
+.mono { font-family: var(--font-mono); }
+.neon-text { text-shadow: 0 0 10px rgba(0, 242, 255, 0.5); color: var(--accent-primary); }
+
+/* Animations */
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+.animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
