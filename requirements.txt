@@ -1,0 +1,9 @@
+# Kaori Core Dependencies
+fastapi==0.109.0        # The API Framework
+uvicorn==0.27.0         # The Server
+pydantic==2.6.0         # Data Validation
+supabase==2.3.0         # Database Connection
+h3==3.7.6               # Earth/Ocean Grid
+healpy==1.16.6          # Moon/Space Grid
+pyyaml==6.0.1           # To read the Schemas
+google-cloud-kms==2.20.0 # For Signing Keys

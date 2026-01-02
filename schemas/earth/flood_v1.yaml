@@ -1,0 +1,23 @@
+domain: earth
+topic: flood
+version: 1.0
+
+# How long does this truth last before it needs re-verification?
+decay_rate_hours: 4 
+
+constraints:
+  spatial:
+    system: h3
+    resolution_min: 7  # Neighborhood level
+    resolution_max: 9  # Street level
+    
+  evidence:
+    required:
+      - photo_url
+      - water_level_cm
+    optional:
+      - flow_velocity
+      
+consensus:
+  # Requires 90% confidence to mint a "Gold" truth
+  min_confidence: 0.90
