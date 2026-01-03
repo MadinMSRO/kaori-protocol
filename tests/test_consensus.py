@@ -20,9 +20,9 @@ class TestConsensusComputation:
                     "bronze": 1,
                     "silver": 3,
                     "expert": 7,
-                    "ministry": 10,
+                    "authority": 10,
                 },
-                "override_allowed_roles": ["ministry"],
+                "override_allowed_roles": ["authority"],
                 "vote_types": {
                     "RATIFY": 1,
                     "REJECT": -1,
@@ -85,10 +85,10 @@ class TestConsensusComputation:
         assert result.finalized
         assert "REJECT_THRESHOLD" in result.finalize_reason
     
-    def test_ministry_override(self, claim_config):
+    def test_authority_override(self, claim_config):
         votes = [
             self._make_vote(Standing.BRONZE, VoteType.REJECT),
-            self._make_vote(Standing.MINISTRY, VoteType.OVERRIDE),
+            self._make_vote(Standing.AUTHORITY, VoteType.OVERRIDE),
         ]
         result = compute_consensus(votes, claim_config)
         assert result.finalized

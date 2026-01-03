@@ -30,7 +30,7 @@ from .models import (
     VoteType,
     SecurityBlock,
 )
-from .schema_loader import get_claim_config
+from .schema_loader import get_claim_config, get_claim_type
 from .signing import sign_truth_state
 from .truthkey import generate_truthkey
 
@@ -334,22 +334,34 @@ class KaoriEngine:
         
         truth_state.consensus.votes.append(vote)
         
-        # Simple Consensus Logic (Reference Implementation)
-        score = sum(1 if v.vote_type == VoteType.RATIFY else -1 if v.vote_type == VoteType.REJECT else 0 for v in truth_state.consensus.votes)
+        # Load typed ClaimType config
+        claim_type = get_claim_type(truth_state.claim_type)
+        claim_config = get_claim_config(truth_state.claim_type)  # Keep dict for confidence
+        
+        # Weighted Consensus Logic (Config-Driven)
+        score = 0
+        for v in truth_state.consensus.votes:
+            weight = claim_type.get_vote_weight(v.voter_standing.value if hasattr(v.voter_standing, 'value') else str(v.voter_standing))
+            if v.vote_type == VoteType.RATIFY:
+                score += weight
+            elif v.vote_type == VoteType.REJECT:
+                score -= weight
         truth_state.consensus.score = score
         
-        if abs(score) >= 3: # Demo threshold
+        # Use YAML-defined thresholds
+        finalize_threshold = claim_type.consensus_model.finalize_threshold
+        reject_threshold = claim_type.consensus_model.reject_threshold
+        
+        if score >= finalize_threshold:
             truth_state.consensus.finalized = True
-            outcome = "VERIFIED_TRUE" if score > 0 else "VERIFIED_FALSE"
-            if outcome == "VERIFIED_TRUE":
-                truth_state.status = TruthStatus.VERIFIED_TRUE
-                truth_state.verification_basis = VerificationBasis.HUMAN_CONSENSUS
-            else:
-                truth_state.status = TruthStatus.VERIFIED_FALSE
-                truth_state.verification_basis = VerificationBasis.HUMAN_CONSENSUS
+            truth_state.status = TruthStatus.VERIFIED_TRUE
+            truth_state.verification_basis = VerificationBasis.HUMAN_CONSENSUS
+        elif score <= reject_threshold:
+            truth_state.consensus.finalized = True
+            truth_state.status = TruthStatus.VERIFIED_FALSE
+            truth_state.verification_basis = VerificationBasis.HUMAN_CONSENSUS
         
         # Recompute confidence
-        claim_config = get_claim_config(truth_state.claim_type)
         truth_state = self._recompute_confidence(truth_state, claim_config)
         truth_state.updated_at = datetime.now(timezone.utc)
 

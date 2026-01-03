@@ -68,7 +68,7 @@ In Phase 1, Kaori observations are limited to **ground-based sources**, includin
 - Humans (MissionHub, field teams, citizens)
 - Drones
 - IoT sensors (water level, rain gauges, etc.)
-- Official reports (ministry site visits)
+- Official reports (authority site visits)
 
 > [!NOTE]
 > Satellite measurements (e.g., NDWI grids) are **external measurement layers**, not Kaori observations in v1. They MAY be joined later using TruthKey for evaluation and calibration, but are not part of the protocol core.
@@ -88,7 +88,7 @@ Standing is a **mandatory** protocol primitive for every Reporter and Validator.
 | `bronze` | New or unverified users |
 | `silver` | Established contributors |
 | `expert` | Domain specialists |
-| `ministry` | Government officials |
+| `authority` | Government officials |
 
 > [!NOTE]
 > **Standing Evolution** (how users graduate between classes) is defined in the **Kaori Flow** specification, not this document. This spec (Kaori Truth Standard) only defines how standing is *used* for validation.
@@ -242,7 +242,7 @@ human_gating:
   min_ai_confidence: 0.82
 
 validation_flow:
-  mode: auto | human_peer | human_expert | ministry_gate
+  mode: auto | human_peer | human_expert | authority_gate
 
 consensus_model:
   type: weighted_threshold
@@ -252,8 +252,8 @@ consensus_model:
     bronze: 1
     silver: 3
     expert: 7
-    ministry: 10
-  override_allowed_roles: ["ministry"]
+    authority: 10
+  override_allowed_roles: ["authority"]
   vote_types:
     RATIFY: +1
     REJECT: -1
@@ -280,7 +280,7 @@ dispute_resolution:
   timeout:
     peer_review: PT12H
     expert_review: PT24H
-    ministry_escalation: PT48H
+    authority_escalation: PT48H
   default_action_on_timeout: maintain_state | downgrade_to_investigating
 
 contradiction_rules:
@@ -562,9 +562,9 @@ If unresolved after timeout:
 - Maintain current state with `REQUIRES_HUMAN_REVIEW`, **OR**
 - Downgrade to `INVESTIGATING`, per YAML policy
 
-### 15.4 Ministry Escalation
+### 15.4 Authority Escalation
 
-If unresolved after expert timeout, Kaori **MUST** escalate to ministry if enabled.
+If unresolved after expert timeout, Kaori **MUST** escalate to authority if enabled.
 
 ---
 

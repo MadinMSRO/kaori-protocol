@@ -52,7 +52,7 @@ async def create_mission(data: MissionCreate):
     """
     Create a new mission.
     
-    Requires ministry standing (not enforced in demo).
+    Requires authority standing (not enforced in demo).
     """
     mission_id = uuid4()
     mission = {

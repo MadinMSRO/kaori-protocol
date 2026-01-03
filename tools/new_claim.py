@@ -111,9 +111,9 @@ DEFAULT_TEMPLATE = {
             "bronze": 1,
             "silver": 3,
             "expert": 7,
-            "ministry": 10
+            "authority": 10
         },
-        "override_allowed_roles": ["ministry"],
+        "override_allowed_roles": ["authority"],
         "vote_types": {
             "RATIFY": +1,
             "REJECT": -1,
@@ -172,7 +172,7 @@ DEFAULT_TEMPLATE = {
         "timeout": {
             "peer_review": "PT12H",
             "expert_review": "PT24H",
-            "ministry_escalation": "PT48H"
+            "authority_escalation": "PT48H"
         },
         "default_action_on_timeout": "maintain_state"
     },

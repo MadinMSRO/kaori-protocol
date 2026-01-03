@@ -133,7 +133,7 @@ human_gating:
 # Validation Flow Mode
 # ----------------------------------------------------------------------------
 validation_flow:
-  mode: human_peer                 # auto | human_peer | human_expert | ministry_gate
+  mode: human_peer                 # auto | human_peer | human_expert | authority_gate
 
 # ----------------------------------------------------------------------------
 # Consensus Model (Section 10 of SPEC)
@@ -146,13 +146,13 @@ consensus_model:
     bronze: 1
     silver: 3
     expert: 7
-    ministry: 10
-  override_allowed_roles: ["ministry"]
+    authority: 10
+  override_allowed_roles: ["authority"]
   vote_types:
     RATIFY: +1
     REJECT: -1
     CHALLENGE: 0                   # Flags for review, doesn't move score
-    OVERRIDE: special              # Ministry can force finalize
+    OVERRIDE: special              # Authority can force finalize
 
 # ----------------------------------------------------------------------------
 # Confidence Model (Section 11 of SPEC)
@@ -206,7 +206,7 @@ dispute_resolution:
   timeout:
     peer_review: PT12H             # 12 hours
     expert_review: PT24H           # 24 hours
-    ministry_escalation: PT48H     # 48 hours
+    authority_escalation: PT48H     # 48 hours
   default_action_on_timeout: downgrade_to_investigating
 
 # ----------------------------------------------------------------------------

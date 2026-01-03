@@ -39,7 +39,7 @@ A **Mission** is a request for ground truth observations within a defined spatia
 {
   "mission_id": "uuid",
   "claim_type": "earth.flood.v1",
-  "created_by": "system|ministry|partner",
+  "created_by": "system|authority|partner",
   "created_at": "ISO8601",
   "status": "open|assigned|completed|expired|cancelled",
   
@@ -93,7 +93,7 @@ An **Assignment** links a Mission to a specific Reporter.
 | `bronze` | 1 | Submit observations, vote on non-critical claims |
 | `silver` | 3 | Vote on all claims, access priority missions, unlock badges |
 | `expert` | 7 | Specialist validation, dispute resolution, train AI, access research data |
-| `ministry` | 10 | Override votes, escalation endpoint, policy changes |
+| `authority` | 10 | Override votes, escalation endpoint, policy changes |
 
 ### 2.4 Kaori Credits
 
@@ -136,7 +136,7 @@ Missions **MAY** be created by:
    - Satellite anomaly detection
    - Scheduled monitoring tasks
 
-2. **Ministry (Manual):**
+2. **Authority (Manual):**
    - Disaster response coordination
    - Policy verification requirements
 
@@ -254,7 +254,7 @@ Users **MUST** meet these criteria to advance:
 |------------|--------------|
 | `bronze` → `silver` | trust_score ≥ 0.50 **AND** verified_observations ≥ 10 **AND** total_credits ≥ 200 **AND** tenure ≥ 7 days |
 | `silver` → `expert` | trust_score ≥ 0.70 **AND** verified_observations ≥ 50 **AND** total_credits ≥ 1000 **AND** validation_accuracy ≥ 0.85 **AND** domain_certification = true |
-| `expert` → `ministry` | Manual appointment only (government officials) |
+| `expert` → `authority` | Manual appointment only (government officials) |
 
 ### 5.3 Standing Demotion
 
@@ -263,7 +263,7 @@ Users **MAY** be demoted if:
 - trust_score falls below threshold for current standing
 - 3+ consecutive rejected observations
 - Inactivity > 90 days (demote by one level)
-- Manual action by ministry (fraud, abuse)
+- Manual action by authority (fraud, abuse)
 
 ### 5.4 Domain Certification
 
@@ -309,7 +309,7 @@ Kaori Credits are the **sole incentive mechanism** within the ecosystem. They ar
 | `bronze` | 1.0× |
 | `silver` | 1.2× |
 | `expert` | 1.5× |
-| `ministry` | 2.0× |
+| `authority` | 2.0× |
 
 ### 6.4 Ecosystem Benefits (Credit Unlocks)
 

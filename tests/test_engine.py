@@ -144,12 +144,12 @@ class TestEngineVoting:
         assert ts.consensus.finalized is True
         assert ts.status == TruthStatus.VERIFIED_TRUE
     
-    def test_ministry_override(self, engine, observation):
+    def test_authority_override(self, engine, observation):
         ts = engine.process_observation(observation)
         truthkey = ts.truthkey
         
-        # Single ministry override should finalize
-        ts = engine.apply_vote(truthkey, self._make_vote(Standing.MINISTRY, VoteType.OVERRIDE))
+        # Single authority override should finalize
+        ts = engine.apply_vote(truthkey, self._make_vote(Standing.AUTHORITY, VoteType.OVERRIDE))
         
         assert ts.consensus.finalized is True
         assert ts.status == TruthStatus.VERIFIED_TRUE

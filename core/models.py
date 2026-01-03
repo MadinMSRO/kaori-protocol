@@ -46,7 +46,7 @@ class VerificationBasis(str, Enum):
     """What caused the verification."""
     AI_AUTOVALIDATION = "AI_AUTOVALIDATION"
     HUMAN_CONSENSUS = "HUMAN_CONSENSUS"
-    MINISTRY_OVERRIDE = "MINISTRY_OVERRIDE"
+    AUTHORITY_OVERRIDE = "AUTHORITY_OVERRIDE"
     TIMEOUT_DEFAULT = "TIMEOUT_DEFAULT"
 
 
@@ -55,7 +55,7 @@ class Standing(str, Enum):
     BRONZE = "bronze"
     SILVER = "silver"
     EXPERT = "expert"
-    MINISTRY = "ministry"
+    AUTHORITY = "authority"
 
 
 class VoteType(str, Enum):

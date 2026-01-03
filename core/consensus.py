@@ -18,7 +18,7 @@ DEFAULT_WEIGHTS = {
     Standing.BRONZE: 1,
     Standing.SILVER: 3,
     Standing.EXPERT: 7,
-    Standing.MINISTRY: 10,
+    Standing.AUTHORITY: 10,
 }
 
 # Default vote values
@@ -58,7 +58,7 @@ def compute_consensus(
         Standing.BRONZE: weighted_roles.get("bronze", DEFAULT_WEIGHTS[Standing.BRONZE]),
         Standing.SILVER: weighted_roles.get("silver", DEFAULT_WEIGHTS[Standing.SILVER]),
         Standing.EXPERT: weighted_roles.get("expert", DEFAULT_WEIGHTS[Standing.EXPERT]),
-        Standing.MINISTRY: weighted_roles.get("ministry", DEFAULT_WEIGHTS[Standing.MINISTRY]),
+        Standing.AUTHORITY: weighted_roles.get("authority", DEFAULT_WEIGHTS[Standing.AUTHORITY]),
     }
     
     # Get vote values
@@ -71,7 +71,7 @@ def compute_consensus(
     }
     
     # Get override roles
-    override_roles = consensus_config.get("override_allowed_roles", ["ministry"])
+    override_roles = consensus_config.get("override_allowed_roles", ["authority"])
     override_standings = [Standing(r) for r in override_roles]
     
     # Compute score
@@ -113,7 +113,7 @@ def compute_consensus(
     
     if has_override and override_vote:
         finalized = True
-        finalize_reason = f"MINISTRY_OVERRIDE by {override_vote.voter_id}"
+        finalize_reason = f"AUTHORITY_OVERRIDE by {override_vote.voter_id}"
     elif score >= finalize_threshold:
         finalized = True
         finalize_reason = f"THRESHOLD_REACHED (score={score} >= {finalize_threshold})"

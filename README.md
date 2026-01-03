@@ -84,7 +84,7 @@ TruthKey enables:
 Kaori assumes adversarial environments and mitigates abuse through:
 
 ### Standing-Based Trust
-Every reporter/validator has **standing** (bronze → silver → expert → ministry) which influences:
+Every reporter/validator has **standing** (bronze → silver → expert → authority) which influences:
 - Vote weight  
 - Gating privileges  
 - Confidence computation  

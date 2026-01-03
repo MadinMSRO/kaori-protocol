@@ -401,7 +401,7 @@
                         "auto",
                         "human_peer",
                         "human_expert",
-                        "ministry_gate"
+                        "authority_gate"
                     ]
                 }
             }
@@ -435,7 +435,7 @@
                         "bronze",
                         "silver",
                         "expert",
-                        "ministry"
+                        "authority"
                     ],
                     "properties": {
                         "bronze": {
@@ -450,7 +450,7 @@
                             "type": "integer",
                             "minimum": 0
                         },
-                        "ministry": {
+                        "authority": {
                             "type": "integer",
                             "minimum": 0
                         }
@@ -561,7 +561,7 @@
                     "required": [
                         "peer_review",
                         "expert_review",
-                        "ministry_escalation"
+                        "authority_escalation"
                     ],
                     "properties": {
                         "peer_review": {
@@ -570,7 +570,7 @@
                         "expert_review": {
                             "type": "string"
                         },
-                        "ministry_escalation": {
+                        "authority_escalation": {
                             "type": "string"
                         }
                     }

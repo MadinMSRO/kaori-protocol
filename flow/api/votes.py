@@ -26,7 +26,7 @@ async def submit_vote(data: VoteCreate):
     - RATIFY: Confirm the observation is true
     - REJECT: Claim the observation is false
     - CHALLENGE: Request more evidence
-    - OVERRIDE: Ministry override (requires ministry standing)
+    - OVERRIDE: Authority override (requires authority standing)
     """
     # Check if truth state exists
     truth_state = _engine.get_truth_state(data.truthkey)

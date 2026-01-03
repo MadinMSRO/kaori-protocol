@@ -150,3 +150,28 @@ def get_claim_config(claim_type: str) -> dict:
         Claim configuration dict
     """
     return load_claim_schema(claim_type)
+
+
+def get_claim_type(claim_type_id: str) -> "ClaimType":
+    """
+    Load a ClaimType as a typed Pydantic model.
+    
+    This provides structured, type-safe access to claim configuration.
+    
+    Args:
+        claim_type_id: Claim type ID like "earth.flood.v1"
+        
+    Returns:
+        ClaimType model instance
+        
+    Example:
+        >>> ct = get_claim_type("earth.flood.v1")
+        >>> ct.consensus_model.finalize_threshold
+        15
+        >>> ct.requires_human_gate()
+        True
+    """
+    from .claimtype import ClaimType
+    
+    raw_config = load_claim_schema(claim_type_id, validate=False)
+    return ClaimType.model_validate(raw_config)

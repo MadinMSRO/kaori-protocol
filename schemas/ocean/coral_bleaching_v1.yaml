@@ -162,8 +162,8 @@ consensus_model:
     bronze: 1
     silver: 2
     expert: 10                      # Marine experts have high weight
-    ministry: 15
-  override_allowed_roles: ["ministry"]
+    authority: 15
+  override_allowed_roles: ["authority"]
   vote_types:
     RATIFY: +1
     REJECT: -1
@@ -222,7 +222,7 @@ dispute_resolution:
   timeout:
     peer_review: PT24H              # Longer review windows
     expert_review: PT48H
-    ministry_escalation: PT72H
+    authority_escalation: PT72H
   default_action_on_timeout: maintain_state
 
 # ----------------------------------------------------------------------------
