@@ -1,80 +1,130 @@
 # Kaori Protocol 🌸
 
-**The Operating System for Truth Verification.**
+**Real-time truth extraction and verification for high-stakes decisions.**
 
-Kaori is an open protocol for verifying physical world events at scale. It combines AI validation, human consensus, and cryptographic signing to produce auditable, machine-readable ground truth.
+Kaori transforms raw physical observations into signed, traceable **Truth Records** and **Truth Maps** that can be used operationally and defended under scrutiny.
 
----
-
-## The Problem
-
-Every major decision today—insurance payouts, climate credits, disaster response, AI training—depends on answering one question: **"What actually happened in the physical world?"**
-
-But verification is broken:
-- 🛰️ **Satellite data** is powerful, but can't confirm what's on the ground.
-- 📱 **Crowdsourced reports** are fast, but noisy and unverifiable.
-- ⛓️ **Blockchain oracles** secure digital claims, but not physical reality.
-
-There is no standard protocol for turning raw observations into trusted, signed truth records.
-
-**Kaori is that protocol.**
+> *"The system that compiles real-world observations into signed, traceable truth states — enabling operational use, defensibility, and scalable verification at national and global levels."*
 
 ---
 
-## How It Works
+## What Problem Kaori Solves
+
+In high-stakes domains (disasters, coastal erosion, subsidence, marine incidents), information is often:
+
+- 🔀 **Fragmented** across agencies and communities  
+- ❓ **Difficult to verify** and unify  
+- � **Slow to validate**  
+- ⚔️ **Politically contested**  
+- � **Hard to defend** in audits, courts, or funding evaluations  
+
+**Kaori solves this** by producing standardized, signed truth objects and truth histories from observations — with transparent verification and confidence semantics.
+
+---
+
+## What Kaori Produces
+
+Kaori produces two primary artifacts:
+
+### 🥇 Gold Truth Map (Current State)
+A signed latest truth state for each location/time/topic.  
+> *"What is the current verified state of reality here?"*
+
+### 🥈 Silver Truth Ledger (Full History)
+An append-only, signed history of how truth evolved over time.  
+> *"How did we arrive at this truth, and who/what validated it?"*
+
+These artifacts can be consumed by:
+- **GeoHub** map layers  
+- **Operational systems** (emergency response, enforcement)  
+- **Satellite companies** (truth-as-a-service)  
+- **UN / Climate fund audits**  
+- **Legal and enforcement workflows**
+
+---
+
+## How Kaori Works
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         KAORI PROTOCOL                              │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│   📲 OBSERVE          🤖 VALIDATE           ✅ VERIFY               │
-│   ───────────         ───────────           ─────────               │
-│   Reporter submits    AI (CLIP/Bouncer)     Human validators        │
-│   image + metadata    checks content        reach consensus         │
-│                       safety & quality                              │
-│                                                                     │
-│   ────────────────────────────────────────────────────────────────  │
-│                              ↓                                      │
-│                    🔐 SIGNED TRUTH STATE                            │
-│                    ─────────────────────                            │
-│                    Immutable, auditable,                            │
-│                    machine-readable record                          │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+Observation → Processing → Candidate Truth → Validation → Final Truth
 ```
 
-### The ELT Pipeline
-
-| Layer | Description |
-|-------|-------------|
-| **Bronze** | Raw ingestion (Images, GPS, Timestamps) |
-| **Silver** | Validated observations (AI + Human checked) |
-| **Gold** | Final truth states (Cryptographically signed) |
-
----
-
-## Why Not Blockchain?
-
-| | **Blockchain** | **Kaori** |
-|---|---|---|
-| **Solves** | "Who owns what?" | "What is true about reality?" |
-| **Input** | Transactions | Physical observations |
-| **Consensus** | Proof-of-Work/Stake | AI + Human Expertise |
-| **Latency** | Minutes | Seconds |
-
-> Blockchain secures *transactions*. Kaori secures *facts*. We're the trust layer that validates real-world data *before* it hits the chain.
+| Step | Description |
+|------|-------------|
+| **1. Observe** | Observations submitted by humans, drones, IoT sensors, or official sources |
+| **2. Compile** | Kaori compiles them deterministically into a candidate truth state |
+| **3. Validate** | Routed through AI ladder (Bouncer → Generalist → Specialist) + Human gating |
+| **4. Finalize** | Consensus and confidence rules applied per ClaimType YAML |
+| **5. Sign** | Every truth transition is hashed and signed for audit-grade records |
 
 ---
 
-## Use Cases
+## The Core Concept: TruthKey
 
-| Domain | Application |
-|--------|-------------|
-| 🌊 **Disaster Response** | Real-time, verified flood/fire/storm reports |
-| 🌿 **Climate Finance** | Audit-grade evidence for carbon credits |
-| 🛡️ **Insurance** | Parametric payouts based on verified sensor data |
-| 🤖 **AI Training** | High-quality labeled data for earth observation models |
+Every truth state is anchored by a canonical **TruthKey** — the universal join key that unifies truth across space and time:
+
+```
+{domain}:{topic}:{spatial_system}:{spatial_id}:{z_index}:{time_bucket}
+```
+
+**Example:**
+```
+earth:flood:h3:8928308280fffff:surface:2026-01-02T10:00Z
+```
+
+TruthKey enables:
+- ⚡ **Scalable indexing** across regions  
+- 🔗 **Deterministic retrieval** and compilation  
+- 🌐 **Interoperability** across systems  
+
+---
+
+## Trust & Validation Model
+
+Kaori assumes adversarial environments and mitigates abuse through:
+
+### Standing-Based Trust
+Every reporter/validator has **standing** (bronze → silver → expert → ministry) which influences:
+- Vote weight  
+- Gating privileges  
+- Confidence computation  
+- Dispute escalation  
+
+### Two-Lane Verification
+
+| Lane | Speed | Use Case |
+|------|-------|----------|
+| **Monitor Lane** | Fast | AI-verified truth with transparency flags |
+| **Critical Lane** | Deliberate | Human gating + weighted consensus required |
+
+This enables both **speed** (for monitoring) and **defensibility** (for high-stakes decisions).
+
+---
+
+## Security & Defensibility
+
+Kaori produces cryptographically signed truth states:
+
+- Each truth transition generates a **TruthHash**  
+- TruthHash is signed using **KMS**  
+- Consumers must **verify signatures** before trusting  
+
+This makes Kaori truth artifacts:
+- ✅ **Tamper-evident**  
+- ✅ **Auditable**  
+- ✅ **Defensible** in high-scrutiny contexts  
+
+---
+
+## What Kaori Does NOT Solve (v1)
+
+Kaori v1 focuses on **governance and verification**, not cryptographic perfection:
+
+| Not in Scope | How Kaori Mitigates |
+|--------------|---------------------|
+| Device attestation | Standing + thresholds |
+| Proof of unedited media | Contradiction detection |
+| Perfect Sybil resistance | Dispute resolution + signed audit history |
 
 ---
 
@@ -89,13 +139,27 @@ uvicorn flow.api.main:app --port 8001
 ```bash
 cd frontend && npm run dev
 ```
-Open **http://localhost:5173** to see the "Kaori Pulse" live feed.
+Open **http://localhost:5173** to see **Kaori Pulse** — the real-time truth feed.
 
-### 3. Simulate the Protocol
+### 3. Simulate the Full Protocol
 ```bash
 python tools/demo_lifecycle.py
 ```
 Watch an observation get submitted → validated by AI → verified by consensus → signed.
+
+---
+
+## API Reference
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /observations/submit` | Submit observation (multipart) |
+| `GET /truth/state/{truthkey}` | Get current signed truth |
+| `GET /truth/history/{truthkey}` | Get signed truth history |
+| `GET /truth/feed` | Get recent truth states (dashboard) |
+| `POST /votes` | Submit validator vote |
+
+See [SPEC.md](SPEC.md) for full protocol specification.
 
 ---
 
@@ -108,30 +172,36 @@ kaori-protocol/
 ├── core/                   # Consensus Engine + Validators
 │   ├── engine.py           # Main orchestration
 │   ├── validators/         # AI Pipeline (Bouncer, Generalist)
-│   └── db/                 # Persistence (SQLite, BigQuery-ready)
+│   └── db/                 # Persistence (Bronze/Silver/Gold)
 ├── flow/api/               # FastAPI REST Endpoints
 ├── frontend/               # React Dashboard ("Kaori Pulse")
-├── schemas/                # JSON Schema for claim types
-│   ├── earth/              # Floods, Fires, Infrastructure
-│   ├── ocean/              # Coral, Pollution, Depth
-│   └── space/              # Debris, Satellites
-├── terraform/              # GCP Deployment (Cloud Run, BigQuery, GCS)
-└── tools/                  # CLI utilities
+├── schemas/                # ClaimType YAML definitions
+├── terraform/              # GCP Deployment (Cloud Run, BigQuery)
+└── tools/                  # CLI utilities + demo scripts
 ```
 
 ---
 
-## Specifications
+## Why Kaori Matters
 
-| Document | Description |
-|----------|-------------|
-| [SPEC.md](SPEC.md) | Defines claims, validation, consensus, confidence, and cryptographic signing |
-| [FLOW_SPEC.md](FLOW_SPEC.md) | Defines missions, incentives, validator standing, and Kaori Credits |
+Kaori enables **Truth as a Service**:
+
+| Consumer | Value |
+|----------|-------|
+| **Satellite companies** | Signed ground truth feeds |
+| **Governments** | Verified evidence packs |
+| **Climate funds** | Audit-grade truth history |
+| **Enforcement agencies** | Defensible decision records |
+
+> **Kaori turns ground truth into a national capability and a strategic export.**
 
 ---
 
 ## Built By and For
 
 **Maldives Space Research Organisation (MSRO)**
+
+Powering the **Unified Data Frontier Initiative**:  
+*GeoHub • DataHub • MissionHub*
 
 *Building infrastructure for a world that needs to know the truth.*
