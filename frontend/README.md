@@ -1,16 +1,40 @@
-# React + Vite
+# Kaori Dashboard — Visual Truth Feed
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React-based dashboard for monitoring Kaori truth states in real-time.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- 📊 **Live Truth Feed** — Real-time updates of truth states
+- 🗺️ **Status Indicators** — Visual status badges (VERIFIED_TRUE, PENDING_HUMAN_REVIEW, etc.)
+- 📈 **Confidence Display** — Confidence scores and breakdowns
+- 🔍 **Detail View** — Click to see full truth state details
 
-## React Compiler
+## Running
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Expanding the ESLint configuration
+Then open http://localhost:5173
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Tech Stack
+
+- **React 18** + Vite
+- **Lucide React** — Icons
+- **Vanilla CSS** — Styling (no Tailwind)
+
+## Screenshot
+
+The dashboard displays:
+- TruthKey (domain, topic, location, time)
+- Status badge with color coding
+- Confidence score
+- AI and human verification flags
+- Observation count
+
+## See Also
+
+- [flow/api/](../flow/api/) — Backend API the dashboard consumes
+- [tools/demo_lifecycle.py](../tools/demo_lifecycle.py) — Demo script to generate data
