@@ -17,6 +17,7 @@ from .votes import router as votes_router
 from .missions import router as missions_router
 from .users import router as users_router
 from .schemas import router as schemas_router
+from .auth_routes import router as auth_router
 
 # =============================================================================
 # Application
@@ -46,12 +47,16 @@ app.add_middleware(
 # Include Routers
 # =============================================================================
 
+# Public routes
+app.include_router(auth_router, prefix="/api/v1", tags=["Auth"])
+app.include_router(schemas_router, prefix="/api/v1", tags=["Schemas"])
+
+# Protected routes (auth required)
 app.include_router(observations_router, prefix="/api/v1", tags=["Observations"])
 app.include_router(truth_router, prefix="/api/v1", tags=["Truth"])
 app.include_router(votes_router, prefix="/api/v1", tags=["Votes"])
 app.include_router(missions_router, prefix="/api/v1", tags=["Missions"])
 app.include_router(users_router, prefix="/api/v1", tags=["Users"])
-app.include_router(schemas_router, prefix="/api/v1", tags=["Schemas"])
 
 
 # =============================================================================

@@ -97,26 +97,29 @@ def demo_lifecycle():
     print(f"   Confidence: {state['confidence']}")
     print(f"   Status:     {state['status']}\n")
 
-    # 3. VALIDATORS: Submit Votes to Ratify
     print("3. [Validators] Crowd Consensus Begins...")
-    # We need enough votes to reach threshold.
-    # Default threshold might be high (15), Bronze weight is likely 1 or 5.
-    # Let's cast 4 votes.
-    validators = ["val_bob", "val_charlie", "val_dave", "val_eve"]
+    # Need to reach threshold=15. Expert weight=7, Silver=3, Bronze=1
+    # Cast 3 expert votes for margin
+    validators = [
+        ("expert_alice", "expert"),
+        ("expert_bob", "expert"),
+        ("expert_carol", "expert"),
+    ]
     
-    for val in validators:
+    for val_id, standing in validators:
         vote_payload = {
             "truthkey": truthkey_str,
-            "voter_id": val,
+            "voter_id": val_id,
+            "voter_standing": standing,
             "vote_type": "RATIFY",
-            "comment": "Looks like a flood."
+            "comment": "Verified flood conditions."
         }
         r = requests.post(f"{API_URL}/votes", json=vote_payload)
         if r.status_code == 200:
             v_resp = r.json()
             is_final = v_resp["consensus_finalized"]
             score = v_resp["consensus_score"]
-            print(f"   [VOTE] Cast by {val} -> Score: {score} (Finalized: {is_final})")
+            print(f"   [VOTE] Cast by {val_id} ({standing}) -> Score: {score} (Finalized: {is_final})")
             if is_final:
                 print("   [!!!] CONSENSUS REACHED!")
                 break

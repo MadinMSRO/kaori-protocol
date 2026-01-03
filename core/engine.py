@@ -298,6 +298,13 @@ class KaoriEngine:
         
         if ai_result:
             truth_state = self._apply_ai_validation(truth_state, ai_result, claim_config)
+        else:
+            # No AI result - check if critical lane requires human review
+            risk_profile = claim_config.get("risk_profile", "monitor")
+            if risk_profile == "critical" and truth_state.status == TruthStatus.PENDING:
+                truth_state.status = TruthStatus.PENDING_HUMAN_REVIEW
+                if "AWAITING_HUMAN_CONSENSUS" not in truth_state.transparency_flags:
+                    truth_state.transparency_flags.append("AWAITING_HUMAN_CONSENSUS")
             
         truth_state = self._recompute_confidence(truth_state, claim_config)
         truth_state.updated_at = datetime.now(timezone.utc)
@@ -389,6 +396,7 @@ class KaoriEngine:
         policy = claim_config.get("state_verification_policy", {})
         
         if risk_profile == "monitor":
+            # Monitor Lane: AI can auto-verify
             monitor_config = policy.get("monitor_lane", {})
             if monitor_config.get("allow_ai_verified_truth", True):
                 if ai_result.final_confidence >= true_threshold:
@@ -400,7 +408,23 @@ class KaoriEngine:
                 else:
                     truth_state.status = TruthStatus.INVESTIGATING
         else:
-            truth_state.status = TruthStatus.INVESTIGATING
+            # Critical Lane: Require human consensus
+            # AI validation informs but cannot finalize
+            if ai_result.final_confidence >= true_threshold:
+                # AI recommends TRUE, but needs human approval
+                truth_state.status = TruthStatus.PENDING_HUMAN_REVIEW
+                if "AI_RECOMMENDS_TRUE" not in truth_state.transparency_flags:
+                    truth_state.transparency_flags.append("AI_RECOMMENDS_TRUE")
+            elif ai_result.final_confidence <= false_threshold:
+                # AI recommends FALSE, but needs human approval
+                truth_state.status = TruthStatus.PENDING_HUMAN_REVIEW
+                if "AI_RECOMMENDS_FALSE" not in truth_state.transparency_flags:
+                    truth_state.transparency_flags.append("AI_RECOMMENDS_FALSE")
+            else:
+                # AI uncertain, definitely needs human review
+                truth_state.status = TruthStatus.PENDING_HUMAN_REVIEW
+                if "AWAITING_HUMAN_CONSENSUS" not in truth_state.transparency_flags:
+                    truth_state.transparency_flags.append("AWAITING_HUMAN_CONSENSUS")
         
         return truth_state
     

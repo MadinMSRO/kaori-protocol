@@ -36,8 +36,10 @@ class TruthStatus(str, Enum):
     """Allowed truth state status values (SPEC Section 8.1)."""
     PENDING = "PENDING"
     INVESTIGATING = "INVESTIGATING"
+    PENDING_HUMAN_REVIEW = "PENDING_HUMAN_REVIEW"  # Critical lane: awaiting human consensus
     VERIFIED_TRUE = "VERIFIED_TRUE"
     VERIFIED_FALSE = "VERIFIED_FALSE"
+    INCONCLUSIVE = "INCONCLUSIVE"  # Review timed out without reaching consensus
     DISPUTED = "DISPUTED"
     EXPIRED = "EXPIRED"
 
@@ -48,6 +50,7 @@ class VerificationBasis(str, Enum):
     HUMAN_CONSENSUS = "HUMAN_CONSENSUS"
     AUTHORITY_OVERRIDE = "AUTHORITY_OVERRIDE"
     TIMEOUT_DEFAULT = "TIMEOUT_DEFAULT"
+    TIMEOUT_INCONCLUSIVE = "TIMEOUT_INCONCLUSIVE"  # Review timed out
 
 
 class Standing(str, Enum):

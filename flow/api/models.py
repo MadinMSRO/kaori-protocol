@@ -75,6 +75,7 @@ class VoteCreate(BaseModel):
     """Request model for submitting a vote."""
     truthkey: str
     voter_id: str
+    voter_standing: str = Field(default="bronze", pattern="^(bronze|silver|expert|authority)$")
     vote_type: str = Field(..., pattern="^(RATIFY|REJECT|CHALLENGE|OVERRIDE)$")
     comment: Optional[str] = None
 

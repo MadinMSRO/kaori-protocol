@@ -39,9 +39,15 @@ async def submit_vote(data: VoteCreate):
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid vote type: {data.vote_type}")
     
+    # Get standing from request (in production, verify this from user database)
+    try:
+        standing = Standing(data.voter_standing.upper())
+    except ValueError:
+        standing = Standing.BRONZE
+    
     vote = Vote(
         voter_id=data.voter_id,
-        voter_standing=Standing.BRONZE,  # In production, look up from user database
+        voter_standing=standing,
         vote_type=vote_type,
         voted_at=datetime.now(timezone.utc),
         comment=data.comment,
