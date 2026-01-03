@@ -6,6 +6,9 @@ Kaori transforms raw physical observations into signed, traceable **Truth Record
 
 > *"The system that compiles real-world observations into signed, traceable truth states — enabling operational use, defensibility, and scalable verification at national and global levels."*
 
+> [!NOTE]
+> This repository contains both the **Kaori Protocol specification** and the **Python reference implementation (Kaori Core)**. Alternative implementations in other languages are welcome.
+
 ---
 
 ## What Problem Kaori Solves
