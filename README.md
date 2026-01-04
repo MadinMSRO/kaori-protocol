@@ -52,6 +52,7 @@ flowchart LR
     subgraph Verification
         direction TB
         Confidence{Confidence >= 0.82?}
+        Implicit{Implicit Consensus?}
         Human[Human Voting]
         Consensus{Consensus Met?}
     end
@@ -69,8 +70,10 @@ flowchart LR
     Bouncer -->|Pass| Generalist
     Bouncer -->|Fail| Rejected
     Generalist --> Confidence
-    Confidence -->|Yes| Verified
+    Confidence -->|Yes| Implicit
     Confidence -->|No| Human
+    Implicit -->|Pass| Verified
+    Implicit -->|Fail| Human
     Human --> Consensus
     Consensus -->|Yes| Verified
     Consensus -->|No| Inconclusive
@@ -96,20 +99,22 @@ sequenceDiagram
     K->>AI: Bouncer Check
     AI-->>K: Pass/Fail
     K->>AI: Generalist (CLIP)
-    AI-->>K: ai_confidence: 0.92
+    AI-->>K: ai_confidence: 0.99
     
     Note over K: Status: LEANING_TRUE
     
-    K->>V: Request Votes
-    V-->>K: RATIFY (weight=5.4)
-    V-->>K: RATIFY (weight=3.6)
+    K->>K: Check Implicit Consensus
     
-    Note over K: Consensus Score: 17
-    
-    K->>S: Sign TruthState
-    S-->>K: truth_hash + signature
-    
-    Note over K: Status: VERIFIED_TRUE ✓
+    alt Implicit Criteria Met
+        K->>S: Auto-Sign TruthState
+        S-->>K: Signature
+        Note over K: Status: VERIFIED_TRUE (Implicit)
+    else Criteria Not Met
+        K->>V: Request Votes (Explicit)
+        V-->>K: RATIFY
+        K->>S: Sign TruthState
+        Note over K: Status: VERIFIED_TRUE (Explicit)
+    end
 ```
 
 ### TruthState Status Lifecycle
