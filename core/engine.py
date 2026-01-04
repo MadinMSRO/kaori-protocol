@@ -29,6 +29,8 @@ from .models import (
     Vote,
     VoteType,
     SecurityBlock,
+    TrustContext,
+    TrustResult,
 )
 from .schema_loader import get_claim_config, get_claim_type
 from .signing import sign_truth_state
@@ -45,6 +47,79 @@ class KaoriEngine:
         self.auto_sign = auto_sign
         # Initialize Database
         Base.metadata.create_all(bind=db_engine)
+
+    def get_trust_result(self, agent_id: str, context: TrustContext) -> TrustResult:
+        """
+        Flow Layer: Compute dynamic trust for an agent in a specific context.
+        Implements TrustProvider interface (SPEC Section 4.3).
+        """
+        import hashlib
+        
+        with SessionLocal() as db:
+            # 1. Fetch Agent Standing (Flow Law 1)
+            agent = crud.get_agent(db, UUID(agent_id))
+            if not agent:
+                # Fallback for unknown agents (e.g. simulation/bootstrapping)
+                standing = 10.0
+            else:
+                standing = agent.standing
+            
+            # 2. Derive Class (Backwards Compatibility)
+            def derive_class(s):
+                if s < 100: return "bronze"
+                if s < 250: return "silver"
+                if s < 500: return "expert"
+                return "authority"
+            
+            cls = derive_class(standing)
+            
+            # 3. Compute Power (Flow Law 1: Fractal Inheritance)
+            INHERITANCE_DECAY = 0.2
+            MAX_INHERITANCE_DEPTH = 3
+            
+            def compute_power(current_agent_id: str, depth: int = 0, visited: set = None) -> float:
+                if visited is None:
+                    visited = set()
+                
+                # Cycle Safety
+                if current_agent_id in visited:
+                    return 0.0
+                visited.add(current_agent_id)
+                
+                # Fetch intrinsic
+                ag = crud.get_agent(db, UUID(current_agent_id))
+                intrinsic = ag.standing if ag else 0.0
+                
+                # Base case: Max depth
+                if depth >= MAX_INHERITANCE_DEPTH:
+                    return intrinsic
+                
+                # Recursive step: Sum of squads
+                inherited = 0.0
+                squad_ids = crud.get_squad_memberships(db, current_agent_id)
+                
+                for squad_id in squad_ids:
+                    # Recursive call with copy of visited to allow diverse paths 
+                    # (but forbid loops in same path)
+                    squad_power = compute_power(squad_id, depth + 1, visited.copy())
+                    inherited += squad_power * INHERITANCE_DECAY
+                    
+                return intrinsic + inherited
+
+            power = compute_power(agent_id) 
+            
+            # 4. Generate Trust Snapshot (Audit Requirement)
+            # deterministic hash of input state
+            snap_str = f"{agent_id}:{standing}:{cls}:{datetime.now().timestamp()}"
+            snap_hash = hashlib.sha256(snap_str.encode()).hexdigest()
+            
+            return TrustResult(
+                power=power,
+                standing=standing,
+                derived_class=cls,
+                flags=[],
+                trust_snapshot_hash=snap_hash
+            )
         
     def _model_to_pydantic(self, db_state: models.TruthStateModel) -> TruthState:
         """Convert DB model to Pydantic object."""
@@ -61,12 +136,119 @@ class KaoriEngine:
             transparency_flags=data.get("transparency_flags", []),
             created_at=db_state.created_at,
             updated_at=db_state.updated_at,
-            consensus=ConsensusRecord(**data.get("consensus")) if data.get("consensus") else None,
+            consensus=self._parse_consensus(data.get("consensus")) if data.get("consensus") else None,
             security=SecurityBlock(**data.get("security")) if data.get("security") else None,
             observation_ids=[UUID(oid) for oid in data.get("observation_ids", [])],
             evidence_refs=data.get("evidence_refs", []),
             confidence_breakdown=data.get("confidence_breakdown")
         )
+
+    def _parse_consensus(self, consensus_data: dict) -> ConsensusRecord:
+        """Parse consensus with backwards compatibility for old string standing values."""
+        # Standing enum to float mapping for migration
+        STANDING_MIGRATION = {
+            "bronze": 10.0,
+            "silver": 50.0,
+            "expert": 200.0,
+            "authority": 500.0,
+        }
+        
+        votes = consensus_data.get("votes", [])
+        for vote in votes:
+            vs = vote.get("voter_standing")
+            if isinstance(vs, str) and vs in STANDING_MIGRATION:
+                vote["voter_standing"] = STANDING_MIGRATION[vs]
+        
+        return ConsensusRecord(**consensus_data)
+
+    def compute_observation_aggregate(self, observations: list, ai_scores: list[float]) -> dict:
+        """
+        SPEC Section 8.4: Compute aggregate metrics from observations.
+        Used for implicit consensus and intermediate status computation.
+        """
+        import statistics
+        
+        if not observations:
+            return {
+                "observation_count": 0,
+                "network_trust": 0.0,
+                "ai_confidence_mean": 0.0,
+                "ai_variance": 0.0,
+            }
+        
+        # Sum of reporter standings (continuous values)
+        network_trust = sum(
+            getattr(obs, 'reporter_context', {}).get('trust_score', 0.5) * 100 
+            if isinstance(getattr(obs, 'reporter_context', {}), dict) 
+            else obs.reporter_context.trust_score * 100
+            for obs in observations
+        )
+        
+        # AI scores
+        if not ai_scores:
+            ai_scores = [0.5]
+        
+        ai_mean = statistics.mean(ai_scores)
+        ai_variance = statistics.variance(ai_scores) if len(ai_scores) > 1 else 0.0
+        
+        return {
+            "observation_count": len(observations),
+            "network_trust": network_trust,
+            "ai_confidence_mean": ai_mean,
+            "ai_variance": ai_variance,
+        }
+
+    def compute_intermediate_status(
+        self,
+        aggregate: dict,
+        claim_config: dict,
+    ) -> TruthStatus:
+        """
+        SPEC Section 8.1: Compute intermediate status during observation window.
+        Returns LEANING_TRUE, LEANING_FALSE, UNDECIDED, or PENDING.
+        """
+        autovalidation = claim_config.get("autovalidation", {})
+        ai_true_threshold = autovalidation.get("ai_verified_true_threshold", 0.82)
+        ai_false_threshold = autovalidation.get("ai_verified_false_threshold", 0.20)
+        
+        implicit = claim_config.get("implicit_consensus", {})
+        max_variance = implicit.get("max_ai_variance", 0.15)
+        
+        ai_mean = aggregate["ai_confidence_mean"]
+        ai_variance = aggregate["ai_variance"]
+        
+        # Check for contradiction (high variance)
+        if ai_variance > max_variance:
+            return TruthStatus.UNDECIDED
+        
+        # Check AI confidence direction
+        if ai_mean >= ai_true_threshold:
+            return TruthStatus.LEANING_TRUE
+        elif ai_mean <= ai_false_threshold:
+            return TruthStatus.LEANING_FALSE
+        else:
+            return TruthStatus.PENDING
+
+    def check_implicit_consensus(
+        self,
+        aggregate: dict,
+        claim_config: dict,
+    ) -> bool:
+        """
+        SPEC Section 8.4: Check if implicit consensus conditions are met.
+        If True, can auto-verify without explicit voting.
+        """
+        implicit = claim_config.get("implicit_consensus", {})
+        if not implicit.get("enabled", False):
+            return False
+        
+        return all([
+            aggregate["observation_count"] >= implicit.get("min_observations", 3),
+            aggregate["network_trust"] >= implicit.get("min_network_trust", 50.0),
+            aggregate["ai_confidence_mean"] >= implicit.get("min_ai_confidence", 0.80),
+            aggregate["ai_variance"] <= implicit.get("max_ai_variance", 0.15),
+        ])
+
 
     def _save_truth_state(self, db: Session, state: TruthState):
         """Persist Pydantic state to DB."""

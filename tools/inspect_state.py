@@ -3,7 +3,7 @@ import json
 import sys
 
 API_URL = "http://localhost:8001/api/v1"
-TRUTH_KEY = "earth:flood:h3:8858e06829fffff:surface:2026-01-02T17:00:00Z"
+TRUTH_KEY = "earth:flood:h3:8858e06829fffff:surface:2026-01-02T17:00Z"
 
 def inspect_state():
     print(f"--- Inspecting Truth State for {TRUTH_KEY} ---")

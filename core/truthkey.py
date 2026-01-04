@@ -20,48 +20,49 @@ def normalize_time_bucket(dt: datetime, duration: str) -> str:
     """
     Normalize a datetime to a time bucket based on ISO8601 duration.
     
-    Supported durations:
-    - PT1H (hourly)
-    - PT15M (15-minute)
-    - PT1M (1-minute)
-    - P1D (daily)
+    SPEC Section 4.1: time_bucket MUST be in format YYYY-MM-DDTHH:MMZ
+    (ISO8601 with minute precision, no seconds)
     
-    Returns ISO8601 timestamp truncated to bucket boundary.
+    Supported durations:
+    - PT1H (hourly)     → truncate to hour
+    - PT4H (4-hourly)   → truncate to 4-hour boundary
+    - PT6H (6-hourly)   → truncate to 6-hour boundary
+    - PT15M (15-minute) → truncate to 15-minute boundary
+    - PT1M (1-minute)   → truncate to minute
+    - P1D (daily)       → truncate to day (00:00)
+    - P7D, P30D etc     → truncate to day
+    
+    Returns ISO8601 timestamp truncated to bucket boundary (no seconds).
     """
     # Ensure UTC
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     
-    # Parse duration
+    # Parse duration and truncate
     if duration == "PT1H":
-        # Truncate to hour
         truncated = dt.replace(minute=0, second=0, microsecond=0)
     elif duration == "PT15M":
-        # Truncate to 15-minute boundary
         minute = (dt.minute // 15) * 15
         truncated = dt.replace(minute=minute, second=0, microsecond=0)
     elif duration == "PT1M":
-        # Truncate to minute
         truncated = dt.replace(second=0, microsecond=0)
     elif duration == "P1D":
-        # Truncate to day
         truncated = dt.replace(hour=0, minute=0, second=0, microsecond=0)
     elif duration == "PT4H":
-        # Truncate to 4-hour boundary
         hour = (dt.hour // 4) * 4
         truncated = dt.replace(hour=hour, minute=0, second=0, microsecond=0)
     elif duration == "PT6H":
-        # Truncate to 6-hour boundary
         hour = (dt.hour // 6) * 6
         truncated = dt.replace(hour=hour, minute=0, second=0, microsecond=0)
     elif duration.startswith("P") and duration.endswith("D"):
-        # P7D, P30D etc - truncate to day
         truncated = dt.replace(hour=0, minute=0, second=0, microsecond=0)
     else:
         # Default to hourly
         truncated = dt.replace(minute=0, second=0, microsecond=0)
     
-    return truncated.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # SPEC 4.1: Format as YYYY-MM-DDTHH:MMZ (no seconds)
+    return truncated.strftime("%Y-%m-%dT%H:%MZ")
+
 
 
 def compute_h3_index(lat: float, lon: float, resolution: int) -> str:

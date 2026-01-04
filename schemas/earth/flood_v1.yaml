@@ -155,6 +155,22 @@ consensus_model:
     OVERRIDE: special              # Authority can force finalize
 
 # ----------------------------------------------------------------------------
+# Implicit Consensus (Section 8.4 of SPEC)
+# ----------------------------------------------------------------------------
+# When multiple observations share the same TruthKey, they MAY be aggregated
+# to determine implicit consensus without requiring explicit votes.
+implicit_consensus:
+  enabled: true
+  min_observations: 3              # Need at least 3 independent reports
+  min_network_trust: 50.0          # Sum of reporter standings
+  min_ai_confidence: 0.80          # Average AI confidence across observations
+  max_ai_variance: 0.15            # Low variance = no contradiction
+  
+  # Authority override: If an authority submits, can auto-verify
+  override_if_authority_present: true
+  override_min_authority_count: 1
+
+
 # Confidence Model (Section 11 of SPEC)
 # ----------------------------------------------------------------------------
 confidence_model:

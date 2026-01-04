@@ -92,32 +92,53 @@ class VoteResponse(BaseModel):
 
 
 # =============================================================================
-# Mission Models
+# Probe Models (Flow Primitive)
 # =============================================================================
 
+class SignalTriggerRequest(BaseModel):
+    """Request model for submitting a trigger signal (creates a Probe Proposal)."""
+    type: str = Field(..., pattern="^(MANUAL_TRIGGER|AUTOMATED_TRIGGER|SCHEDULED_TRIGGER)$")
+    source_standing: str = Field(default="bronze", pattern="^(bronze|silver|expert|authority)$")
+    claim_type: str = Field(..., example="earth.flood.v1")
+    scope: dict[str, Any] = Field(..., example={"type": "h3", "value": "8928308280fffff"})
+    # Optional: link to existing TruthKey if investigating
+    truthkey: Optional[str] = None
+    # Optional requirements override
+    requirements: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProbeApprovalRequest(BaseModel):
+    """Request model for approving a proposed probe."""
+    approver_id: str
+
+
+class ProbeResponse(BaseModel):
+    """Response model for probe (aligned with core.models.Probe)."""
+    probe_id: UUID
+    probe_key: str
+    claim_type: str
+    status: str
+    scope: dict[str, Any]
+    active_signals: list[UUID]
+    requirements: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+    expires_at: Optional[datetime]
+
+
+class ProbeListResponse(BaseModel):
+    """List response for probes."""
+    probes: list[ProbeResponse]
+    total: int
+
+
+# Legacy model kept for backwards compatibility
 class MissionCreate(BaseModel):
-    """Request model for creating a mission."""
+    """[DEPRECATED] Use SignalTriggerRequest instead."""
     claim_type: str
     scope: dict[str, Any]
     requirements: dict[str, Any] = Field(default_factory=dict)
     rewards: dict[str, Any] = Field(default_factory=dict)
-
-
-class MissionResponse(BaseModel):
-    """Response model for mission."""
-    mission_id: UUID
-    claim_type: str
-    status: str
-    scope: dict[str, Any]
-    requirements: dict[str, Any]
-    rewards: dict[str, Any]
-    created_at: datetime
-
-
-class MissionListResponse(BaseModel):
-    """Response model for listing missions."""
-    missions: list[MissionResponse]
-    total: int
 
 
 # =============================================================================

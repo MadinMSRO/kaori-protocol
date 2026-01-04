@@ -45,7 +45,7 @@ class TestTruthHash:
                 spatial_system=SpatialSystem.H3,
                 spatial_id="8928308280fffff",
                 z_index="surface",
-                time_bucket="2026-01-02T10:00:00Z",
+                time_bucket="2026-01-02T10:00Z",
             ),
             claim_type="earth.flood.v1",
             status=TruthStatus.VERIFIED_TRUE,
@@ -66,7 +66,7 @@ class TestTruthHash:
     
     def test_hash_changes_with_status(self, truth_state):
         hash1 = compute_truth_hash(truth_state)
-        truth_state.status = TruthStatus.DISPUTED
+        truth_state.status = TruthStatus.VERIFIED_FALSE
         hash2 = compute_truth_hash(truth_state)
         assert hash1 != hash2
 
@@ -101,7 +101,7 @@ class TestTruthStateSigning:
                 spatial_system=SpatialSystem.H3,
                 spatial_id="8928308280fffff",
                 z_index="surface",
-                time_bucket="2026-01-02T10:00:00Z",
+                time_bucket="2026-01-02T10:00Z",
             ),
             claim_type="earth.flood.v1",
             status=TruthStatus.VERIFIED_TRUE,
@@ -122,7 +122,7 @@ class TestTruthStateSigning:
     def test_verify_tampered_state(self, truth_state):
         truth_state.security = sign_truth_state(truth_state)
         # Tamper with the state
-        truth_state.status = TruthStatus.DISPUTED
+        truth_state.status = TruthStatus.VERIFIED_FALSE
         assert verify_truth_state(truth_state) is False
     
     def test_verify_unsigned_state(self, truth_state):

@@ -23,7 +23,7 @@ async def get_truth_state(truthkey: str):
     Get current truth state for a TruthKey.
     
     The TruthKey format: {domain}:{topic}:{spatial_system}:{spatial_id}:{z_index}:{time_bucket}
-    Example: earth:flood:h3:886142a8e7fffff:surface:2026-01-02T10:00:00Z
+    Example: earth:flood:h3:886142a8e7fffff:surface:2026-01-02T10:00Z
     """
     truth_state = _engine.get_truth_state(truthkey)
     

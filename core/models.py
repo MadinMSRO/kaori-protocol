@@ -12,6 +12,8 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
+from core.signals import SignalType
+
 
 # =============================================================================
 # Enums
@@ -33,15 +35,24 @@ class SpatialSystem(str, Enum):
 
 
 class TruthStatus(str, Enum):
-    """Allowed truth state status values (SPEC Section 8.1)."""
+    """
+    Truth state status values (SPEC Section 8.1).
+    
+    Intermediate: May change during observation window.
+    Final: Set only at window end, immutable and signed.
+    """
+    # Intermediate statuses (during time_bucket window)
     PENDING = "PENDING"
-    INVESTIGATING = "INVESTIGATING"
-    PENDING_HUMAN_REVIEW = "PENDING_HUMAN_REVIEW"  # Critical lane: awaiting human consensus
+    LEANING_TRUE = "LEANING_TRUE"          # Evidence trending towards verified true
+    LEANING_FALSE = "LEANING_FALSE"        # Evidence trending towards verified false
+    UNDECIDED = "UNDECIDED"                # Conflicting or unclear evidence
+    PENDING_HUMAN_REVIEW = "PENDING_HUMAN_REVIEW"  # Escalated for human validation
+    
+    # Final statuses (at window end, must be signed)
     VERIFIED_TRUE = "VERIFIED_TRUE"
     VERIFIED_FALSE = "VERIFIED_FALSE"
-    INCONCLUSIVE = "INCONCLUSIVE"  # Review timed out without reaching consensus
-    DISPUTED = "DISPUTED"
-    EXPIRED = "EXPIRED"
+    INCONCLUSIVE = "INCONCLUSIVE"          # Could not determine after review
+    EXPIRED = "EXPIRED"                    # Window closed without resolution
 
 
 class VerificationBasis(str, Enum):
@@ -67,6 +78,103 @@ class VoteType(str, Enum):
     REJECT = "REJECT"
     CHALLENGE = "CHALLENGE"
     OVERRIDE = "OVERRIDE"
+
+
+# =============================================================================
+# Agent & Network Models (FLOW_SPEC Sections 2.1-2.2)
+# =============================================================================
+
+class AgentType(str, Enum):
+    """Type of agent in the network."""
+    INDIVIDUAL = "individual"
+    SQUAD = "squad"
+    SENSOR = "sensor"
+    OFFICIAL = "official"
+
+
+class EdgeType(str, Enum):
+    """Type of edge in the trust network."""
+    VOUCH = "VOUCH"           # A explicitly trusts B
+    MEMBER_OF = "MEMBER_OF"   # A belongs to Squad B
+    COLLABORATE = "COLLABORATE"  # History of agreement
+    CONFLICT = "CONFLICT"     # History of disagreement
+
+
+class Agent(BaseModel):
+    """
+    The atomic unit of the Kaori Flow system (FLOW_SPEC Section 2.1).
+    Represents a person, sensor, drone, squad, or organization.
+    """
+    agent_id: UUID = Field(default_factory=uuid4)
+    agent_type: AgentType = AgentType.INDIVIDUAL
+    standing: Standing = Standing.BRONZE
+    trust_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    
+    # Per-domain qualifications ("Genome")
+    qualifications: dict[str, str] = Field(default_factory=dict)  # {"earth.flood": "expert"}
+    
+    # Stats
+    verified_observations: int = 0
+    correct_votes: int = 0
+    total_votes: int = 0
+    
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class NetworkEdge(BaseModel):
+    """
+    Edge in the trust network (FLOW_SPEC Section 2.2).
+    Defines relationships between Agents.
+    """
+    edge_id: UUID = Field(default_factory=uuid4)
+    edge_type: EdgeType
+    source_agent_id: UUID
+    target_agent_id: UUID
+    weight: float = Field(default=1.0, ge=0.0)  # Coupling strength
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None  # CONFLICT edges never expire
+
+
+# =============================================================================
+# Probe Enums & Models (Flow Primitive)
+# =============================================================================
+
+class ProbeStatus(str, Enum):
+    """Status of a probe (Flow Layer)."""
+    PROPOSED = "PROPOSED"      # Created by low-standing signal, awaiting approval
+    ACTIVE = "ACTIVE"          # Approved and open for assignment
+    ASSIGNED = "ASSIGNED"      # Linked to an Agent
+    IN_PROGRESS = "IN_PROGRESS" # Observation received
+    COMPLETED = "COMPLETED"    # TruthState finalized
+    EXPIRED = "EXPIRED"        # Time window closed
+    CANCELLED = "CANCELLED"    # Administratively cancelled
+
+
+class Probe(BaseModel):
+    """
+    A persistent coordination object (Flow Primitive).
+    Directs agents to gather observations.
+    """
+    probe_id: UUID = Field(default_factory=uuid4)
+    probe_key: str  # Deterministic key: hash(claim_type + scope)
+    claim_type: str
+    status: ProbeStatus = ProbeStatus.PROPOSED
+    
+    # Scope
+    scope: dict[str, Any]  # { "spatial": ..., "temporal": ... }
+    
+    # Origin
+    created_by_signal: Optional[UUID] = None
+    active_signals: list[UUID] = Field(default_factory=list)
+    
+    # Requirements
+    requirements: dict[str, Any] = Field(default_factory=dict)  # e.g., {"min_effective_power": 250}
+    
+    # Metadata
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
 
 
 # =============================================================================
@@ -129,6 +237,7 @@ class Observation(BaseModel):
     Raw input from reporters/sensors before validation.
     """
     observation_id: UUID = Field(default_factory=uuid4)
+    probe_id: Optional[UUID] = None  # Optional link to Flow Probe
     claim_type: str  # e.g., "earth.flood.v1"
     reported_at: datetime
     reporter_id: str
@@ -151,10 +260,10 @@ class Observation(BaseModel):
 # =============================================================================
 
 class Vote(BaseModel):
-    """A validation vote from a user."""
+    """Vote for consensus (SPEC Section 10)."""
     vote_id: UUID = Field(default_factory=uuid4)
     voter_id: str
-    voter_standing: Standing
+    voter_standing: float = Field(ge=0.0, description="Continuous standing per FLOW_SPEC 2.1")
     vote_type: VoteType
     voted_at: datetime
     comment: Optional[str] = None
@@ -171,6 +280,27 @@ class ConsensusRecord(BaseModel):
     finalized: bool = False
     finalize_reason: Optional[str] = None
     positive_ratio: float = 0.0  # (ratify - reject) / total
+
+
+# =============================================================================
+# Trust Models (Flow Interface)
+# =============================================================================
+
+class TrustContext(BaseModel):
+    """Context for trust evaluation (SPEC Section 4.1)."""
+    action: str           # "vote" | "observe" | "trigger_probe"
+    claim_type: str       # e.g., "earth.flood.v1"
+    domain: str           # e.g., "earth"
+    scope: dict[str, Any] # { "spatial": ..., "temporal": ... }
+
+
+class TrustResult(BaseModel):
+    """Result of trust evaluation (SPEC Section 4.2)."""
+    power: float                 # Effective voting/observation power
+    standing: float              # Raw standing value
+    derived_class: str           # "bronze" | "silver" | "expert" | "authority"
+    flags: list[str]             # e.g., ["ISOLATED", "HIGH_ASSURANCE"]
+    trust_snapshot_hash: str     # SHA256 of trust graph state (for audit)
 
 
 # =============================================================================

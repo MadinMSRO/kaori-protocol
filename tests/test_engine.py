@@ -109,9 +109,9 @@ class TestEngineVoting:
             geo={"lat": 4.175, "lon": 73.509},
         )
     
-    def _make_vote(self, standing: Standing, vote_type: VoteType) -> Vote:
+    def _make_vote(self, standing: float, vote_type: VoteType) -> Vote:
         return Vote(
-            voter_id=f"voter_{standing.value}",
+            voter_id=f"voter_{standing}",
             voter_standing=standing,
             vote_type=vote_type,
             voted_at=datetime.now(timezone.utc),
@@ -122,25 +122,25 @@ class TestEngineVoting:
         ts = engine.process_observation(observation)
         truthkey = ts.truthkey
         
-        # Apply vote
-        vote = self._make_vote(Standing.EXPERT, VoteType.RATIFY)
+        # Apply vote with continuous standing
+        vote = self._make_vote(200.0, VoteType.RATIFY)  # Expert-level standing
         ts = engine.apply_vote(truthkey, vote)
         
         assert ts.consensus is not None
         assert len(ts.consensus.votes) == 1
-        assert ts.consensus.score == 7  # Expert weight
+        assert ts.consensus.score >= 5  # weight(200) ≈ 5.4
     
     def test_votes_reach_threshold(self, engine, observation):
         ts = engine.process_observation(observation)
         truthkey = ts.truthkey
         
         # Apply enough votes to reach threshold (15)
-        ts = engine.apply_vote(truthkey, self._make_vote(Standing.EXPERT, VoteType.RATIFY))
-        ts = engine.apply_vote(truthkey, self._make_vote(Standing.EXPERT, VoteType.RATIFY))
-        ts = engine.apply_vote(truthkey, self._make_vote(Standing.BRONZE, VoteType.RATIFY))
+        ts = engine.apply_vote(truthkey, self._make_vote(200.0, VoteType.RATIFY))  # Expert
+        ts = engine.apply_vote(truthkey, self._make_vote(200.0, VoteType.RATIFY))  # Expert
+        ts = engine.apply_vote(truthkey, self._make_vote(200.0, VoteType.RATIFY))  # Expert
         
-        # Score should be 15 (7+7+1)
-        assert ts.consensus.score == 15
+        # Score should be >= 15 with 3 experts
+        assert ts.consensus.score >= 15
         assert ts.consensus.finalized is True
         assert ts.status == TruthStatus.VERIFIED_TRUE
     
@@ -149,7 +149,7 @@ class TestEngineVoting:
         truthkey = ts.truthkey
         
         # Single authority override should finalize
-        ts = engine.apply_vote(truthkey, self._make_vote(Standing.AUTHORITY, VoteType.OVERRIDE))
+        ts = engine.apply_vote(truthkey, self._make_vote(500.0, VoteType.OVERRIDE))  # Authority
         
         assert ts.consensus.finalized is True
         assert ts.status == TruthStatus.VERIFIED_TRUE
@@ -186,5 +186,5 @@ class TestEngineRetrieval:
         assert retrieved is not None
     
     def test_get_nonexistent_truth_state(self, engine):
-        result = engine.get_truth_state("earth:flood:h3:nonexistent:surface:2026-01-01T00:00:00Z")
+        result = engine.get_truth_state("earth:flood:h3:nonexistent:surface:2026-01-01T00:00Z")
         assert result is None

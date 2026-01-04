@@ -1,8 +1,8 @@
-# Kaori Flow — Engineering Specification (v1.0)
+# Kaori Flow — Engineering Specification (v2.2)
 
-> **Status:** Draft v1.0 (Implementation Grade)  
+> **Status:** Draft v2.2 (Probe-First Architecture)  
 > **Maintainer:** MSRO  
-> **Scope:** Defines the operational layer for mission creation, reward distribution, standing evolution, and work assignment within the Kaori Protocol ecosystem.
+> **Scope:** Defines the "Physics of Trust" (Agents, Networks, Signals, Probes) that powers the Kaori Protocol.
 
 ---
 
@@ -10,581 +10,413 @@
 
 | Specification | Scope |
 |---------------|-------|
-| **SPEC.md** (Kaori Truth Standard) | Defines *what* constitutes truth and *how* it is validated |
-| **FLOW_SPEC.md** (Kaori Flow) | Defines *who* does the work, *when* they do it, and *how* they earn standing and credits |
+| **TRUTH_SPEC.md** (Kaori Truth Standard) | Defines *what* constitutes truth and *how* it is validated |
+| **FLOW_SPEC.md** (Kaori Flow) | Defines *who* does the work, *when* they do it, and *how* they earn standing |
 
 Kaori Flow operates **on top of** Kaori Truth. Observations submitted through Flow are validated according to the Truth Standard.
 
----
-
-## 1. Normative Language
-
-The following keywords are to be interpreted as described in **RFC 2119**:
-
-| Keyword | Meaning |
-|---------|---------|
-| **MUST / MUST NOT** | Absolute requirement |
-| **SHOULD / SHOULD NOT** | Recommended |
-| **MAY** | Optional |
+> [!IMPORTANT]
+> **Normative Boundary:** Truth MUST NOT require Flow primitives to compile truth. Flow primitives (Probes, Agents, Network) are coordination mechanisms. Truth receives observations and produces verified states independently.
 
 ---
 
-## 2. Core Primitives
+## 1. Architectural Philosophy: Physics vs. Mechanics
 
-### 2.1 Mission
+Kaori Flow is distinct from Kaori Truth.
 
-A **Mission** is a request for ground truth observations within a defined spatial and temporal scope.
+| Layer | Responsibility | Primitives |
+|-------|----------------|------------|
+| **Kaori Truth** (Mechanics) | Deterministic verification of claims. "What is this vote worth?" | Observations, Votes, Claims |
+| **Kaori Flow** (Physics) | Dynamic calculation of trust. "Who is this agent and why do we trust them?" | Agents, Network, Signals, Probes |
+
+---
+
+## 2. Core Primitives (The Physics Layer)
+
+Kaori Flow is built on a **Fractal Graph Architecture**. There is no distinction between an individual and a group; both are Agents.
+
+### 2.1 The Agent (The Cell)
+
+The **Agent** is the atomic unit of the system. An Agent can represent a person, a sensor, a drone, a squad, or an entire organization.
+
+**Structure:**
+- **Identity:** Unique UUID.
+- **Type:** `individual`, `squad`, `sensor`, `official`.
+- **Intrinsic Standing:** A scalar float (0.0 to ∞) representing raw accumulated trust.
+- **Genome (Qualifications):** Per-domain capabilities (e.g., `earth.flood: expert`).
+- **Activity Record:** Immutable ledger of interactions.
+
+#### Standing (Normative Definition)
+
+Standing is a **continuous scalar float** (canonical representation). Standing classes are **derived** for backwards compatibility:
+
+```python
+def derive_standing_class(standing: float) -> str:
+    """Derive standing class from scalar value."""
+    if standing < 100:
+        return "bronze"
+    elif standing < 250:
+        return "silver"
+    elif standing < 500:
+        return "expert"
+    else:
+        return "authority"
+```
+
+| Standing Value | Derived Class | Typical Role |
+|----------------|---------------|--------------|
+| 0 – 99 | `bronze` | New/Unverified |
+| 100 – 249 | `silver` | Verified Contributor |
+| 250 – 499 | `expert` | Domain Expert |
+| 500+ | `authority` | Official/Calibrated Sensor |
+
+### 2.2 The Network (The Tissue)
+
+The **Network** defines the relationships between Agents. Trust flows through these edges.
+
+**Edge Types:**
+*   **Trust Edges:**
+    *   `VOUCH (A -> B)`: A explicitly trusts B. Transfer of standing.
+    *   `MEMBER_OF (A -> B)`: A is part of Squad B. Enables **Fractal Trust Inheritance**.
+*   **Signal Edges:**
+    *   `COLLABORATE (A <-> B)`: History of agreeing on verified truth. Forms "Squads".
+    *   `CONFLICT (A <-> B)`: History of disagreement. Defines "Independence".
+
+### 2.3 Signals (The Chemical Gradient)
+
+Signals are immutable event envelopes that propagate through the Network to trigger reactions.
+
+> [!IMPORTANT]
+> **Signals are immutable. Probes are stateful.** A Signal MUST NOT contain an embedded Probe. The SignalProcessor creates or mutates Probes in response to Signals.
+
+#### Signal Primitives
+
+```python
+class Signal:
+    id: UUID
+    type: SignalType          # Source category
+    source_id: str            # Emitter (Sensor, User, System)
+    timestamp: datetime
+    data: dict                # Payload (claim_type, scope, severity)
+```
+
+#### Signal Types
+
+| Signal Type | Emitter | Purpose |
+|-------------|---------|---------|
+| `AUTOMATED_TRIGGER` | IoT, External APIs | Raw environmental alert (e.g., "Rain > 50mm") |
+| `MANUAL_TRIGGER` | Human User | User explicit intent (e.g., "Create Probe") |
+| `SCHEDULED_TRIGGER` | Scheduler | Time-based intent (e.g., "Daily Check") |
+| `SYSTEM_ALERT` | Internal Logic | Contradiction or Low Confidence flag |
+
+### 2.4 Probes (The Coordination Object) — FLOW PRIMITIVE
+
+> [!IMPORTANT]
+> **Probe is a first-class primitive of Kaori Flow (Normative).**
+> - Flow MUST define and manage Probe creation, dedupe, lifecycle, assignment, expiry.
+> - Kaori Truth MUST NOT require Probes to compile truth.
+> - Truth MAY reference `probe_id` only as optional provenance metadata.
+
+A **Probe** is a persistent, stateful coordination object that directs agents to gather observations.
+
+#### Probe Schema
 
 ```json
 {
-  "mission_id": "uuid",
+  "probe_id": "uuid",
+  "probe_key": "string (deterministic)",
   "claim_type": "earth.flood.v1",
-  "created_by": "system|authority|partner",
-  "created_at": "ISO8601",
-  "status": "open|assigned|completed|expired|cancelled",
-  
   "scope": {
-    "spatial": {
-      "system": "h3",
-      "cells": ["8928308280fffff", "8928308281fffff"],
-      "resolution": 8
-    },
-    "temporal": {
-      "start": "ISO8601",
-      "end": "ISO8601"
-    }
+    "spatial": { "type": "h3", "value": "886142a8e7fffff" },
+    "temporal": { "start": "ISO8601", "end": "ISO8601" }
   },
-  
+  "status": "PROPOSED|ACTIVE|ASSIGNED|IN_PROGRESS|COMPLETED|EXPIRED|CANCELLED",
+  "created_by_signal": "signal_id",
+  "active_signals": ["signal_id_1", "signal_id_2"],
   "requirements": {
-    "min_observations": 3,
-    "min_standing": "bronze",
-    "evidence_required": true
+    "min_effective_power": 250,
+    "required_edges": []
   },
-  
-  "rewards": {
-    "base_credits": 20,
-    "priority_level": "standard|urgent|critical",
-    "bonus_multiplier": 1.0
-  }
-}
-```
-
-### 2.2 Assignment
-
-An **Assignment** links a Mission to a specific Reporter.
-
-```json
-{
-  "assignment_id": "uuid",
-  "mission_id": "uuid",
-  "reporter_id": "uuid",
-  "assigned_at": "ISO8601",
-  "status": "pending|submitted|verified|rejected|expired",
-  "observation_id": "uuid|null"
-}
-```
-
-### 2.3 Standing
-
-**Standing** represents a user's trust level within the Kaori ecosystem.
-
-| Class | Weight | Privileges |
-|-------|--------|------------|
-| `bronze` | 1 | Submit observations, vote on non-critical claims |
-| `silver` | 3 | Vote on all claims, access priority missions, unlock badges |
-| `expert` | 7 | Specialist validation, dispute resolution, train AI, access research data |
-| `authority` | 10 | Override votes, escalation endpoint, policy changes |
-
-### 2.4 Kaori Credits
-
-**Kaori Credits** are the internal unit of contribution within the ecosystem. Credits are **non-transferable** and **non-monetary**. They represent accumulated contribution value.
-
-Credits unlock:
-- Standing promotions
-- Priority mission access
-- Ecosystem privileges
-- Recognition badges
-- Access to premium features
-
----
-
-## 3. Mission Lifecycle
-
-### 3.1 Mission States
-
-```
-DRAFT → OPEN → ASSIGNED → COMPLETED
-                ↓
-             EXPIRED
-```
-
-| State | Description |
-|-------|-------------|
-| `draft` | Created but not yet published |
-| `open` | Published and accepting assignments |
-| `assigned` | All slots filled, awaiting observations |
-| `completed` | Required observations submitted and verified |
-| `expired` | Temporal window closed without completion |
-| `cancelled` | Manually cancelled by creator |
-
-### 3.2 Mission Creation
-
-Missions **MAY** be created by:
-
-1. **System (Automated):**
-   - IoT sensor triggers (e.g., water level > threshold)
-   - Satellite anomaly detection
-   - Scheduled monitoring tasks
-
-2. **Authority (Manual):**
-   - Disaster response coordination
-   - Policy verification requirements
-
-3. **Partners (API):**
-   - Research institutions needing ground truth
-   - Conservation organizations
-   - International monitoring bodies
-
-### 3.3 Mission Triggers (Normative)
-
-For automated mission creation, the system **MUST** support:
-
-```yaml
-triggers:
-  iot_threshold:
-    sensor_type: "water_level"
-    condition: "value > 150"  # cm
-    claim_type: "earth.flood.v1"
-    spatial_expansion: 1      # Include neighboring H3 cells
-    priority: "urgent"
-    
-  satellite_anomaly:
-    source: "copernicus_ndwi"
-    condition: "delta > 0.3"
-    claim_type: "earth.flood.v1"
-    priority: "critical"
-    
-  scheduled:
-    cron: "0 6 * * *"         # Daily at 6 AM
-    claim_type: "ocean.coral_health.v1"
-    scope: "all_monitored_reefs"
-    priority: "standard"
-```
-
----
-
-## 4. Assignment and Notification
-
-### 4.1 Assignment Algorithm
-
-When a Mission opens, the system **MUST**:
-
-1. **Identify eligible reporters** within the spatial scope
-2. **Filter by standing** (>= `min_standing`)
-3. **Rank by:**
-   - Proximity to mission center
-   - Trust score (higher = priority)
-   - Recent activity (active users preferred)
-   - Standing class (higher = priority for critical missions)
-
-4. **Assign slots** up to `max_assignments` (default: 2× `min_observations`)
-
-### 4.2 Notification Delivery
-
-Notifications **MUST** be delivered via:
-
-| Channel | Priority | Latency |
-|---------|----------|---------|
-| Push notification | High | < 30 seconds |
-| In-app alert | High | < 1 minute |
-| Email | Low | < 5 minutes |
-| SMS (critical only) | Critical | < 1 minute |
-
-### 4.3 Assignment Acceptance
-
-```json
-{
-  "type": "assignment_offer",
-  "mission_id": "uuid",
-  "claim_type": "earth.flood.v1",
-  "location": { "lat": 4.175, "lon": 73.509 },
   "expires_at": "ISO8601",
-  "reward_credits": 20,
-  "priority": "urgent",
-  "accept_url": "/api/v1/assignments/{id}/accept",
-  "decline_url": "/api/v1/assignments/{id}/decline"
+  "created_at": "ISO8601",
+  "updated_at": "ISO8601"
 }
 ```
 
-Reporters **MUST** accept or decline within `assignment_expiry` (default: 15 minutes).
+#### ProbeKey (Deterministic Dedupe Key)
 
-Unaccepted assignments **MUST** be reassigned to next eligible reporter.
+ProbeKey MUST be derived deterministically from claim_type + scope:
+
+```
+ProbeKey = hash(claim_type + spatial_id + z_index + time_bucket)
+```
+
+Or equivalently:
+
+```
+ProbeKey = claim_type + ":" + TruthKey
+```
+
+This enables:
+- Idempotent Probe creation
+- Distributed correctness
+- Replay safety
+
+#### Probe Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> PROPOSED: Low-standing signal
+    [*] --> ACTIVE: Authority/Sensor signal
+    PROPOSED --> ACTIVE: Approved
+    PROPOSED --> CANCELLED: Rejected
+    ACTIVE --> ASSIGNED: Agent accepts
+    ASSIGNED --> IN_PROGRESS: Observation received
+    IN_PROGRESS --> COMPLETED: TruthState finalized
+    IN_PROGRESS --> EXPIRED: Time window closed
+    ACTIVE --> EXPIRED: No assignment before deadline
+```
+
+| Status | Description |
+|--------|-------------|
+| `PROPOSED` | Created by low-standing signal, awaiting approval |
+| `ACTIVE` | Approved and open for assignment |
+| `ASSIGNED` | Linked to an Agent |
+| `IN_PROGRESS` | At least one observation received |
+| `COMPLETED` | TruthState finalized (VERIFIED_TRUE/FALSE) |
+| `EXPIRED` | Time window closed without finalization |
+| `CANCELLED` | Administratively cancelled |
+
+### 2.5 The Signal Processor (The Reflex Arc)
+
+The **Signal Processor** is the core logic engine that transmutes Signals into Probe mutations.
+
+**Workflow:**
+1. **Ingest:** Receive `Signal` from any source.
+2. **Authenticate:** Check `source_id` standing (e.g., Is this user an Authority?).
+3. **Compute ProbeKey:** Derive deterministic key from `claim_type + scope`.
+4. **Deduplicate:** Check if an active Probe already exists for this ProbeKey.
+5. **React:**
+   - If no active Probe: Create new Probe.
+   - If active Probe exists: Link signal to probe (`probe.active_signals.append(signal_id)`).
+6. **Route:** Emit assignments to eligible agents/squads.
+
+**Action Outputs:**
+
+| Action | Trigger Condition |
+|--------|-------------------|
+| `CREATE_PROBE` | New ProbeKey, sufficient authority |
+| `ESCALATE_REVIEW` | Low confidence or contradiction detected |
+| `ISSUE_ALERT` | Urgent signal from calibrated sensor |
+| `FREEZE_AGENT` | Repeated malicious behavior detected |
+| `REQUEST_EVIDENCE` | Claim requires additional observation |
+
+> [!NOTE]
+> This unifies human and machine inputs. A "Create Probe" button in the UI simply emits a `MANUAL_TRIGGER` signal.
 
 ---
 
-## 5. Standing Evolution
+## 3. The Laws of Physics (Trust Dynamics)
 
-### 5.1 Trust Score
+Trust is calculated dynamically at runtime via the **TrustProvider** interface.
 
-Every user has a **trust_score** (0.0 to 1.0) computed from:
+### 3.1 Law 1: Fractal Inheritance (Bounded)
 
+An Agent's effective power is the sum of their Intrinsic Standing and the standing inherited from their Network Context.
+
+> `Power(A) = Intrinsic(A) + (Power(Squad) * InheritanceDecay)`
+
+**Bounds (Mandatory):**
+```yaml
+constants:
+  inheritance_decay: 0.2      # 20% per hop
+  max_inheritance_depth: 3    # Maximum hops
 ```
-trust_score = base_score 
-            + (verified_observations × verification_weight)
-            - (rejected_observations × rejection_penalty)
-            + (validation_accuracy × validation_weight)
-            + (tenure_bonus)
+
+**Cycle Safety:**
+Traversal MUST maintain a visited set to prevent infinite loops.
+
+```python
+def compute_power(agent_id: UUID, visited: set = None) -> float:
+    if visited is None:
+        visited = set()
+    if agent_id in visited:
+        return 0.0  # Cycle detected
+    visited.add(agent_id)
+    
+    intrinsic = get_intrinsic_standing(agent_id)
+    inherited = 0.0
+    
+    for squad_id in get_squads(agent_id):
+        if len(visited) < MAX_INHERITANCE_DEPTH:
+            inherited += compute_power(squad_id, visited) * INHERITANCE_DECAY
+    
+    return intrinsic + inherited
 ```
 
-**Default weights:**
+### 3.2 Law 2: Shared Liability
 
-| Component | Weight |
-|-----------|--------|
-| `base_score` | 0.30 |
-| `verification_weight` | +0.02 per verified observation |
-| `rejection_penalty` | -0.05 per rejected observation |
-| `validation_weight` | +0.01 per correct validation vote |
-| `tenure_bonus` | +0.001 per day active (max +0.10) |
+If an Agent acts maliciously, the penalty propagates up the `MEMBER_OF` edges to their Squads.
 
-### 5.2 Standing Transitions (Normative)
+> `Damage(Squad) = Damage(Agent) * LiabilityFactor`
 
-Users **MUST** meet these criteria to advance:
+### 3.3 Law 3: Isolation Dampening (Immunity)
 
-| Transition | Requirements |
-|------------|--------------|
-| `bronze` → `silver` | trust_score ≥ 0.50 **AND** verified_observations ≥ 10 **AND** total_credits ≥ 200 **AND** tenure ≥ 7 days |
-| `silver` → `expert` | trust_score ≥ 0.70 **AND** verified_observations ≥ 50 **AND** total_credits ≥ 1000 **AND** validation_accuracy ≥ 0.85 **AND** domain_certification = true |
-| `expert` → `authority` | Manual appointment only (government officials) |
+Agents or Squads that form strictly internal loops ("Echo Chambers") without external grounding receive a penalty.
 
-### 5.3 Standing Demotion
+> `EffectivePower = Power * (1 - IsolationMetric)`
 
-Users **MAY** be demoted if:
+**Isolation Metric:**
+```python
+IsolationMetric = internal_collabs / (internal_collabs + external_collabs + 1)
+```
 
-- trust_score falls below threshold for current standing
-- 3+ consecutive rejected observations
-- Inactivity > 90 days (demote by one level)
-- Manual action by authority (fraud, abuse)
+Where:
+- `internal_collabs`: COLLABORATE edges within the same squad
+- `external_collabs`: COLLABORATE edges with agents outside the squad
 
-### 5.4 Domain Certification
+Bounded in [0, 1]. Updated with each collaboration and grounding event.
 
-For `expert` standing, users **MUST** complete domain certification:
+### 3.4 Law 4: Grounding
 
-1. **Training module** (claim-type specific)
-2. **Qualification test** (≥ 80% accuracy on test observations)
-3. **Supervised period** (10 observations reviewed by existing expert)
+Agreement with High-Assurance Agents clears Isolation penalties ("Cronyism Debt").
+
+**High-Assurance Agents:**
+- `official` type agents
+- Calibrated `sensor` type agents
+- `expert` agents above minimum power threshold (optional)
+
+**Grounding Effect:**
+```python
+IsolationMetric *= (1 - grounding_strength)
+```
+
+### 3.5 Law 5: Accuracy Dynamics
+
+Agent standing evolves based on verification outcomes. Accurate agents strengthen; inaccurate agents weaken.
+
+> `Δ Standing = Outcome × Magnitude × AccuracyFactor`
+
+Where:
+- `Outcome`: +1 if correct, -1 if incorrect
+- `Magnitude`: Confidence of the finalized TruthState
+- `AccuracyFactor`: Configurable multiplier per claim type
 
 ---
 
-## 6. Kaori Credits System
+## 4. Integration with Kaori Truth
 
-### 6.1 Purpose
+Kaori Truth consumes Flow via a strict, context-aware interface.
 
-Kaori Credits are the **sole incentive mechanism** within the ecosystem. They are:
+### 4.1 TrustContext (Input)
 
-- **Non-transferable** between users
-- **Non-exchangeable** for external value
-- **Earned** through verified contributions
-- **Spent** on ecosystem privileges
+```python
+class TrustContext:
+    action: str           # "vote" | "observe" | "trigger_probe"
+    claim_type: str       # e.g., "earth.flood.v1"
+    domain: str           # e.g., "earth"
+    scope: dict           # { spatial: {...}, temporal: {...} }
+```
 
-### 6.2 Credit Events
+### 4.2 TrustResult (Output)
 
-| Event | Credits |
-|-------|---------|
-| Observation verified as TRUE | +20 |
-| Observation verified as FALSE (valid negative) | +15 |
-| Observation rejected (spam/fraud) | -10 |
-| Validation vote (correct) | +5 |
-| Validation vote (incorrect) | -2 |
-| Standing promotion | +50 |
-| Mission completion bonus (first responder) | +10 |
-| Urgent mission completion | +15 (bonus) |
-| Critical mission completion | +25 (bonus) |
-| Streak bonus (7 consecutive days) | +20 |
-| Referral (new user reaches silver) | +25 |
+```python
+class TrustResult:
+    power: float                 # Effective voting/observation power
+    standing: float              # Raw standing value
+    derived_class: str           # "bronze" | "silver" | "expert" | "authority"
+    flags: list[str]             # e.g., ["ISOLATED", "HIGH_ASSURANCE"]
+    trust_snapshot_hash: str     # SHA256 of trust graph state (for audit)
+```
 
-### 6.3 Credit Multipliers
+### 4.3 TrustProvider Interface (Normative)
 
-| Standing | Multiplier |
-|----------|------------|
-| `bronze` | 1.0× |
-| `silver` | 1.2× |
-| `expert` | 1.5× |
-| `authority` | 2.0× |
+```python
+interface TrustProvider:
+    def get_power(agent_id: UUID, context: TrustContext) -> TrustResult
+```
 
-### 6.4 Ecosystem Benefits (Credit Unlocks)
+### 4.4 Trust Snapshot Determinism (Audit Requirement)
 
-| Benefit | Credit Cost | Description |
-|---------|-------------|-------------|
-| Priority Queue | 100 / month | First access to new missions |
-| Extended Deadline | 50 / use | +30 minutes on assignment |
-| Profile Badge | 200 | Display achievement on profile |
-| Data Export | 500 | Export personal contribution history |
-| Research Access | 1000 | Access aggregated (anonymized) truth data |
-| Beta Features | 250 | Early access to new features |
-| Custom Alert Radius | 150 | Expand notification radius |
+> [!IMPORTANT]
+> **For audit-grade verification, Trust queries MUST be deterministic.**
 
-### 6.5 Leaderboards
+Whenever Truth queries Flow for power/trust, Flow MUST return a `trust_snapshot_hash` computed from:
+- Agent's current standing
+- Relevant network edges
+- Isolation/grounding state
 
-The system **SHOULD** maintain:
+Truth MUST store this hash in vote records and observation records.
 
-- **Weekly leaderboard** (credits earned this week)
-- **Monthly leaderboard** (credits earned this month)
-- **All-time leaderboard** (total credits earned)
-- **Domain leaderboards** (per claim type)
+**Example Vote Record:**
+```json
+{
+  "agent_id": "uuid",
+  "vote": "RATIFY",
+  "power": 14.2,
+  "trust_snapshot_hash": "sha256(...)"
+}
+```
 
-Leaderboard position unlocks recognition badges.
+Flow MUST maintain an append-only ledger of trust snapshots for audit replay.
 
 ---
 
-## 7. Recognition System
+## 5. Configuration (The Constants)
 
-### 7.1 Badges
-
-Badges are **permanent** achievements displayed on user profiles.
-
-| Badge | Criteria | Credits Awarded |
-|-------|----------|-----------------|
-| 🌊 First Responder | First to verify an urgent mission | +10 |
-| 🎯 Sharpshooter | 10 consecutive verified observations | +25 |
-| 🔬 Specialist | Complete domain certification | +50 |
-| 🏆 Top Contributor | Reach #1 on weekly leaderboard | +100 |
-| 🌍 Global Guardian | 100 verified observations | +75 |
-| 🔍 Truth Seeker | 50 correct validation votes | +30 |
-| 📅 Dedicated | 30-day activity streak | +50 |
-| 🚀 Early Adopter | Join during beta period | +25 |
-
-### 7.2 Titles
-
-Users earn titles based on cumulative achievements:
-
-| Title | Requirements |
-|-------|--------------|
-| Observer | Default (all users) |
-| Contributor | 10+ verified observations |
-| Guardian | 50+ verified observations + Silver standing |
-| Sentinel | 100+ verified observations + Expert standing |
-| Champion | Top 10 all-time leaderboard |
-
----
-
-## 8. API Contract (Normative)
-
-A Kaori Flow implementation **MUST** expose:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/missions` | GET | List available missions |
-| `/api/v1/missions` | POST | Create new mission |
-| `/api/v1/missions/{id}` | GET | Get mission details |
-| `/api/v1/missions/{id}/assignments` | GET | List assignments for mission |
-| `/api/v1/assignments/{id}/accept` | POST | Accept assignment |
-| `/api/v1/assignments/{id}/decline` | POST | Decline assignment |
-| `/api/v1/assignments/{id}/submit` | POST | Submit observation for assignment |
-| `/api/v1/users/{id}/standing` | GET | Get user standing and trust score |
-| `/api/v1/users/{id}/credits` | GET | Get user credit balance and history |
-| `/api/v1/users/{id}/badges` | GET | Get user badges |
-| `/api/v1/users/{id}/history` | GET | Get observation/validation history |
-| `/api/v1/leaderboard` | GET | Get leaderboard rankings |
-| `/api/v1/benefits` | GET | List available credit unlocks |
-| `/api/v1/benefits/{id}/redeem` | POST | Redeem credits for benefit |
-
----
-
-## 9. Notification Templates
-
-### 9.1 Mission Assignment
-
-```
-🌊 New Mission Available
-
-A flood verification is needed near your location.
-
-📍 Location: Malé, North Malé Atoll
-⏰ Deadline: 2 hours
-⭐ Reward: 20 Credits (+15 urgent bonus)
-🏅 Priority: URGENT
-
-[Accept] [Decline]
-```
-
-### 9.2 Observation Verified
-
-```
-✅ Observation Verified
-
-Your flood report has been verified as TRUE.
-
-📍 Cell: 8928308280fffff
-⭐ Credits earned: +24 (20 base × 1.2 silver multiplier)
-📈 Trust score: 0.62 (+0.02)
-
-Total credits: 847
-```
-
-### 9.3 Standing Promotion
-
-```
-🎉 Congratulations!
-
-You've been promoted to SILVER standing.
-
-New privileges:
-• Vote on all claim types
-• Priority mission access
-• 1.2× credit multiplier
-• Unlock new badges
-
-+50 bonus credits awarded!
-
-Keep contributing to reach EXPERT level!
-```
-
-### 9.4 Badge Earned
-
-```
-🏆 New Badge Unlocked!
-
-You earned: 🎯 Sharpshooter
-"10 consecutive verified observations"
-
-+25 bonus credits awarded!
-
-View your badges in your profile.
-```
-
----
-
-## 10. Fraud Prevention
-
-### 10.1 Sybil Resistance
-
-Kaori Flow **MUST** implement:
-
-- Phone number verification (one account per number)
-- Device fingerprinting
-- Geographic consistency checks (can't report from 2 locations simultaneously)
-- Velocity limits (max observations per hour)
-
-### 10.2 Collusion Detection
-
-The system **SHOULD** flag:
-
-- Multiple users submitting identical evidence (same photo hash)
-- Unusual voting patterns (always agreeing with same users)
-- Rapid-fire submissions from clustered accounts
-
-### 10.3 Evidence Provenance
-
-For high-stakes claims, evidence **SHOULD** include:
-
-- GPS coordinates (embedded in EXIF)
-- Timestamp verification (within mission window)
-- Device attestation (if available)
-
-### 10.4 Credit Fraud Prevention
-
-To prevent gaming:
-
-- Credits are **non-transferable**
-- Negative credit balance triggers review
-- Unusual earning patterns flagged for manual review
-- Benefit redemptions rate-limited
-
----
-
-## 11. Integration with Kaori Truth
-
-### 11.1 Observation Submission Flow
-
-```
-Reporter accepts Mission
-        ↓
-Reporter submits Observation (Bronze)
-        ↓
-Kaori Truth validates Observation
-        ↓
-    ┌───┴───┐
-  VERIFIED  REJECTED
-    ↓          ↓
-Credits     Credits
-awarded     deducted
-    ↓          ↓
-Standing    Standing
-updated     updated
-```
-
-### 11.2 Validation Request Flow
-
-```
-TruthState enters INVESTIGATING
-        ↓
-Kaori Flow assigns Validators
-        ↓
-Validators submit votes
-        ↓
-Kaori Truth computes consensus
-        ↓
-Validators credited/debited
-```
-
----
-
-## 12. Configuration Schema
-
-Flow behavior **MUST** be configurable per-deployment:
+The "Laws of Physics" are tuned via YAML.
 
 ```yaml
-flow_config:
-  assignment:
-    expiry_minutes: 15
-    max_per_mission: 10
-    reassignment_enabled: true
-    
-  standing:
-    evolution_enabled: true
-    demotion_enabled: true
-    certification_required_for_expert: true
-    
-  credits:
-    enabled: true
-    base_observation_reward: 20
-    multipliers_enabled: true
-    negative_balance_allowed: false
-    
-  benefits:
-    enabled: true
-    redemption_enabled: true
-    
-  notifications:
-    push_enabled: true
-    sms_enabled: false
-    email_enabled: true
-    
-  fraud:
-    velocity_limit_per_hour: 10
-    duplicate_evidence_check: true
-    device_fingerprint_required: false
-    
-  leaderboards:
-    enabled: true
-    refresh_interval_minutes: 15
+# schemas/flow/physics_v1.yaml
+
+# Trust inheritance and penalties
+constants:
+  inheritance_decay: 0.2         # You get 20% of your Squad's power
+  max_inheritance_depth: 3       # Maximum hops (cycle safety)
+  liability_factor: 0.5          # Squad takes 50% of member's damage
+  isolation_penalty: 0.9         # 90% power reduction if isolated
+  
+# Edge formation thresholds
+thresholds:
+  squad_formation: 5             # Collaborations to form squad
+  conflict_persistence: permanent
+
+# Standing derivation (scalar -> class)
+standing_thresholds:
+  bronze_max: 99
+  silver_max: 249
+  expert_max: 499
+  # authority: 500+
+  
+# Standing evolution (Law 5)
+standing_dynamics:
+  accuracy:
+    observation_correct: 1.0     # Standing += on verified observation
+    observation_wrong: 1.5       # Standing -= on contradicted observation
+    vote_correct: 0.5            # Standing += on vote aligned with outcome
+    vote_wrong: 0.8              # Standing -= on vote against outcome
+  
+  bounds:
+    min: 0.0                     # Floor
+    max: 1000.0                  # Ceiling (optional)
+    initial: 10.0                # New agent starting standing
+  
+# Signal propagation
+signals:
+  max_propagation_depth: 3
+  decay_per_hop: 0.2
 ```
 
 ---
 
-## 13. Compatibility Requirements
+## 6. Out of Scope (Deferred)
 
-An implementation is **Kaori Flow-compatible** if it satisfies:
+The following are explicitly **not** part of Kaori Flow v2.2:
 
-- [ ] Mission CRUD with defined states
-- [ ] Assignment lifecycle management
-- [ ] Standing tracking and evolution
-- [ ] Trust score computation
-- [ ] Kaori Credits ledger (earn/spend)
-- [ ] Notification delivery (at least one channel)
-- [ ] Minimal API contract exposed
-- [ ] Integration with Kaori Truth for observation validation
+- **Credits:** Non-transferable energy for work. Deferred to future specification.
+- **Payments:** Financial incentives. Deferred.
+- **Reputation Tokens:** On-chain reputation. Deferred.
 
 ---
 
-*End of Kaori Flow Spec (v1.0)*
+*End of Kaori Flow Spec (v2.2)*

@@ -17,29 +17,29 @@ class TestTimeBucketNormalization:
     def test_hourly_bucket(self):
         dt = datetime(2026, 1, 2, 14, 35, 22, tzinfo=timezone.utc)
         result = normalize_time_bucket(dt, "PT1H")
-        assert result == "2026-01-02T14:00:00Z"
+        assert result == "2026-01-02T14:00Z"
     
     def test_daily_bucket(self):
         dt = datetime(2026, 1, 2, 14, 35, 22, tzinfo=timezone.utc)
         result = normalize_time_bucket(dt, "P1D")
-        assert result == "2026-01-02T00:00:00Z"
+        assert result == "2026-01-02T00:00Z"
     
     def test_15min_bucket(self):
         dt = datetime(2026, 1, 2, 14, 35, 22, tzinfo=timezone.utc)
         result = normalize_time_bucket(dt, "PT15M")
-        assert result == "2026-01-02T14:30:00Z"
+        assert result == "2026-01-02T14:30Z"
     
     def test_4hour_bucket(self):
         dt = datetime(2026, 1, 2, 14, 35, 22, tzinfo=timezone.utc)
         result = normalize_time_bucket(dt, "PT4H")
-        assert result == "2026-01-02T12:00:00Z"
+        assert result == "2026-01-02T12:00Z"
 
 
 class TestTruthKeyParsing:
     """Test TruthKey string parsing."""
     
     def test_parse_valid_truthkey(self):
-        s = "earth:flood:h3:8928308280fffff:surface:2026-01-02T10:00:00Z"
+        s = "earth:flood:h3:8928308280fffff:surface:2026-01-02T10:00Z"
         tk = parse_truthkey(s)
         
         assert tk.domain == Domain.EARTH
@@ -47,17 +47,17 @@ class TestTruthKeyParsing:
         assert tk.spatial_system == SpatialSystem.H3
         assert tk.spatial_id == "8928308280fffff"
         assert tk.z_index == "surface"
-        assert tk.time_bucket == "2026-01-02T10:00:00Z"
+        assert tk.time_bucket == "2026-01-02T10:00Z"
     
     def test_parse_ocean_truthkey(self):
-        s = "ocean:coral_bleaching:h3:89283082:depth_20m:2026-01-02T00:00:00Z"
+        s = "ocean:coral_bleaching:h3:89283082:depth_20m:2026-01-02T00:00Z"
         tk = parse_truthkey(s)
         
         assert tk.domain == Domain.OCEAN
         assert tk.z_index == "depth_20m"
     
     def test_parse_space_truthkey(self):
-        s = "space:orbital_debris:healpix:12345678:orbital_shell:2026-01-02T10:00:00Z"
+        s = "space:orbital_debris:healpix:12345678:orbital_shell:2026-01-02T10:00Z"
         tk = parse_truthkey(s)
         
         assert tk.domain == Domain.SPACE
@@ -68,7 +68,7 @@ class TestTruthKeyParsing:
             parse_truthkey("invalid:format")
     
     def test_roundtrip(self):
-        original = "earth:flood:h3:8928308280fffff:surface:2026-01-02T10:00:00Z"
+        original = "earth:flood:h3:8928308280fffff:surface:2026-01-02T10:00Z"
         tk = parse_truthkey(original)
         formatted = format_truthkey(tk)
         assert formatted == original
@@ -106,7 +106,7 @@ class TestTruthKeyGeneration:
         assert tk.topic == "flood"
         assert tk.spatial_system == SpatialSystem.H3
         assert tk.z_index == "surface"
-        assert tk.time_bucket == "2026-01-02T14:00:00Z"
+        assert tk.time_bucket == "2026-01-02T14:00Z"
     
     def test_generate_ocean_with_depth(self):
         obs = Observation(
@@ -136,4 +136,4 @@ class TestTruthKeyGeneration:
         
         assert tk.domain == Domain.OCEAN
         assert tk.z_index == "depth_20m"  # 25.5 rounds down to 20m bucket
-        assert tk.time_bucket == "2026-01-02T00:00:00Z"
+        assert tk.time_bucket == "2026-01-02T00:00Z"

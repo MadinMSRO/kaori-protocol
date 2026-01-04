@@ -2,12 +2,19 @@
 import pytest
 from datetime import datetime, timezone
 
-from core.models import Standing, Vote, VoteType
-from core.consensus import compute_consensus, get_consensus_outcome
+from core.models import Vote, VoteType
+from core.consensus import compute_consensus, get_consensus_outcome, standing_to_weight
+
+
+# Continuous standing values (per FLOW_SPEC Section 2.1)
+STANDING_BRONZE = 10.0
+STANDING_SILVER = 50.0
+STANDING_EXPERT = 200.0
+STANDING_AUTHORITY = 500.0
 
 
 class TestConsensusComputation:
-    """Test weighted threshold consensus."""
+    """Test weighted threshold consensus with continuous standing."""
     
     @pytest.fixture
     def claim_config(self):
@@ -16,13 +23,7 @@ class TestConsensusComputation:
                 "type": "weighted_threshold",
                 "finalize_threshold": 15,
                 "reject_threshold": -10,
-                "weighted_roles": {
-                    "bronze": 1,
-                    "silver": 3,
-                    "expert": 7,
-                    "authority": 10,
-                },
-                "override_allowed_roles": ["authority"],
+                "override_standing_threshold": 500.0,
                 "vote_types": {
                     "RATIFY": 1,
                     "REJECT": -1,
@@ -32,9 +33,9 @@ class TestConsensusComputation:
             }
         }
     
-    def _make_vote(self, standing: Standing, vote_type: VoteType) -> Vote:
+    def _make_vote(self, standing: float, vote_type: VoteType) -> Vote:
         return Vote(
-            voter_id=f"voter_{standing.value}",
+            voter_id=f"voter_{standing}",
             voter_standing=standing,
             vote_type=vote_type,
             voted_at=datetime.now(timezone.utc),
@@ -47,48 +48,52 @@ class TestConsensusComputation:
     
     def test_bronze_votes_only(self, claim_config):
         votes = [
-            self._make_vote(Standing.BRONZE, VoteType.RATIFY),
-            self._make_vote(Standing.BRONZE, VoteType.RATIFY),
-            self._make_vote(Standing.BRONZE, VoteType.RATIFY),
+            self._make_vote(STANDING_BRONZE, VoteType.RATIFY),
+            self._make_vote(STANDING_BRONZE, VoteType.RATIFY),
+            self._make_vote(STANDING_BRONZE, VoteType.RATIFY),
         ]
         result = compute_consensus(votes, claim_config)
-        assert result.score == 3  # 3 × 1 × 1
+        # weight(10) ≈ 2.0, so 3 × 2.0 × 1 ≈ 6
+        assert 5 <= result.score <= 7
         assert not result.finalized
     
     def test_expert_vote_weight(self, claim_config):
         votes = [
-            self._make_vote(Standing.EXPERT, VoteType.RATIFY),
-            self._make_vote(Standing.EXPERT, VoteType.RATIFY),
+            self._make_vote(STANDING_EXPERT, VoteType.RATIFY),
+            self._make_vote(STANDING_EXPERT, VoteType.RATIFY),
         ]
         result = compute_consensus(votes, claim_config)
-        assert result.score == 14  # 2 × 7 × 1
+        # weight(200) ≈ 5.4, so 2 × 5.4 × 1 ≈ 10.8
+        assert 9 <= result.score <= 12
         assert not result.finalized  # Just under threshold
     
     def test_finalize_threshold_reached(self, claim_config):
         votes = [
-            self._make_vote(Standing.EXPERT, VoteType.RATIFY),
-            self._make_vote(Standing.EXPERT, VoteType.RATIFY),
-            self._make_vote(Standing.BRONZE, VoteType.RATIFY),
+            self._make_vote(STANDING_EXPERT, VoteType.RATIFY),
+            self._make_vote(STANDING_EXPERT, VoteType.RATIFY),
+            self._make_vote(STANDING_EXPERT, VoteType.RATIFY),
         ]
         result = compute_consensus(votes, claim_config)
-        assert result.score == 15  # 2×7 + 1×1
+        # 3 × 5.4 ≈ 16+
+        assert result.score >= 15
         assert result.finalized
         assert "THRESHOLD_REACHED" in result.finalize_reason
     
     def test_reject_threshold_reached(self, claim_config):
         votes = [
-            self._make_vote(Standing.EXPERT, VoteType.REJECT),
-            self._make_vote(Standing.SILVER, VoteType.REJECT),
+            self._make_vote(STANDING_EXPERT, VoteType.REJECT),
+            self._make_vote(STANDING_EXPERT, VoteType.REJECT),
         ]
         result = compute_consensus(votes, claim_config)
-        assert result.score == -10  # 7×(-1) + 3×(-1)
+        # 2 × 5.4 × (-1) ≈ -10.8
+        assert result.score <= -10
         assert result.finalized
         assert "REJECT_THRESHOLD" in result.finalize_reason
     
     def test_authority_override(self, claim_config):
         votes = [
-            self._make_vote(Standing.BRONZE, VoteType.REJECT),
-            self._make_vote(Standing.AUTHORITY, VoteType.OVERRIDE),
+            self._make_vote(STANDING_BRONZE, VoteType.REJECT),
+            self._make_vote(STANDING_AUTHORITY, VoteType.OVERRIDE),
         ]
         result = compute_consensus(votes, claim_config)
         assert result.finalized
@@ -96,17 +101,18 @@ class TestConsensusComputation:
     
     def test_challenge_vote_no_score(self, claim_config):
         votes = [
-            self._make_vote(Standing.EXPERT, VoteType.RATIFY),
-            self._make_vote(Standing.SILVER, VoteType.CHALLENGE),
+            self._make_vote(STANDING_EXPERT, VoteType.RATIFY),
+            self._make_vote(STANDING_SILVER, VoteType.CHALLENGE),
         ]
         result = compute_consensus(votes, claim_config)
-        assert result.score == 7  # Challenge adds 0
+        # Challenge adds 0, so just expert's weight ≈ 5.4
+        assert 4 <= result.score <= 6
     
     def test_positive_ratio(self, claim_config):
         votes = [
-            self._make_vote(Standing.BRONZE, VoteType.RATIFY),
-            self._make_vote(Standing.BRONZE, VoteType.RATIFY),
-            self._make_vote(Standing.BRONZE, VoteType.REJECT),
+            self._make_vote(STANDING_BRONZE, VoteType.RATIFY),
+            self._make_vote(STANDING_BRONZE, VoteType.RATIFY),
+            self._make_vote(STANDING_BRONZE, VoteType.REJECT),
         ]
         result = compute_consensus(votes, claim_config)
         # ratio = (2-1)/3 = 0.33, normalized = (0.33+1)/2 = 0.67

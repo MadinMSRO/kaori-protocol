@@ -56,7 +56,7 @@ Kaori v1 does **NOT** attempt to:
 The Kaori truth lifecycle is:
 
 ```
-Mission → Observation → Processing → Candidate Truth → Validation → Final Truth
+Probe/Signal → Observation → Processing → Candidate Truth → Validation → Final Truth
 ```
 
 Kaori defines everything from **Observation** onwards.
@@ -65,7 +65,7 @@ Kaori defines everything from **Observation** onwards.
 
 In Phase 1, Kaori observations are limited to **ground-based sources**, including:
 
-- Humans (MissionHub, field teams, citizens)
+- Humans (ProbeHub, field teams, citizens)
 - Drones
 - IoT sensors (water level, rain gauges, etc.)
 - Official reports (authority site visits)
@@ -141,7 +141,34 @@ earth:flood:h3:8928308280fffff:surface:2026-01-02T10:00Z
 }
 ```
 
+### 4.4 Canonical time_bucket Format (Normative)
+
+The `time_bucket` component **MUST** be formatted as:
+
+```
+YYYY-MM-DDTHH:MMZ
+```
+
+Implementations **MUST**:
+1. Truncate to the bucket boundary (not round)
+2. Always use UTC (Z suffix)
+3. Omit seconds (`:SS` MUST NOT be included)
+
+#### Time Bucket Normalization
+
+When an observation arrives, the `reported_at` timestamp **MUST** be truncated to the bucket boundary defined by the ClaimType YAML `time_bucket` duration:
+
+| Duration | Meaning | Example Input | Normalized Output |
+|----------|---------|---------------|-------------------|
+| `PT1H` | Hourly | `2026-01-04T10:37:42Z` | `2026-01-04T10:00Z` |
+| `PT4H` | 4-hourly | `2026-01-04T10:37:42Z` | `2026-01-04T08:00Z` |
+| `PT15M` | 15-min | `2026-01-04T10:37:42Z` | `2026-01-04T10:30Z` |
+| `P1D` | Daily | `2026-01-04T10:37:42Z` | `2026-01-04T00:00Z` |
+
+All observations within the same normalized bucket share the same TruthKey and are aggregated for implicit consensus.
+
 ---
+
 
 ## 5. Claim Types (YAML Contracts)
 
@@ -324,6 +351,7 @@ Every observation **MUST** include:
 ```json
 {
   "observation_id": "uuid",
+  "probe_id": "uuid|null", 
   "claim_type": "earth.flood.v1",
   "reported_at": "ISO8601",
   "reporter_id": "string",
@@ -364,18 +392,65 @@ If enabled in claim YAML, perceptual hash **MUST** be computed for each evidence
 
 ## 8. Truth States (Gold) and Truth History (Silver)
 
-### 8.1 Allowed Status Values (Normative)
+### 8.1 Status Values (Normative)
 
-`TruthState.status` **MUST** be one of:
+TruthState status values are divided into **Intermediate** (during observation window) and **Final** (at window end).
+
+#### Intermediate Statuses
+
+These statuses **MAY** change as new observations arrive during the `time_bucket` window.
 
 | Status | Description |
 |--------|-------------|
-| `PENDING` | Awaiting processing |
-| `INVESTIGATING` | Under review |
-| `VERIFIED_TRUE` | Confirmed true |
-| `VERIFIED_FALSE` | Confirmed false |
-| `DISPUTED` | Conflicting evidence |
-| `EXPIRED` | Past validity window |
+| `PENDING` | Initial state, awaiting observations |
+| `LEANING_TRUE` | Evidence trending towards verified true |
+| `LEANING_FALSE` | Evidence trending towards verified false |
+| `UNDECIDED` | Conflicting or unclear evidence |
+| `PENDING_HUMAN_REVIEW` | Escalated for human validation |
+
+> [!NOTE]
+> Intermediate statuses provide UX feedback during the observation window but **MUST NOT** trigger finalization or signing.
+
+#### Final Statuses
+
+These statuses are set **ONLY** at the end of the `time_bucket` window and **MUST** be signed.
+
+| Status | Description |
+|--------|-------------|
+| `VERIFIED_TRUE` | Confirmed true via consensus |
+| `VERIFIED_FALSE` | Confirmed false via consensus |
+| `INCONCLUSIVE` | Could not determine after review |
+| `EXPIRED` | Window closed without resolution |
+
+> [!IMPORTANT]
+> Final statuses are **immutable** once set. The TruthState **MUST** be signed (see Section 16) immediately upon finalization.
+
+#### Status Lifecycle
+
+```
+Observation arrives
+     │
+     ▼
+PENDING ──► LEANING_TRUE ──► LEANING_TRUE ──► ...
+             (AI high)        (more obs)
+     │
+     ▼ (contradiction)
+UNDECIDED ──► PENDING_HUMAN_REVIEW
+     │
+     ▼ (window end)
+     ├─ Consensus met ──► VERIFIED_TRUE/FALSE (signed)
+     ├─ No consensus ──► INCONCLUSIVE (signed)
+     └─ Timeout ──► EXPIRED (signed)
+```
+
+#### Window-Based Finalization
+
+Final statuses are determined **at the end of the `time_bucket` window**, not iteratively.
+
+- `time_bucket: PT1H` → finalization check every hour (urgent events)
+- `time_bucket: P7D` → finalization check every 7 days (deliberate verification)
+
+The urgency of finalization is controlled by the ClaimType YAML `time_bucket` configuration.
 
 ### 8.2 Canonical TruthState JSON (Normative)
 
@@ -417,6 +492,54 @@ TruthState **MUST** include:
 ### 8.3 Silver Ledger Requirement
 
 Silver **MUST** be append-only and **MUST** store full truth snapshots for every transition.
+
+### 8.4 Observation Aggregation (Implicit Consensus)
+
+When multiple observations share the same TruthKey, they **MAY** be aggregated to determine implicit consensus without requiring explicit votes.
+
+#### Aggregate Metrics
+
+At window end, implementations **MUST** compute:
+
+```python
+network_trust = Σ(reporter_standing[i])    # Sum of all reporter standings
+ai_confidence = mean(ai_score[i])          # Average AI confidence
+ai_variance = variance(ai_score[i])        # Variance (contradiction detection)
+observation_count = N                       # Number of observations
+```
+
+#### Implicit Consensus Conditions
+
+A TruthState **MAY** be auto-verified via implicit consensus if **ALL** of the following are satisfied:
+
+1. `observation_count >= min_observations`
+2. `network_trust >= min_network_trust`
+3. `ai_confidence >= min_ai_confidence`
+4. `ai_variance <= max_ai_variance` (no contradiction)
+
+These thresholds are defined per ClaimType in the `implicit_consensus` YAML block.
+
+#### Implicit Consensus YAML Configuration
+
+ClaimType YAMLs **MAY** include:
+
+```yaml
+implicit_consensus:
+  enabled: true
+  min_observations: 3
+  min_network_trust: 50.0
+  min_ai_confidence: 0.80
+  max_ai_variance: 0.15
+  
+  # Authority override
+  override_if_authority_present: true
+  override_min_authority_count: 1
+```
+
+If `implicit_consensus.enabled` is `false` or absent, observations **MUST** go through explicit consensus voting.
+
+> [!NOTE]
+> Implicit consensus reduces validator workload for routine claims while preserving explicit voting for contested or critical claims.
 
 ---
 

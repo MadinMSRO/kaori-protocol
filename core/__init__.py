@@ -5,22 +5,34 @@ The core implementation of the Kaori Protocol (SPEC.md v1.3).
 """
 
 from .models import (
+    # Enums
+    AgentType,
+    Domain,
+    EdgeType,
+    ProbeStatus,
+    SpatialSystem,
+    Standing,
+    TruthStatus,
+    VerificationBasis,
+    VoteType,
+    # Core Models
+    Agent,
     AIValidationResult,
     ConfidenceBreakdown,
     ConsensusRecord,
-    Domain,
+    Probe,
+    NetworkEdge,
     Observation,
     ReporterContext,
     SecurityBlock,
-    SpatialSystem,
-    Standing,
     TruthKey,
     TruthState,
-    TruthStatus,
-    VerificationBasis,
     Vote,
-    VoteType,
+    TrustContext,
+    TrustResult,
 )
+
+from .signals import Signal, SignalType
 
 from .engine import KaoriEngine, create_engine
 from .consensus import compute_consensus, get_consensus_outcome
@@ -38,22 +50,34 @@ __all__ = [
     "KaoriEngine",
     "create_engine",
     
-    # Models
+    # Enums
+    "AgentType",
     "Domain",
+    "EdgeType",
+    "ProbeStatus",
     "SpatialSystem",
+    "Standing",
     "TruthStatus",
     "VerificationBasis",
-    "Standing",
     "VoteType",
-    "TruthKey",
-    "ReporterContext",
-    "Observation",
-    "Vote",
-    "ConsensusRecord",
+    "SignalType",
+    
+    # Core Models
+    "Agent",
     "AIValidationResult",
     "ConfidenceBreakdown",
+    "ConsensusRecord",
+    "Probe",
+    "NetworkEdge",
+    "Observation",
+    "ReporterContext",
     "SecurityBlock",
+    "Signal",
+    "TruthKey",
+    "TrustContext",
+    "TrustResult",
     "TruthState",
+    "Vote",
     
     # Functions
     "compute_consensus",

@@ -1,5 +1,8 @@
 from sqlalchemy.orm import Session
-from .models import TruthStateModel, ObservationModel, VoteModel, RawObservationModel, RawObservationStatus
+from .models import (
+    TruthStateModel, ObservationModel, VoteModel, RawObservationModel, RawObservationStatus,
+    AgentModel, NetworkEdgeModel, ProbeModel, SignalLogModel
+)
 from datetime import datetime, timezone
 import json
 import uuid
@@ -103,3 +106,107 @@ def create_vote(db: Session, vote_data, truthkey: str):
 
 def get_recent_truth_states(db: Session, limit: int = 50):
     return db.query(TruthStateModel).order_by(TruthStateModel.updated_at.desc()).limit(limit).all()
+
+
+# =============================================================================
+# Agent CRUD
+# =============================================================================
+
+def get_agent(db: Session, agent_id: str):
+    return db.query(AgentModel).filter(AgentModel.agent_id == agent_id).first()
+
+def create_agent(db: Session, agent_id: str, agent_type: str = "individual", standing: str = "bronze"):
+    db_obj = AgentModel(
+        agent_id=agent_id,
+        agent_type=agent_type,
+        standing=standing,
+        trust_score=0.5,
+    )
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
+
+def update_agent_standing(db: Session, agent_id: str, standing: str, trust_score: float):
+    db_obj = get_agent(db, agent_id)
+    if db_obj:
+        db_obj.standing = standing
+        db_obj.trust_score = trust_score
+        db_obj.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(db_obj)
+    return db_obj
+
+def get_or_create_agent(db: Session, agent_id: str) -> AgentModel:
+    agent = get_agent(db, agent_id)
+    if not agent:
+        agent = create_agent(db, agent_id)
+    return agent
+
+
+# =============================================================================
+# Mission CRUD
+# =============================================================================
+
+def create_probe(db: Session, probe_data: dict):
+    db_obj = ProbeModel(**probe_data)
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
+
+def get_probe(db: Session, probe_id: str):
+    return db.query(ProbeModel).filter(ProbeModel.probe_id == probe_id).first()
+
+def update_probe_status(db: Session, probe_id: str, status: str):
+    db_obj = get_probe(db, probe_id)
+    if db_obj:
+        db_obj.status = status
+        db_obj.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(db_obj)
+    return db_obj
+
+def get_probes_by_status(db: Session, status: str, limit: int = 50):
+    return db.query(ProbeModel).filter(ProbeModel.status == status).limit(limit).all()
+
+def get_squad_memberships(db: Session, agent_id: str) -> list[str]:
+    """Get list of Squad IDs this agent is a MEMBER_OF."""
+    edges = db.query(NetworkEdgeModel).filter(
+        NetworkEdgeModel.source_agent_id == agent_id,
+        NetworkEdgeModel.edge_type == "MEMBER_OF"  # Assuming string or enum value
+    ).all()
+    return [edge.target_agent_id for edge in edges]
+
+
+# =============================================================================
+# Network Edge CRUD
+# =============================================================================
+
+def create_network_edge(db: Session, edge_data: dict):
+    db_obj = NetworkEdgeModel(**edge_data)
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
+
+def get_edges_for_agent(db: Session, agent_id: str):
+    return db.query(NetworkEdgeModel).filter(
+        (NetworkEdgeModel.source_agent_id == agent_id) | 
+        (NetworkEdgeModel.target_agent_id == agent_id)
+    ).all()
+
+
+# =============================================================================
+# Signal Log CRUD
+# =============================================================================
+
+def log_signal(db: Session, signal_data: dict):
+    db_obj = SignalLogModel(**signal_data)
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
+
+def get_signals_for_truthkey(db: Session, truthkey: str, limit: int = 50):
+    return db.query(SignalLogModel).filter(SignalLogModel.truthkey == truthkey).limit(limit).all()

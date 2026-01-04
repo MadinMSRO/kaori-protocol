@@ -2,24 +2,20 @@
 Kaori Core — Consensus Computation
 
 Compute consensus from votes using weighted threshold model (SPEC Section 10).
+Uses CONTINUOUS standing values per FLOW_SPEC Section 2.1.
 """
 from __future__ import annotations
 
 from .models import (
     ConsensusRecord,
-    Standing,
     Vote,
     VoteType,
 )
 
 
-# Default weights per standing
-DEFAULT_WEIGHTS = {
-    Standing.BRONZE: 1,
-    Standing.SILVER: 3,
-    Standing.EXPERT: 7,
-    Standing.AUTHORITY: 10,
-}
+# Standing thresholds for override permissions
+AUTHORITY_THRESHOLD = 500.0  # Minimum standing to cast OVERRIDE vote
+
 
 # Default vote values
 DEFAULT_VOTE_VALUES = {
@@ -30,6 +26,26 @@ DEFAULT_VOTE_VALUES = {
 }
 
 
+def standing_to_weight(standing: float) -> float:
+    """
+    Convert continuous standing to vote weight.
+    
+    Per FLOW_SPEC Section 2.1, standing is a scalar float (0.0 to ∞).
+    Weight scales logarithmically to prevent extreme accumulation.
+    
+    Formula: weight = 1 + log2(1 + standing / 10)
+    
+    Examples:
+        standing=0   → weight ≈ 1.0
+        standing=10  → weight ≈ 2.0
+        standing=50  → weight ≈ 3.6
+        standing=200 → weight ≈ 5.4
+        standing=500 → weight ≈ 6.7
+    """
+    import math
+    return 1.0 + math.log2(1 + standing / 10.0)
+
+
 def compute_consensus(
     votes: list[Vote],
     claim_config: dict,
@@ -37,10 +53,10 @@ def compute_consensus(
     """
     Compute consensus from a list of votes using weighted threshold model.
     
-    Formula: score = Σ(weight(role) × vote_value)
+    Formula: score = Σ(weight(standing) × vote_value)
     
     Args:
-        votes: List of Vote objects
+        votes: List of Vote objects with continuous standing values
         claim_config: Claim configuration with consensus_model
         
     Returns:
@@ -52,14 +68,11 @@ def compute_consensus(
     finalize_threshold = consensus_config.get("finalize_threshold", 15)
     reject_threshold = consensus_config.get("reject_threshold", -10)
     
-    # Get weights per role
-    weighted_roles = consensus_config.get("weighted_roles", {})
-    weights = {
-        Standing.BRONZE: weighted_roles.get("bronze", DEFAULT_WEIGHTS[Standing.BRONZE]),
-        Standing.SILVER: weighted_roles.get("silver", DEFAULT_WEIGHTS[Standing.SILVER]),
-        Standing.EXPERT: weighted_roles.get("expert", DEFAULT_WEIGHTS[Standing.EXPERT]),
-        Standing.AUTHORITY: weighted_roles.get("authority", DEFAULT_WEIGHTS[Standing.AUTHORITY]),
-    }
+    # Get override threshold
+    override_standing_threshold = consensus_config.get(
+        "override_standing_threshold", 
+        AUTHORITY_THRESHOLD
+    )
     
     # Get vote values
     vote_types_config = consensus_config.get("vote_types", {})
@@ -70,12 +83,8 @@ def compute_consensus(
         VoteType.OVERRIDE: vote_types_config.get("OVERRIDE", DEFAULT_VOTE_VALUES[VoteType.OVERRIDE]),
     }
     
-    # Get override roles
-    override_roles = consensus_config.get("override_allowed_roles", ["authority"])
-    override_standings = [Standing(r) for r in override_roles]
-    
     # Compute score
-    score = 0
+    score = 0.0
     ratify_count = 0
     reject_count = 0
     has_override = False
@@ -84,13 +93,13 @@ def compute_consensus(
     for vote in votes:
         # Check for override
         if vote.vote_type == VoteType.OVERRIDE:
-            if vote.voter_standing in override_standings:
+            if vote.voter_standing >= override_standing_threshold:
                 has_override = True
                 override_vote = vote
                 continue
         
-        # Normal vote processing
-        weight = weights.get(vote.voter_standing, 1)
+        # Calculate weight from continuous standing
+        weight = standing_to_weight(vote.voter_standing)
         value = vote_values.get(vote.vote_type, 0)
         score += weight * value
         
@@ -116,14 +125,14 @@ def compute_consensus(
         finalize_reason = f"AUTHORITY_OVERRIDE by {override_vote.voter_id}"
     elif score >= finalize_threshold:
         finalized = True
-        finalize_reason = f"THRESHOLD_REACHED (score={score} >= {finalize_threshold})"
+        finalize_reason = f"THRESHOLD_REACHED (score={score:.1f} >= {finalize_threshold})"
     elif score <= reject_threshold:
         finalized = True
-        finalize_reason = f"REJECT_THRESHOLD (score={score} <= {reject_threshold})"
+        finalize_reason = f"REJECT_THRESHOLD (score={score:.1f} <= {reject_threshold})"
     
     return ConsensusRecord(
         votes=votes,
-        score=score,
+        score=int(score),  # Round to int for backwards compatibility
         finalized=finalized,
         finalize_reason=finalize_reason,
         positive_ratio=positive_ratio,
