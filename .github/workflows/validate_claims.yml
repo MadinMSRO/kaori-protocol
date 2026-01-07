@@ -3,15 +3,17 @@ name: Validate Kaori Claim Schemas
 on:
   pull_request:
     paths:
-      - "schemas/**"
-      - "meta/**"
+      - "packages/kaori-spec/schemas/**"
+      - "packages/kaori-spec/meta/**"
+      - "packages/kaori-spec/tools/**"
       - "tools/**"
   push:
     branches:
       - main
     paths:
-      - "schemas/**"
-      - "meta/**"
+      - "packages/kaori-spec/schemas/**"
+      - "packages/kaori-spec/meta/**"
+      - "packages/kaori-spec/tools/**"
       - "tools/**"
 
 jobs:

@@ -2,12 +2,14 @@
 
 **Real-time truth extraction and verification for high-stakes decisions.**
 
+Kaori Protocol exists to close the most expensive gap in modern decision systems: data can be abundant, but truth and trust are not. It combines two complementary layers — Kaori Truth (the Mechanics of Verification), which deterministically compiles observations into signed, replayable TruthStates anchored by a canonical TruthKey, and Kaori Flow (the Physics of Trust), which models standing, coordination, and adversarial resilience across agents and networks. Together, they make truth operational: verifiable, auditable, and composable without requiring blind trust in any single pipeline.
+
 Kaori transforms raw physical observations into signed, traceable Truth Records and Truth Maps that can be used operationally and defended under scrutiny.
 
 > [!NOTE]
 > This repository follows the **Open Core** architecture. The core truth compilation logic is pure, open source, and deterministic.
 >
-> **Scope:** Open Core includes deterministic truth compilation and canonical specs. Production systems typically add identity, orchestration, connectors, and deployment infrastructure.
+> **Scope:** Open Core includes deterministic truth compilation and canonical specifications. Production systems typically add identity, orchestration, connectors, and deployment infrastructure.
 
 ---
 
@@ -15,21 +17,22 @@ Kaori transforms raw physical observations into signed, traceable Truth Records 
 
 ### Packages (`packages/`)
 
-*   **`kaori-truth`**: The pure, deterministic compiler. This package has **NO runtime dependencies** on DB/Flow/API layers. It enforces the "Physics of Truth".
-*   **`kaori-flow`**: The physics of Trust and Coordination (Standing, Probes, Signals).
-*   **`kaori-spec`**: The Single Source of Truth for specifications (`TRUTH_SPEC.md`, `FLOW_SPEC.md`) and ClaimType schemas.
+*   **`kaori-truth`**: The pure, deterministic compiler. This package has **NO runtime dependencies** on DB/Flow/API layers. It enforces the Mechanics of Verification.
+*   **`kaori-flow`**: The Physics of Trust and Coordination (Standing, Probes, Signals).
+*   **`kaori-spec`**: The Single Source of Truth for specifications (`TRUTH_SPEC.md`, `FLOW_SPEC.md`) and ClaimType standards.
 *   **`kaori-db`**: Standard SQLAlchemy models and migrations.
-*   **`kaori-api`**: Reference Orchestrator and REST API implementation.
+*   **`kaori-api`**: Reference orchestrator and REST API implementation.
 
 ### Implementation Status
 
 | Component | Status | Package |
 | :--- | :--- | :--- |
-| **Truth Compiler** | ✅ Production (Pure) | `kaori-truth` |
-| **Canonicalization** | ✅ Complete | `kaori-truth` |
-| **Temporal Engine** | ✅ Complete | `kaori-truth` |
-| **Specifications** | ✅ v2.0 Released | `kaori-spec` |
-| **API / DB** | 🚧 Reference Impl | `kaori-api` |
+| Truth Compiler | ✅ Production (Pure) | `kaori-truth` |
+| Canonicalization | ✅ Complete | `kaori-truth` |
+| Temporal Engine | ✅ Complete | `kaori-truth` |
+| Specifications | ✅ v2.0 Released | `kaori-spec` |
+| Flow (Trust Physics) | 🚧 Beta | `kaori-flow` |
+| API / DB | 🚧 Reference Impl | `kaori-api` |
 
 ---
 
@@ -91,7 +94,7 @@ pip install -e packages/kaori-db
 
 ### Running Tests
 
-Verify the purity of the Truth Compiler:
+Verify the purity and determinism of the Truth Compiler:
 
 **Linux / macOS:**
 ```bash
@@ -106,16 +109,16 @@ pytest packages/kaori-truth
 ```
 
 ### Governance
-Kaori is governed under a BDFL model (MSRO).
+Kaori is governed under a BDFL model led by Madin Maseeh, with MSRO serving as steward.
 See [GOVERNANCE.md](GOVERNANCE.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ---
 
 ## 📚 Documentation
 
-*   [**TRUTH_SPEC.md**](packages/kaori-spec/TRUTH_SPEC.md): The Mechanics of Verification.
-*   [**FLOW_SPEC.md**](packages/kaori-spec/FLOW_SPEC.md): The Physics of Trust.
-*   [**OPEN_CORE.md**](OPEN_CORE.md): Architecture definition.
+*   [**TRUTH_SPEC.md**](packages/kaori-spec/TRUTH_SPEC.md): The Mechanics of Verification
+*   [**FLOW_SPEC.md**](packages/kaori-spec/FLOW_SPEC.md): The Physics of Trust
+*   [**OPEN_CORE.md**](OPEN_CORE.md): Architecture definition
 
 ## 🔐 Security & Licensing
 
