@@ -1,6 +1,6 @@
 [project]
 name = "kaori-flow"
-version = "1.0.0"
+version = "2.0.0"
 description = "Kaori Protocol — Trust Physics & Orchestration"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -11,7 +11,7 @@ authors = [
 
 dependencies = [
     "pydantic>=2.0.0",
-    "kaori-truth>=1.0.0",
+    "kaori-truth>=2.0.0",
 ]
 
 [project.optional-dependencies]

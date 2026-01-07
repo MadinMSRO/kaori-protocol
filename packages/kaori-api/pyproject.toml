@@ -1,6 +1,6 @@
 [project]
 name = "kaori-api"
-version = "1.0.0"
+version = "2.0.0"
 description = "Kaori Protocol — FastAPI Reference Implementation"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,9 +12,9 @@ authors = [
 dependencies = [
     "fastapi>=0.100.0",
     "pydantic>=2.0.0",
-    "kaori-truth>=1.0.0",
-    "kaori-flow>=1.0.0",
-    "kaori-db>=1.0.0",
+    "kaori-truth>=2.0.0",
+    "kaori-flow>=2.0.0",
+    "kaori-db>=2.0.0",
 ]
 
 [project.optional-dependencies]

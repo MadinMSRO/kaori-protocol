@@ -1,6 +1,6 @@
 [project]
 name = "kaori-protocol"
-version = "1.0.0"
+version = "2.0.0"
 description = "Kaori Protocol — Distributed Truth Compilation for Planetary-Scale Observation"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -10,7 +10,7 @@ authors = [
 ]
 keywords = ["kaori", "protocol", "truth", "distributed", "observation"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -21,10 +21,10 @@ classifiers = [
 
 # Root package depends on all sub-packages
 dependencies = [
-    "kaori-truth>=1.0.0",
-    "kaori-flow>=1.0.0",
-    "kaori-db>=1.0.0",
-    "kaori-api>=1.0.0",
+    "kaori-truth>=2.0.0",
+    "kaori-flow>=2.0.0",
+    "kaori-db>=2.0.0",
+    "kaori-api>=2.0.0",
 ]
 
 [project.optional-dependencies]

@@ -1,6 +1,6 @@
 [project]
 name = "kaori-db"
-version = "1.0.0"
+version = "2.0.0"
 description = "Kaori Protocol — Database Schemas & Migrations"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,8 +12,8 @@ authors = [
 dependencies = [
     "sqlalchemy>=2.0.0",
     "alembic>=1.10.0",
-    "kaori-truth>=1.0.0",
-    "kaori-flow>=1.0.0",
+    "kaori-truth>=2.0.0",
+    "kaori-flow>=2.0.0",
 ]
 
 [project.optional-dependencies]
