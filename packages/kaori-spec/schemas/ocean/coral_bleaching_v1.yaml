@@ -1,0 +1,264 @@
+# ============================================================================
+# Kaori Protocol — ClaimType Definition
+# ============================================================================
+# Claim:   Coral Bleaching Detection (Ocean Domain)
+# Version: 1
+# Status:  DRAFT
+# ============================================================================
+
+id: ocean.coral_bleaching.v1
+version: 1
+domain: ocean
+topic: coral_bleaching
+
+# ----------------------------------------------------------------------------
+# TruthKey Formation
+# ----------------------------------------------------------------------------
+# Ocean domain uses H3 + depth (z_index) for 3D positioning.
+truthkey:
+  spatial_system: h3
+  resolution: 9                    # ~175m hexagons (reef-scale precision)
+  z_index: underwater              # Depth-aware observations
+  time_bucket: P1D                 # Daily buckets (coral changes slowly)
+
+# ----------------------------------------------------------------------------
+# Risk Profile
+# ----------------------------------------------------------------------------
+# Coral bleaching is high-stakes for conservation and insurance.
+risk_profile: critical
+
+# ----------------------------------------------------------------------------
+# UI Schema (for MissionHub / Dive Teams)
+# ----------------------------------------------------------------------------
+ui_schema:
+  fields:
+    - name: depth_meters
+      type: number
+      label: "Depth (meters)"
+      required: true
+      validation:
+        min: 0
+        max: 100
+    - name: bleaching_percentage
+      type: number
+      label: "Estimated Bleaching (%)"
+      required: true
+      validation:
+        min: 0
+        max: 100
+    - name: coral_species
+      type: select
+      label: "Primary Coral Species"
+      required: false
+      options: ["acropora", "porites", "pocillopora", "montipora", "other", "unknown"]
+    - name: water_temperature_c
+      type: number
+      label: "Water Temperature (°C)"
+      required: false
+      validation:
+        min: 15
+        max: 40
+    - name: visibility_meters
+      type: number
+      label: "Visibility (meters)"
+      required: false
+      validation:
+        min: 0
+        max: 50
+
+# ----------------------------------------------------------------------------
+# Evidence Requirements
+# ----------------------------------------------------------------------------
+evidence:
+  required: true
+  types: ["photo", "video"]
+  min_count: 2                     # Require multiple angles for coral
+  max_count: 10
+  storage:
+    canonical_scheme: "gs://"
+    bucket: "kaori-evidence"
+    path_template: "{domain}/{topic}/{truthkey}/{observation_id}/{filename}"
+
+# ----------------------------------------------------------------------------
+# Evidence Similarity (Duplicate/Fraud Detection)
+# ----------------------------------------------------------------------------
+evidence_similarity:
+  enabled: true
+  hash:
+    enabled: true
+    method: phash
+    duplicate_threshold: 6
+    immediate_reject_if_duplicate: true
+  embedding:
+    enabled: true
+    compute_mode: ON_DEMAND
+    engine: clip_v1
+    similarity_threshold: 0.80     # Slightly lower for underwater variation
+    trigger_conditions:
+      - ai_confidence_below: 0.75
+      - requires_semantic_corroboration: true
+
+# ----------------------------------------------------------------------------
+# AI Validation Routing
+# ----------------------------------------------------------------------------
+ai_validation_routing:
+  enabled: true
+  bouncer:
+    engine: bouncer_v1
+    checks:
+      - evidence_present
+      - evidence_quality_min: 0.25  # Underwater photos can be murky
+      - duplicate_hash_check
+      - geolocation_plausibility
+      - depth_consistency            # z_index must match reported depth
+    routes:
+      fail: reject
+      pass: generalist
+  generalist:
+    engine: generalist_v1
+    prompt_context: "Coral reef health assessment in tropical waters"
+    routes:
+      high_confidence: specialist    # Always route to specialist for coral
+      low_confidence: specialist
+  specialist:
+    engine: coral_specialist_v1      # Marine biology trained model
+    routes:
+      pass: accept
+      fail: human_review
+
+# ----------------------------------------------------------------------------
+# Autovalidation Thresholds
+# ----------------------------------------------------------------------------
+autovalidation:
+  ai_verified_true_threshold: 0.85  # Higher bar for critical ecological claims
+  ai_verified_false_threshold: 0.15
+  uncertainty_band:
+    low: 0.15
+    high: 0.85
+
+# ----------------------------------------------------------------------------
+# Human Gating
+# ----------------------------------------------------------------------------
+human_gating:
+  always_require_human: true        # Coral bleaching always needs expert review
+  required_for_risk_profiles: ["critical"]
+  min_trust_score: 0.50             # Higher bar for marine claims
+  min_ai_confidence: 0.85
+
+# ----------------------------------------------------------------------------
+# Validation Flow Mode
+# ----------------------------------------------------------------------------
+validation_flow:
+  mode: human_expert                # Requires marine biology expert
+
+# ----------------------------------------------------------------------------
+# Consensus Model
+# ----------------------------------------------------------------------------
+consensus_model:
+  type: weighted_threshold
+  finalize_threshold: 20            # Higher threshold for ecological claims
+  reject_threshold: -15
+  weighted_roles:
+    bronze: 1
+    silver: 2
+    expert: 10                      # Marine experts have high weight
+    authority: 15
+  override_allowed_roles: ["authority"]
+  vote_types:
+    RATIFY: +1
+    REJECT: -1
+    CHALLENGE: 0
+    OVERRIDE: special
+
+# ----------------------------------------------------------------------------
+# Confidence Model
+# ----------------------------------------------------------------------------
+confidence_model:
+  type: composite
+  components:
+    ai_confidence:
+      weight: 0.25                  # Lower AI weight for complex ecological claims
+      source: ai_validation.confidence
+    consensus_ratio:
+      weight: 0.30                  # Higher weight on expert consensus
+      source: consensus.positive_ratio
+    reporter_trust:
+      weight: 0.20
+      source: reporter_context.trust_score
+    evidence_count:
+      weight: 0.15
+      source: evidence.count
+      normalize:
+        min: 2
+        max: 10
+    depth_verification:
+      weight: 0.10                  # Bonus for consistent depth data
+      source: evidence.depth_consistency_score
+  modifiers:
+    contradiction_penalty: -0.25
+    expert_validation_bonus: 0.10
+  thresholds:
+    high: 0.85
+    medium: 0.60
+    low: 0.35
+
+# ----------------------------------------------------------------------------
+# State Verification Policy
+# ----------------------------------------------------------------------------
+state_verification_policy:
+  monitor_lane:
+    allow_ai_verified_truth: false  # Never auto-verify coral claims
+    transparency_flag_if_composite_below: 0.85
+    flag_label: LOW_COMPOSITE_CONFIDENCE
+  critical_lane:
+    require_human_consensus_for_verified_true: true
+
+# ----------------------------------------------------------------------------
+# Dispute Resolution
+# ----------------------------------------------------------------------------
+dispute_resolution:
+  quorum:
+    min_votes: 5                    # More votes needed for ecological claims
+  timeout:
+    peer_review: PT24H              # Longer review windows
+    expert_review: PT48H
+    authority_escalation: PT72H
+  default_action_on_timeout: maintain_state
+
+# ----------------------------------------------------------------------------
+# Contradiction Rules
+# ----------------------------------------------------------------------------
+contradiction_rules:
+  enabled: true
+  trusted_sources:
+    min_standing: expert
+    min_trust_score: 0.75
+  contradiction_trigger:
+    min_confidence_gap: 0.35
+    action: flag_and_escalate
+
+# ----------------------------------------------------------------------------
+# Temporal Decay
+# ----------------------------------------------------------------------------
+temporal_decay:
+  half_life: P7D                   # Coral status valid for ~week
+  max_validity: P30D               # Re-verify monthly
+
+# ----------------------------------------------------------------------------
+# Kaori Credits
+# ----------------------------------------------------------------------------
+credits:
+  enabled: true
+  base_reward: 30                  # Higher reward for diving/underwater work
+  verified_false_reward: 25
+  rejected_penalty: -15
+  priority_bonus:
+    urgent: 20
+    critical: 35
+  quality_multiplier:
+    high_confidence: 1.30
+    standard: 1.0
+
+# ============================================================================
+# End of ClaimType: ocean.coral_bleaching.v1
+# ============================================================================

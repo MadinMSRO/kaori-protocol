@@ -1,0 +1,692 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://kaori.msro.mv/meta/claimtype.schema.json",
+    "title": "Kaori ClaimType Schema (v1)",
+    "type": "object",
+    "required": [
+        "id",
+        "version",
+        "domain",
+        "topic",
+        "truthkey",
+        "risk_profile",
+        "evidence",
+        "evidence_similarity",
+        "ai_validation_routing",
+        "autovalidation",
+        "human_gating",
+        "validation_flow",
+        "consensus_model",
+        "confidence_model",
+        "state_verification_policy",
+        "dispute_resolution",
+        "contradiction_rules",
+        "temporal_decay"
+    ],
+    "additionalProperties": true,
+    "properties": {
+        "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+\\.[a-z0-9_]+\\.v[0-9]+$",
+            "description": "Canonical claim type id format: domain.topic.vN"
+        },
+        "version": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "domain": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+        },
+        "topic": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+        },
+        "truthkey": {
+            "type": "object",
+            "required": [
+                "spatial_system",
+                "resolution",
+                "z_index",
+                "time_bucket"
+            ],
+            "properties": {
+                "spatial_system": {
+                    "type": "string",
+                    "enum": [
+                        "h3",
+                        "geohash",
+                        "healpix",
+                        "custom"
+                    ]
+                },
+                "resolution": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "z_index": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "time_bucket": {
+                    "type": "string",
+                    "pattern": "^PT[0-9]+(H|M|S)|P[0-9]+D$",
+                    "description": "ISO8601 duration, e.g. PT1H, PT15M, P1D"
+                }
+            }
+        },
+        "risk_profile": {
+            "type": "string",
+            "enum": [
+                "monitor",
+                "critical"
+            ]
+        },
+        "ui_schema": {
+            "type": "object",
+            "required": [
+                "fields"
+            ],
+            "properties": {
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                }
+            }
+        },
+        "evidence": {
+            "type": "object",
+            "required": [
+                "required",
+                "types",
+                "min_count",
+                "storage"
+            ],
+            "properties": {
+                "required": {
+                    "type": "boolean"
+                },
+                "types": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "min_count": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "storage": {
+                    "type": "object",
+                    "required": [
+                        "canonical_scheme",
+                        "bucket"
+                    ],
+                    "properties": {
+                        "canonical_scheme": {
+                            "type": "string",
+                            "enum": [
+                                "gs://"
+                            ]
+                        },
+                        "bucket": {
+                            "type": "string",
+                            "minLength": 1
+                        }
+                    }
+                }
+            }
+        },
+        "evidence_similarity": {
+            "type": "object",
+            "required": [
+                "enabled",
+                "hash",
+                "embedding"
+            ],
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "hash": {
+                    "type": "object",
+                    "required": [
+                        "enabled",
+                        "method",
+                        "duplicate_threshold",
+                        "immediate_reject_if_duplicate"
+                    ],
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "method": {
+                            "type": "string",
+                            "enum": [
+                                "phash",
+                                "dhash",
+                                "ahash"
+                            ]
+                        },
+                        "duplicate_threshold": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "immediate_reject_if_duplicate": {
+                            "type": "boolean"
+                        }
+                    }
+                },
+                "embedding": {
+                    "type": "object",
+                    "required": [
+                        "enabled",
+                        "compute_mode",
+                        "engine",
+                        "similarity_threshold",
+                        "trigger_conditions"
+                    ],
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "compute_mode": {
+                            "type": "string",
+                            "enum": [
+                                "ALWAYS",
+                                "ON_DEMAND",
+                                "OFF",
+                                "on_demand"
+                            ]
+                        },
+                        "engine": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "similarity_threshold": {
+                            "type": "number",
+                            "minimum": 0.0,
+                            "maximum": 1.0
+                        },
+                        "trigger_conditions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "ai_validation_routing": {
+            "type": "object",
+            "required": [
+                "enabled",
+                "bouncer",
+                "generalist",
+                "specialist"
+            ],
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "bouncer": {
+                    "type": "object",
+                    "required": [
+                        "engine",
+                        "routes"
+                    ],
+                    "properties": {
+                        "engine": {
+                            "type": "string"
+                        },
+                        "routes": {
+                            "type": "object",
+                            "required": [
+                                "fail",
+                                "pass"
+                            ],
+                            "properties": {
+                                "fail": {
+                                    "type": "string"
+                                },
+                                "pass": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "generalist": {
+                    "type": "object",
+                    "required": [
+                        "engine",
+                        "routes"
+                    ],
+                    "properties": {
+                        "engine": {
+                            "type": "string"
+                        },
+                        "routes": {
+                            "type": "object",
+                            "required": [
+                                "high_confidence",
+                                "low_confidence"
+                            ],
+                            "properties": {
+                                "high_confidence": {
+                                    "type": "string"
+                                },
+                                "low_confidence": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "specialist": {
+                    "type": "object",
+                    "required": [
+                        "engine",
+                        "routes"
+                    ],
+                    "properties": {
+                        "engine": {
+                            "type": "string"
+                        },
+                        "routes": {
+                            "type": "object",
+                            "required": [
+                                "pass",
+                                "fail"
+                            ],
+                            "properties": {
+                                "pass": {
+                                    "type": "string"
+                                },
+                                "fail": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "autovalidation": {
+            "type": "object",
+            "required": [
+                "ai_verified_true_threshold",
+                "ai_verified_false_threshold",
+                "uncertainty_band"
+            ],
+            "properties": {
+                "ai_verified_true_threshold": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "ai_verified_false_threshold": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "uncertainty_band": {
+                    "type": "object",
+                    "required": [
+                        "low",
+                        "high"
+                    ],
+                    "properties": {
+                        "low": {
+                            "type": "number",
+                            "minimum": 0.0,
+                            "maximum": 1.0
+                        },
+                        "high": {
+                            "type": "number",
+                            "minimum": 0.0,
+                            "maximum": 1.0
+                        }
+                    }
+                }
+            }
+        },
+        "human_gating": {
+            "type": "object",
+            "required": [
+                "always_require_human",
+                "required_for_risk_profiles",
+                "min_trust_score",
+                "min_ai_confidence"
+            ],
+            "properties": {
+                "always_require_human": {
+                    "type": "boolean"
+                },
+                "required_for_risk_profiles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "monitor",
+                            "critical"
+                        ]
+                    }
+                },
+                "min_trust_score": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "min_ai_confidence": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                }
+            }
+        },
+        "validation_flow": {
+            "type": "object",
+            "required": [
+                "mode"
+            ],
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "auto",
+                        "human_peer",
+                        "human_expert",
+                        "authority_gate"
+                    ]
+                }
+            }
+        },
+        "consensus_model": {
+            "type": "object",
+            "required": [
+                "type",
+                "finalize_threshold",
+                "reject_threshold",
+                "weighted_roles",
+                "override_allowed_roles",
+                "vote_types"
+            ],
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "weighted_threshold"
+                    ]
+                },
+                "finalize_threshold": {
+                    "type": "integer"
+                },
+                "reject_threshold": {
+                    "type": "integer"
+                },
+                "weighted_roles": {
+                    "type": "object",
+                    "required": [
+                        "bronze",
+                        "silver",
+                        "expert",
+                        "authority"
+                    ],
+                    "properties": {
+                        "bronze": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "silver": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "expert": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "authority": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    }
+                },
+                "override_allowed_roles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "vote_types": {
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            }
+        },
+        "confidence_model": {
+            "type": "object",
+            "required": [
+                "type",
+                "components",
+                "modifiers",
+                "thresholds"
+            ],
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "composite"
+                    ]
+                },
+                "components": {
+                    "type": "object"
+                },
+                "modifiers": {
+                    "type": "object"
+                },
+                "thresholds": {
+                    "type": "object"
+                }
+            }
+        },
+        "state_verification_policy": {
+            "type": "object",
+            "required": [
+                "monitor_lane",
+                "critical_lane"
+            ],
+            "properties": {
+                "monitor_lane": {
+                    "type": "object",
+                    "required": [
+                        "allow_ai_verified_truth",
+                        "transparency_flag_if_composite_below",
+                        "flag_label"
+                    ],
+                    "properties": {
+                        "allow_ai_verified_truth": {
+                            "type": "boolean"
+                        },
+                        "transparency_flag_if_composite_below": {
+                            "type": "number",
+                            "minimum": 0.0,
+                            "maximum": 1.0
+                        },
+                        "flag_label": {
+                            "type": "string",
+                            "minLength": 1
+                        }
+                    }
+                },
+                "critical_lane": {
+                    "type": "object",
+                    "required": [
+                        "require_human_consensus_for_verified_true"
+                    ],
+                    "properties": {
+                        "require_human_consensus_for_verified_true": {
+                            "type": "boolean"
+                        }
+                    }
+                }
+            }
+        },
+        "dispute_resolution": {
+            "type": "object",
+            "required": [
+                "quorum",
+                "timeout",
+                "default_action_on_timeout"
+            ],
+            "properties": {
+                "quorum": {
+                    "type": "object",
+                    "required": [
+                        "min_votes"
+                    ],
+                    "properties": {
+                        "min_votes": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                },
+                "timeout": {
+                    "type": "object",
+                    "required": [
+                        "peer_review",
+                        "expert_review",
+                        "authority_escalation"
+                    ],
+                    "properties": {
+                        "peer_review": {
+                            "type": "string"
+                        },
+                        "expert_review": {
+                            "type": "string"
+                        },
+                        "authority_escalation": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "default_action_on_timeout": {
+                    "type": "string",
+                    "enum": [
+                        "maintain_state",
+                        "downgrade_to_investigating"
+                    ]
+                }
+            }
+        },
+        "contradiction_rules": {
+            "type": "object",
+            "required": [
+                "enabled",
+                "trusted_sources",
+                "contradiction_trigger"
+            ],
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "trusted_sources": {
+                    "type": "object",
+                    "required": [
+                        "min_standing",
+                        "min_trust_score"
+                    ],
+                    "properties": {
+                        "min_standing": {
+                            "type": "string"
+                        },
+                        "min_trust_score": {
+                            "type": "number",
+                            "minimum": 0.0,
+                            "maximum": 1.0
+                        }
+                    }
+                },
+                "contradiction_trigger": {
+                    "type": "object",
+                    "required": [
+                        "min_confidence_gap",
+                        "action"
+                    ],
+                    "properties": {
+                        "min_confidence_gap": {
+                            "type": "number",
+                            "minimum": 0.0,
+                            "maximum": 1.0
+                        },
+                        "action": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "temporal_decay": {
+            "type": "object",
+            "required": [
+                "half_life",
+                "max_validity"
+            ],
+            "properties": {
+                "half_life": {
+                    "type": "string"
+                },
+                "max_validity": {
+                    "type": "string"
+                }
+            }
+        },
+        "incentives": {
+            "type": "object",
+            "description": "Legacy incentives format (prefer 'credits')",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "base_credit": {
+                    "type": "integer"
+                },
+                "verified_bonus": {
+                    "type": "integer"
+                },
+                "rejected_penalty": {
+                    "type": "integer"
+                }
+            }
+        },
+        "credits": {
+            "type": "object",
+            "description": "Kaori Credits system (FLOW_SPEC Section 6)",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "base_reward": {
+                    "type": "integer"
+                },
+                "verified_false_reward": {
+                    "type": "integer"
+                },
+                "rejected_penalty": {
+                    "type": "integer"
+                },
+                "priority_bonus": {
+                    "type": "object"
+                },
+                "quality_multiplier": {
+                    "type": "object"
+                }
+            }
+        }
+    }
+}

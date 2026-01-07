@@ -1,0 +1,265 @@
+# ============================================================================
+# Kaori Protocol — ClaimType Definition
+# ============================================================================
+# Claim:   Flood Detection (Earth Domain)
+# Version: 1
+# Status:  RELEASED (Immutable — changes require v2)
+# ============================================================================
+
+id: earth.flood.v1
+version: 1
+domain: earth
+topic: flood
+
+# ----------------------------------------------------------------------------
+# TruthKey Formation
+# ----------------------------------------------------------------------------
+# Defines how observations are bucketed into discrete truth cells.
+truthkey:
+  spatial_system: h3
+  resolution: 8                    # ~460m hexagons (neighborhood level)
+  z_index: surface
+  time_bucket: PT1H                # 1-hour buckets
+
+# ----------------------------------------------------------------------------
+# Risk Profile
+# ----------------------------------------------------------------------------
+# Determines which verification lane applies (Section 12 of SPEC).
+# - monitor: AI can auto-verify, with transparency flags
+# - critical: Human consensus required before VERIFIED_TRUE
+risk_profile: critical             # Floods are high-stakes; require human gate
+
+# ----------------------------------------------------------------------------
+# UI Schema (for MissionHub / Field Apps)
+# ----------------------------------------------------------------------------
+ui_schema:
+  fields:
+    - name: water_level_cm
+      type: number
+      label: "Water Level (cm)"
+      required: true
+      validation:
+        min: 0
+        max: 500
+    - name: flow_velocity
+      type: select
+      label: "Flow Velocity"
+      required: false
+      options: ["still", "slow", "moderate", "fast", "torrential"]
+    - name: affected_structures
+      type: boolean
+      label: "Are buildings/roads affected?"
+      required: false
+
+# ----------------------------------------------------------------------------
+# Evidence Requirements
+# ----------------------------------------------------------------------------
+evidence:
+  required: true
+  types: ["photo", "video"]
+  min_count: 1
+  max_count: 5
+  storage:
+    canonical_scheme: "gs://"
+    bucket: "kaori-evidence"
+    path_template: "{domain}/{topic}/{truthkey}/{observation_id}/{filename}"
+
+# ----------------------------------------------------------------------------
+# Evidence Similarity (Duplicate/Fraud Detection)
+# ----------------------------------------------------------------------------
+evidence_similarity:
+  enabled: true
+  hash:
+    enabled: true
+    method: phash                  # Perceptual hash
+    duplicate_threshold: 6         # Hamming distance threshold
+    immediate_reject_if_duplicate: true
+  embedding:
+    enabled: true
+    compute_mode: on_demand        # ALWAYS | ON_DEMAND | OFF
+    engine: clip_v1
+    similarity_threshold: 0.85
+    trigger_conditions:
+      - ai_confidence_below: 0.80
+      - requires_semantic_corroboration: true
+
+# ----------------------------------------------------------------------------
+# AI Validation Routing (Section 9 of SPEC)
+# ----------------------------------------------------------------------------
+ai_validation_routing:
+  enabled: true
+  bouncer:
+    engine: bouncer_v1
+    checks:
+      - evidence_present
+      - evidence_quality_min: 0.3
+      - duplicate_hash_check
+      - geolocation_plausibility
+    routes:
+      fail: reject
+      pass: generalist
+  generalist:
+    engine: generalist_v1
+    prompt_context: "Flood detection in tropical island environment"
+    routes:
+      high_confidence: accept       # ai_confidence >= 0.82
+      low_confidence: specialist
+  specialist:
+    engine: flood_specialist_v1     # Domain-specific model
+    routes:
+      pass: accept
+      fail: human_review
+
+# ----------------------------------------------------------------------------
+# Autovalidation Thresholds
+# ----------------------------------------------------------------------------
+autovalidation:
+  ai_verified_true_threshold: 0.82
+  ai_verified_false_threshold: 0.20
+  uncertainty_band:
+    low: 0.20
+    high: 0.82
+
+# ----------------------------------------------------------------------------
+# Human Gating (Section 13 of SPEC)
+# ----------------------------------------------------------------------------
+human_gating:
+  always_require_human: false
+  required_for_risk_profiles: ["critical"]
+  min_trust_score: 0.35
+  min_ai_confidence: 0.82
+
+# ----------------------------------------------------------------------------
+# Validation Flow Mode
+# ----------------------------------------------------------------------------
+validation_flow:
+  mode: human_peer                 # auto | human_peer | human_expert | authority_gate
+
+# ----------------------------------------------------------------------------
+# Consensus Model (Section 10 of SPEC)
+# ----------------------------------------------------------------------------
+consensus_model:
+  type: weighted_threshold
+  finalize_threshold: 15
+  reject_threshold: -10
+  weighted_roles:
+    bronze: 1
+    silver: 3
+    expert: 7
+    authority: 10
+  override_allowed_roles: ["authority"]
+  vote_types:
+    RATIFY: +1
+    REJECT: -1
+    CHALLENGE: 0                   # Flags for review, doesn't move score
+    OVERRIDE: special              # Authority can force finalize
+
+# ----------------------------------------------------------------------------
+# Implicit Consensus (Section 8.4 of SPEC)
+# ----------------------------------------------------------------------------
+# When multiple observations share the same TruthKey, they MAY be aggregated
+# to determine implicit consensus without requiring explicit votes.
+implicit_consensus:
+  enabled: true
+  min_observations: 3              # Need at least 3 independent reports
+  min_network_trust: 50.0          # Sum of reporter standings
+  min_ai_confidence: 0.80          # Average AI confidence across observations
+  max_ai_variance: 0.15            # Low variance = no contradiction
+  
+  # Authority override: If an authority submits, can auto-verify
+  override_if_authority_present: true
+  override_min_authority_count: 1
+
+
+# Confidence Model (Section 11 of SPEC)
+# ----------------------------------------------------------------------------
+confidence_model:
+  type: composite
+  components:
+    ai_confidence:
+      weight: 0.30
+      source: ai_validation.confidence
+    consensus_ratio:
+      weight: 0.25
+      source: consensus.positive_ratio   # (ratify - reject) / total_votes
+    reporter_trust:
+      weight: 0.20
+      source: reporter_context.trust_score
+    evidence_count:
+      weight: 0.15
+      source: evidence.count
+      normalize:
+        min: 1
+        max: 5
+    temporal_freshness:
+      weight: 0.10
+      source: temporal.freshness_score   # Decays over time
+  modifiers:
+    contradiction_penalty: -0.20
+    expert_bonus: 0.05                   # If expert ratified
+  thresholds:
+    high: 0.80
+    medium: 0.50
+    low: 0.30
+
+# ----------------------------------------------------------------------------
+# State Verification Policy (Section 12 of SPEC)
+# ----------------------------------------------------------------------------
+state_verification_policy:
+  monitor_lane:
+    allow_ai_verified_truth: true
+    transparency_flag_if_composite_below: 0.82
+    flag_label: LOW_COMPOSITE_CONFIDENCE
+  critical_lane:
+    require_human_consensus_for_verified_true: true
+
+# ----------------------------------------------------------------------------
+# Dispute Resolution (Section 15 of SPEC)
+# ----------------------------------------------------------------------------
+dispute_resolution:
+  quorum:
+    min_votes: 3
+  timeout:
+    peer_review: PT12H             # 12 hours
+    expert_review: PT24H           # 24 hours
+    authority_escalation: PT48H     # 48 hours
+  default_action_on_timeout: downgrade_to_investigating
+
+# ----------------------------------------------------------------------------
+# Contradiction Rules (Section 14 of SPEC)
+# ----------------------------------------------------------------------------
+contradiction_rules:
+  enabled: true
+  trusted_sources:
+    min_standing: expert
+    min_trust_score: 0.70
+  contradiction_trigger:
+    min_confidence_gap: 0.40       # If two reports differ by 40%+ confidence
+    action: flag_and_escalate
+
+# ----------------------------------------------------------------------------
+# Temporal Decay
+# ----------------------------------------------------------------------------
+temporal_decay:
+  half_life: PT4H                  # Confidence halves every 4 hours
+  max_validity: P1D                # Truth expires after 1 day (floods are transient)
+
+# ----------------------------------------------------------------------------
+# Kaori Credits (FLOW_SPEC Section 6)
+# ----------------------------------------------------------------------------
+# Credits are non-transferable, non-monetary ecosystem incentives.
+credits:
+  enabled: true
+  base_reward: 20                  # Credits for verified observation
+  verified_false_reward: 15        # Valid negative detection
+  rejected_penalty: -10            # Spam/fraud penalty
+  priority_bonus:
+    urgent: 15
+    critical: 25
+  quality_multiplier:
+    high_confidence: 1.25          # composite >= 0.90
+    standard: 1.0
+
+# ============================================================================
+# End of ClaimType: earth.flood.v1
+# ============================================================================
