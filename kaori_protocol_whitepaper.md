@@ -48,9 +48,9 @@ Kaori is operational in the Maldives, providing ground-truth validation for sate
 12. Implementation Architecture
 
 ### PART IV: APPLICATIONS OF GROUND-TRUTHING
-13. Deployment: Maritime Domain Awareness (Maldives)
-14. Application: Climate Ground-Truthing (MRV)
-15. Application: Disaster Ground-Truthing
+13. Primary Deployment: Early Warning & Resilience (Maldives)
+14. Secondary Deployment: Maritime Security
+15. Application: Climate Ground-Truthing (MRV)
 16. Future: Autonomous Institutions
 
 ### PART V: FORMAL FOUNDATIONS
@@ -1410,131 +1410,119 @@ GET    /signals                # Query signal log
 
 # PART IV: APPLICATIONS OF GROUND-TRUTHING
 
-Kaori Protocol is a general-purpose ground-truthing engine. While born from maritime needs, the pattern is universal: **combine global-scale remote sensing with trusted local observations to verify physical reality.**
+Kaori Protocol is a general-purpose ground-truthing engine. While originally conceived for maritime security, its **primary operational deployment** focuses on existential climate resilience: early warning for natural disasters and ecosystem monitoring (coral bleaching).
 
-This section explores how this pattern applies across three critical domains: Maritime Security, Climate Finance, and Disaster Response.
+This section explores how this pattern applies across three critical domains: Environmental Resilience, Maritime Security, and Climate Finance.
 
-## 13. Deployment: Maritime Domain Awareness (Maldives)
+## 13. Primary Deployment: Early Warning & Resilience (Maldives)
 
-This is the protocol's first live deployment—validating what satellites see with what observers on the ground report.
+As a low-lying island nation, the Maldives faces existential threats from rapid-onset disasters (tsunamis, floods) and slow-onset ecosystem collapse (coral bleaching). Kaori's first mission is to verify these physical threats to trigger rapid response.
 
-### 13.1 The Problem
+### 13.1 The Vulnerability Problem
 
-The Maldives has:
-- 99% ocean territory (1.2 million km² EEZ)
-- 1,192 islands spread over 90,000 km²
-- Critical shipping lanes through the Indian Ocean
-- Limited resources for maritime patrol
+- **Fragility:** 80% of land is <1m above sea level.
+- **Dependency:** Economy relies entirely on coral reefs (tourism, fisheries).
+- **Latency:** Warning systems are often centralized and slow to reach remote atolls.
+- **Uncertainty:** "Is the reef dead?" or "Is a wave coming?" are questions that often get conflicting answers until it's too late.
 
-**Challenges:**
-- Illegal, unreported, unregulated (IUU) fishing
-- Drug trafficking
-- Illegal waste dumping
-- Maritime boundary disputes
-- Limited patrol vessel coverage
+**Need:** A verified, real-time picture of physical coordination that no single agency controls, but everyone can trust.
 
-**Current limitations:**
-- Manual patrol reports (sparse coverage)
-- Satellite imagery review (labor-intensive)
-- AIS data (easily spoofed)
-- Radar (limited range)
+### 13.2 Use Case A: Disaster Early Warning
 
-**Need:** Automated, continuous, verifiable monitoring with evidence trails suitable for enforcement.
+**Scenario:** Earthquake detection and tsunami warning.
 
-### 13.2 Kaori Implementation
+**ClaimTypes:** `earth:earthquake:v1`, `ocean:tsunami:v1`, `earth:flood:v1`
 
-**ClaimType:** `ocean:vessel_detection:v1`
+**Phase 1: Detection (minutes 0-5)**
+1. **Seismic sensors detect earthquake**
+   - TruthKey: `earth:earthquake:geo:region_indian_ocean:subsurface:2026-01-07T08:23:00Z`
+   - Status: VERIFIED_TRUE (0.95 confidence)
+   
+2. **Tsunami model triggered**
+   - AI predicts tsunami likelihood: 0.87
+   - TruthState: SUSPECTED (tsunami probable, not yet observed)
 
-**Data sources:**
-- Satellite SAR imagery (detects vessels regardless of AIS)
-- AIS transponders (for cooperative vessels)
-- Coastal radar stations
-- Patrol vessel reports
-- Citizen reports from fishing communities
+**Phase 2: Confirmation (minutes 5-30)**
+3. **Ocean buoys detect wave**
+   - Sea level sensors confirm tsunami
+   - TruthState: VERIFIED_TRUE (0.99 confidence)
+   - **Action:** Automated alert broadcast to all atolls.
 
-**TruthKey example:**
-```
-ocean:vessel_detection:h3:886142a8e7fffff:surface:2026-01-07T00:00Z
-```
+**Phase 3: Impact Ground-Truthing (hours 3-6)**
+4. **Coastal verification**
+   - Citizens submit photos via Kaori app (geotagged, signed).
+   - Coastal sensors report water levels.
+   - TruthStates for "Flood Severity" compiled in real-time.
 
-**Verification workflow:**
+### 13.3 Use Case B: Coral Bleaching Monitor
 
-1. **Satellite detects vessel** (no AIS signal)
-   - Generates observation with SAR image
-   - Signal: `observation.submitted`
+**Problem:** Mass bleaching events can kill reefs in weeks. Early detection allows for palliative measures (shading, cooling) or at least accurate loss assessment.
 
-2. **AI analysis**
-   - Vessel classifier: 95% confidence it's a fishing vessel
-   - Region classifier: Inside protected zone
-   - Size estimator: ~30m length (commercial scale)
+**ClaimType:** `ocean:coral_health:v1`
 
-3. **Cross-reference AIS**
-   - No AIS signal for this location/time
-   - Suspicious: vessel should have AIS
+**Verification Workflow:**
 
-4. **Request ground truth**
-   - Mission dispatched to patrol vessel
-   - Probe: "Verify vessel at coordinates, within 12 hours"
+1. **Satellite Alert:** 
+   - NOAA Coral Reef Watch triggers "Alert Level 1" based on Sea Surface Temperature (SST).
+   - Signal: `alert.emitted`
 
-5. **Patrol confirmation**
-   - Patrol vessel investigates
-   - Photos taken, vessel identified
-   - Foreign-flagged fishing vessel, no permission
+2. **Probe Dispatch:**
+   - Kaori automatically creates a Mission: "Verify bleaching at North Malé Atoll".
+   - Target: Divers and Drone operators in that sector.
 
-6. **Truth compilation**
-   - Multiple independent sources agree
+3. **Ground Truth Collection:**
+   - **Drones:** Multispectral flyover (detects whitening from surface).
+   - **Divers:** Photo transects of specific reef sections.
+   - **Sensors:** In-water temperature loggers upload data.
+
+4. **Truth Compilation:**
+   - AI analyzes diver photos for bleaching percentage (e.g., 40% bleached).
+   - Cross-references with local temperature logs.
    - TruthState: VERIFIED_TRUE
-   - Confidence: 0.97
-   - Claim: "Illegal fishing vessel detected"
+   - Claim: "Severe bleaching event (40-60%) in progress."
 
-7. **Enforcement action**
-   - TruthState forwarded to Coast Guard
-   - Vessel intercepted
-   - Evidence package includes:
-     - Satellite imagery (timestamped, hashed)
-     - AI analysis results
-     - Patrol vessel report with photos
-     - Complete verification trail
-     - Cryptographic signatures
+5. **Response:**
+   - Marine biologists deploy emergency response.
+   - Tourism operators notified to reduce stress on reef.
 
-**Legal admissibility:**
-- Complete chain of custody
-- Multiple independent sources
-- Timestamped and signed at each step
-- Replayable verification
-- Defense cannot claim fabrication
+### 13.4 Operational Benefits
 
-### 13.3 Operational Benefits
-
-**For MSRO:**
-- Continuous monitoring without constant human oversight
-- Automated alerts for suspicious activity
-- Evidence packages generated automatically
-- Reduced cost per detection
-
-**For Ministry of Defense:**
-- Verifiable intelligence for patrol dispatch
-- Legal-grade evidence for prosecution
-- Audit trail for international disputes
-- Improved coverage with limited resources
-
-**For Fishermen (Legitimate):**
-- Transparent enforcement (no arbitrary accusations)
-- Evidence-based decisions
-- Protection from illegal competition
-
-**For International Community:**
-- Transparent reporting of maritime violations
-- Verifiable compliance with fishing agreements
-- Data for regional cooperation
+- **Speed:** Automated detection reduces notification time from hours to minutes.
+- **Coverage:** Crowdsourced citizens + automated sensors cover 1,192 islands better than any central team.
+- **Defensibility:** Response funding is triggered by cryptographic proof, not political lobbying.
 
 ---
 
-## 14. Application: Climate Ground-Truthing (MRV)
+## 14. Secondary Deployment: Maritime Security
+
+Built upon the same sensor and observer network used for resilience, Kaori extends its capacity to maritime domain awareness.
+
+### 14.1 The Security Challenge
+
+With 99% ocean territory, the Maldives struggles to monitor huge EEZ areas against Illegal, Unreported, and Unregulated (IUU) fishing.
+
+### 14.2 Kaori Implementation
+
+**ClaimType:** `ocean:vessel_detection:v1`
+
+**Verification Workflow:**
+
+1. **Detection:** Satellite SAR detects vessel (no AIS).
+2. **Analysis:** AI identifies potential fishing vessel.
+3. **Cross-Reference:** No authorized license for that location.
+4. **Ground Truth:** Mission dispatched to nearby Coast Guard or local fishing boat.
+5. **Confirmation:** Vessel photos uploaded.
+6. **Enforcement:** TruthState "Illegal Vessel" generated, enabling legal action.
+
+**Synergy:** The same fishermen verifying coral health (Section 13) also verify illegal vessels. The network effect reinforces both domains.
+
+---
+
+## 15. Application: Climate Ground-Truthing (MRV)
 
 The same ground-truthing logic applies to carbon markets: **Satellite estimates must be validated by ground samples.**
 
-### 14.1 The Carbon Credit Problem
+### 15.1 The Carbon Credit Problem
 
 Carbon markets are plagued by verification issues:
 - **Self-reported data:** Project developers report their own results
@@ -1545,7 +1533,7 @@ Carbon markets are plagued by verification issues:
 
 **Result:** Low confidence in carbon credit integrity, undermining market.
 
-### 14.2 Kaori for MRV
+### 15.2 Kaori for MRV
 
 **ClaimType:** `earth:carbon_sequestration:v1`
 
@@ -1598,7 +1586,7 @@ earth:carbon_sequestration:project:maldives_mangrove_001:P1M:2026-01
    - Evidence package permanently linked to credits
    - Future audits can replay verification
 
-### 14.3 Benefits Over Traditional MRV
+### 15.3 Benefits Over Traditional MRV
 
 **Continuous verification:**
 - Monthly or even daily truth states
@@ -1630,100 +1618,7 @@ earth:carbon_sequestration:project:maldives_mangrove_001:P1M:2026-01
 - Confidence → higher prices for quality credits
 - Bad actors isolated by trust network
 
-## 15. Application: Disaster Ground-Truthing
 
-### 15.1 The Coordination Problem
-
-During disasters:
-- Information is fragmented and contradictory
-- First reports are often wrong
-- Agencies operate on different data
-- Decisions need to be fast but defensible
-- Resources are scarce (prioritization matters)
-
-**Example: 2004 Indian Ocean Tsunami**
-- Initial magnitude underestimated
-- Warning systems failed to coordinate
-- Many agencies had pieces of truth, no shared picture
-- Response was delayed and uncoordinated
-
-### 15.2 Kaori for Disaster Response
-
-**ClaimType:** `earth:earthquake:v1`, `ocean:tsunami:v1`, `earth:flood:v1`
-
-**Scenario: Earthquake detection and tsunami warning**
-
-**Phase 1: Detection (minutes 0-5)**
-
-1. **Seismic sensors detect earthquake**
-   - Multiple stations report
-   - TruthKey: `earth:earthquake:geo:region_indian_ocean:subsurface:2026-01-07T08:23:00Z`
-   - AI estimates magnitude: 7.8 ± 0.2
-   - TruthState: VERIFIED_TRUE (0.95 confidence)
-   - Status: Major earthquake confirmed
-
-2. **Tsunami model triggered**
-   - ClaimType: `ocean:tsunami:v1`
-   - AI model predicts tsunami likelihood: 0.87
-   - Travel time to Maldives: 3.5 hours
-   - TruthState: SUSPECTED (tsunami probable, not yet observed)
-
-**Phase 2: Confirmation (minutes 5-30)**
-
-3. **Ocean buoys detect wave**
-   - Sea level sensors confirm tsunami
-   - Wave height: 2.1 meters
-   - TruthState: VERIFIED_TRUE (0.99 confidence)
-   - Status: Tsunami confirmed, inbound
-
-4. **Satellite imagery**
-   - Synthetic aperture radar detects wave pattern
-   - Independent confirmation
-   - Confidence increases to 0.999
-
-**Phase 3: Impact assessment (hours 3-6)**
-
-5. **Coastal flooding reports**
-   - Citizens submit observations (photos, videos)
-   - Coastal sensors report water levels
-   - Drones survey damage
-   - Multiple TruthKeys for each affected area
-   - TruthStates compiled in real-time
-
-**Phase 4: Response (hours 6-48)**
-
-6. **Resource allocation**
-   - Verified flood areas prioritized
-   - Evidence-based damage assessment
-   - Smart contracts release emergency funds
-   - Coordination between agencies based on shared truth
-
-### 15.3 Operational Advantages
-
-**Speed:**
-- Automated detection and verification
-- TruthStates available in minutes
-- No waiting for human committee decisions
-
-**Accuracy:**
-- Multi-source validation
-- AI + sensors + humans
-- Confidence scores guide response intensity
-
-**Coordination:**
-- All agencies see same TruthStates
-- No conflicting reports
-- Shared situation awareness
-
-**Defensibility:**
-- Complete evidence trail
-- Decisions justified by TruthStates
-- Audit shows response was appropriate given information
-
-**Learning:**
-- Post-disaster replay
-- Identify what worked, what didn't
-- Improve ClaimTypes and response protocols
 
 ## 16. Future: Autonomous Institutions
 
