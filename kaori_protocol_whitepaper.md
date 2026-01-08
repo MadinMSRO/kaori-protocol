@@ -699,11 +699,10 @@ def update_standing(agent, outcome):
     agent.standing = new_standing * decay_factor
 ```
 
-**Why nonlinear:**
-- **Diminishing returns:** Harder to gain trust when already high (logistic saturation)
-- **Bounded by design:** Can't exceed 1000 or drop below 0 naturally
-- **Smooth dynamics:** `tanh`-based curves prevent discontinuous jumps
-- **Robustness:** Small noisy events don't dramatically shift stable agents
+**Why `tanh` (Hyperbolic Tangent)?**
+- **Zero-Centered Symmetry:** Unlike standard sigmoid (0 to 1), `tanh` (-1 to 1) naturally models trust as a force that can pull positively or negatively from a neutral origin.
+- **Steeper Gradients:** `tanh` has a derivative of 1.0 at origin vs 0.25 for sigmoid, creating stronger feedback for clear signals while still saturating.
+- **Physics Alignment:** It models natural saturation phenomena (like magnetization) better than algebraic curves, matching the "Physics of Trust" ethos.
 
 **Why decay:**
 - Inactive agents drift toward baseline
