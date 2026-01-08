@@ -1,7 +1,7 @@
 # Kaori Protocol v2.1 Release Notes
 
-**Version:** 2.1.0 (The 14 Laws)  
-**Status:** Stable Core
+**Version:** 2.1.0 (The Resonance Release)
+**Status:** Stable Core (Truth & Flow)
 
 ---
 
