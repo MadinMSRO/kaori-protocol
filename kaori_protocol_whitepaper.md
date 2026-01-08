@@ -5,7 +5,7 @@
 
 **Author:** Madin Maseeh  
 **Institution:** Maldives Space Research Organisation (MSRO)  
-**Version:** 2.1 (The 14 Laws)  
+**Version:** 2.1 
 **Date:** January 2026  
 **Status:** Production (TRUTH Layer) / Stable Core (FLOW Layer)
 
@@ -15,11 +15,11 @@
 
 Kaori Protocol was born from a simple question: why don't we have a standardized way of getting truth into our systems?
 
-Working on the Unified Data Frontier Initiative at MSRO, we faced a challenge that satellite operators worldwide share—ground-truthing. Satellite data is abundant, but validating what it shows requires observations from people and sensors on the ground. Managing thousands of observations from diverse sources, processing them into verified claims, and defending those claims under scrutiny exposed a gap: **there was no standard protocol for turning contested observations into audit-grade truth.**
+Working on the Unified Data Frontier Initiative at MSRO, we faced a challenge that satellite operators worldwide share — ground-truthing. Satellite data is abundant, but validating what it shows requires observations from people and sensors on the ground. Managing thousands of observations from diverse sources, processing them into verified claims, and defending those claims under scrutiny exposed a gap: **there was no standard protocol for turning contested observations into audit-grade truth.**
 
 This paper presents Kaori Protocol—a two-layer architecture that transforms physical observations into cryptographically signed, deterministically verifiable truth states. The **TRUTH layer** compiles observations using configurable verification policies, producing signed outputs governed by **7 Laws** that guarantee replayability forever. The **FLOW layer** manages trust through **7 Rules** that generate emergent, adversarial-resistant networks without central coordination.
 
-Kaori is operational in the Maldives for maritime domain awareness, providing ground-truth validation for satellite-detected vessel activity and coastal change. The architecture applies beyond maritime—to climate MRV, disaster response, and any domain where physical claims must be verified and defended.
+Kaori is operational in the Maldives, providing ground-truth validation for satellite-detected hazards, disasters, maritime activity, and coastal change. The architecture applies beyond maritime—to climate MRV, disaster response, and any domain where physical claims must be verified and defended.
 
 **Keywords:** satellite ground-truthing, oracle problem, verifiable truth, trust networks, event sourcing, maritime domain awareness, remote sensing validation
 
@@ -48,10 +48,10 @@ Kaori is operational in the Maldives for maritime domain awareness, providing gr
 12. Implementation Architecture
 
 ### PART IV: APPLICATIONS
-13. Maritime Domain Awareness (Maldives Deployment)
-14. Climate Finance & MRV
-15. Disaster Response
-16. Autonomous Institutions
+13. Primary Use Case: Maritime Ground-Truthing (Maldives)
+14. Potential: Climate Finance & MRV
+15. Potential: Disaster Response
+16. Potential: Autonomous Institutions
 
 ### PART V: FORMAL FOUNDATIONS
 17. Topological Properties of Trust Networks
@@ -666,8 +666,7 @@ effective_trust = compute_trust(
 )
 ```
 
-**Context modifiers are defined in FlowPolicy YAML**, not hardcoded:
-```
+**Context modifiers are defined in FlowPolicy YAML**, not hardcoded.
 
 **Domain affinity:** Agent's standing in specific ClaimType derived from signal history in that domain.
 
