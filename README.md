@@ -140,8 +140,9 @@ See [GOVERNANCE.md](GOVERNANCE.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for de
 
 ## 📚 Documentation
 
-*   [**TRUTH_SPEC.md**](packages/kaori-spec/TRUTH_SPEC.md): The Mechanics of Verification
-*   [**FLOW_SPEC.md**](packages/kaori-spec/FLOW_SPEC.md): The Physics of Trust
+*   [**TRUTH_SPEC.md**](packages/kaori-spec/TRUTH_SPEC.md): The 7 Laws of Truth
+*   [**FLOW_SPEC.md**](packages/kaori-spec/FLOW_SPEC.md): The 7 Rules of Trust
+*   [**INTEGRATION.md**](INTEGRATION.md): Production integration guide
 *   [**OPEN_CORE.md**](OPEN_CORE.md): Architecture definition
 
 ## 🔐 Security & Licensing
