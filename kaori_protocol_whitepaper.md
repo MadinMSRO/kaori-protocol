@@ -5,9 +5,9 @@
 
 **Author:** Madin Maseeh  
 **Institution:** Maldives Space Research Organisation (MSRO)  
-**Version:** 2.0  
+**Version:** 2.1 (The 14 Laws)  
 **Date:** January 2026  
-**Status:** Production (TRUTH Layer) / Development (FLOW Layer)
+**Status:** Production (TRUTH Layer) / Stable Core (FLOW Layer)
 
 ---
 
@@ -35,7 +35,9 @@ The protocol is operational in the Maldives for maritime domain awareness and is
 ### PART II: THE SOLUTION
 4. Kaori Protocol Architecture
 5. Kaori Truth - Deterministic Verification
+   - 5.6 The Seven Laws of Truth
 6. Kaori Flow - Emergent Trust
+   - 6.1 The Seven Rules of Trust
 7. How TRUTH and FLOW Compose
 
 ### PART III: THE IMPLEMENTATION
@@ -68,10 +70,11 @@ The protocol is operational in the Maldives for maritime domain awareness and is
 26. Final Thoughts
 
 ### APPENDICES
-A. The 7 Rules (Quick Reference)
+A. The 14 Laws (Quick Reference)
 B. Example ClaimType
 C. Trust Dynamics Mathematics
 D. Implementation Guide
+
 
 ---
 
@@ -472,6 +475,98 @@ assert state_2026.state_hash == original_state.state_hash
 
 If hashes match, verification was identical. If they don't, something changed (evidence tampered, or bug found).
 
+### 5.6 The Seven Laws of Truth
+
+Truth is governed by seven invariant laws that ensure auditability and replayability forever.
+
+---
+
+#### Law 1: Truth is Compiled, Not Declared
+
+Truth MUST be computed from observations through a deterministic compiler, not asserted by authority.
+
+```python
+truth_state = compile(observations, trust_snapshot, policy)
+```
+
+**Implication:** No one can "declare" something true. They can only provide observations.
+
+---
+
+#### Law 2: The Compiler is Pure
+
+The Truth compiler MUST be a pure function — no side effects, no external state, no network calls.
+
+```
+Same inputs → identical output (byte-for-byte)
+```
+
+**Implication:** Truth is mathematics, not consensus.
+
+---
+
+#### Law 3: TruthKey is the Universal Address
+
+Every truth state MUST be addressed by a canonical TruthKey.
+
+```
+{domain}:{topic}:{spatial}:{id}:{z}:{time}
+```
+
+**Implication:** Any physical claim has exactly one address. Truth is joinable across any system.
+
+---
+
+#### Law 4: Evidence Precedes Verification
+
+Truth MUST NOT be compiled without explicit observations.
+
+```python
+if len(observations) == 0:
+    return TruthState(status="UNVERIFIED")
+```
+
+**Implication:** Absence of evidence is not evidence. No observations → no truth.
+
+---
+
+#### Law 5: Trust is Input, Not Computed
+
+The compiler MUST receive trust as frozen snapshot, not compute it.
+
+```python
+def compile(observations, trust_snapshot):  # Trust is DATA
+    # Compiler never calls flow.get_trust()
+```
+
+**Implication:** Truth layer has no opinion on who is trusted. That's Flow's job.
+
+---
+
+#### Law 6: Every Output is Signed
+
+Final TruthStates MUST be cryptographically signed with full provenance.
+
+```python
+signature = sign(canonical_hash(truth_state))
+```
+
+**Implication:** Anyone can verify a truth state is authentic without trusting the verifier.
+
+---
+
+#### Law 7: Truth is Replayable Forever
+
+Given the same inputs, any implementation MUST produce identical output at any future time.
+
+```
+compile(inputs) == compile(inputs)  # Always, forever
+```
+
+**Implication:** You can replay truth 100 years later and get the same answer.
+
+---
+
 ## 6. Kaori Flow - Emergent Trust
 
 Flow manages trust through seven fundamental rules that generate complex, adversarial-resistant behavior from simple primitives.
@@ -524,9 +619,9 @@ No "special objects." Everything participates through signals.
 
 ---
 
-#### Rule 3: Standing is the Only Trust Primitive
+#### Rule 3: Standing is the Primitive of Trust
 
-Flow MUST reduce trust to a single canonical scalar: **standing ∈ [0, 1]**
+Flow MUST reduce trust to a single canonical scalar: **standing ∈ [0, 1000]**
 
 No sprawling trust taxonomies. No separate credibility/reputation/authority scores.
 
@@ -545,19 +640,20 @@ Everything else (effective trust, weights in consensus) is **derived** from stan
 
 ---
 
-#### Rule 4: Standing is Contextual (Topological Trust)
+#### Rule 4: Standing is Global, Trust is Local (Topological)
 
-Trust MUST NOT be global—it must be contextual.
+**Standing** is the same everywhere (global). **Trust** depends on context (local).
 
 ```python
-effective_standing = base_standing × context_modifiers
-
-context_modifiers = (
-    domain_affinity ×      # high in flood, low in carbon MRV
-    network_position ×     # isolated → penalty, connected → bonus
-    recent_activity ×      # dormant → decay, active → maintain
-    abuse_flags            # rate-limited → penalty
+effective_trust = compute_trust(
+    base_standing,
+    context,        # claimtype, probe, mission
+    signal_history, # for network/edge computation
+    policy          # defines which modifiers apply
 )
+```
+
+**Context modifiers are defined in FlowPolicy YAML**, not hardcoded:
 ```
 
 **Domain affinity:** Agent's standing in specific ClaimType derived from signal history in that domain.
@@ -612,19 +708,20 @@ Standing MUST create threshold effects that generate discrete behavioral regimes
 
 ```python
 def weight_in_consensus(agent, effective_standing):
-    if effective_standing < 0.3:
-        return 0.1          # DORMANT: low influence
-    elif effective_standing < 0.7:
+    if effective_standing < 100:
+        return effective_standing * 0.5  # DORMANT: reduced weight
+    elif effective_standing < 700:
         return effective_standing  # ACTIVE: proportional influence
     else:
         # DOMINANT: high influence but diminishing returns
-        return 0.7 + 0.3 × (effective_standing - 0.7)
+        excess = effective_standing - 700
+        return 700 + excess * 0.3
 ```
 
-**Three phases:**
-- **Dormant (< 0.3):** New or low-performing agents, minimal weight
-- **Active (0.3-0.7):** Normal participation, proportional influence
-- **Dominant (> 0.7):** Expert validators, high weight but capped
+**Three phases (configurable in FlowPolicy):**
+- **Dormant (< 100):** New or low-performing agents, reduced weight
+- **Active (100-700):** Normal participation, proportional influence
+- **Dominant (> 700):** Expert validators, high weight but with diminishing returns
 
 **Similar thresholds for:**
 - Collusion detection: correlation > threshold → isolated
@@ -2556,7 +2653,7 @@ Not a silver bullet, but a foundation. Not perfect, but principled. Not the only
 - It's resilient (adversarial by design)
 - It's open (anyone can verify)
 
-ThThat's what Kaori provides.
+That's what Kaori provides.
 
 **The work begins now.**
 
@@ -2564,15 +2661,27 @@ ThThat's what Kaori provides.
 
 # APPENDICES
 
-## Appendix A: The 7 Rules (Quick Reference)
+## Appendix A: The 14 Laws (Quick Reference)
+
+### The 7 Laws of Truth (Verification)
+
+1. **Truth is Compiled, Not Declared:** Computed from observations, not asserted by authority
+2. **The Compiler is Pure:** No side effects, no external state, no network calls
+3. **TruthKey is the Universal Address:** Canonical join key for all truth
+4. **Evidence Precedes Verification:** No observations → no truth
+5. **Trust is Input, Not Computed:** TrustSnapshot is data, not a call
+6. **Every Output is Signed:** Cryptographic provenance
+7. **Truth is Replayable Forever:** Same inputs → same output, eternally
+
+### The 7 Rules of Trust (Coordination)
 
 1. **Trust is Event-Sourced:** Compute from immutable signals, not stored state
 2. **Everything is an Agent:** No special cases, universal participation
-3. **Standing is the Only Trust Primitive:** Single canonical metric
-4. **Standing is Contextual:** Topological trust, not global
-5. **Trust Updates are Deterministic and Nonlinear:** Bounded functions, smooth dynamics
-6. **Trust Has Phase Transitions:** Threshold effects create emergence
-7. **Adaptiveness Lives in Policy Interpretation:** Evolve interpretation, not events
+3. **Standing is the Primitive of Trust:** Single scalar (0-1000) per agent
+4. **Standing is Global, Trust is Local:** Contextual topology affects effective trust
+5. **Nonlinear Updates:** Penalty sharper than reward, bounded functions
+6. **Phase Transitions:** Threshold effects create discrete behavioral regimes
+7. **Policy Interpretation Evolves:** FlowPolicy is an agent with standing
 
 ## Appendix B: Example ClaimType
 
