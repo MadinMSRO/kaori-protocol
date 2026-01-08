@@ -690,17 +690,20 @@ Use bounded nonlinear functions (tanh/sigmoid), not linear updates:
 
 ```python
 def update_standing(agent, outcome):
-    delta = compute_delta(outcome)  # based on verification accuracy
-    # Bounded nonlinear update (e.g., logistic/sigmoid)
-    new_standing = logistic_curve(agent.standing + delta, min=0, max=1000)
+    delta = compute_delta(outcome) 
+    
+    # Logistic/Tanh curve provides "diminishing returns" at extremes
+    # Naturally bounded [0, 1000], no hard clamping needed
+    new_standing = logistic_curve(agent.standing + delta, slope=tanh(1))
+    
     agent.standing = new_standing * decay_factor
 ```
 
 **Why nonlinear:**
-- Linear updates are easy to exploit (predictable accumulation)
-- Bounded functions prevent gaming (can't spike to 1.0 instantly)
-- Smooth curves create natural dynamics (no discontinuous jumps)
-- Diminishing returns at extremes (hard to go from 0.9 → 1.0)
+- **Diminishing returns:** Harder to gain trust when already high (logistic saturation)
+- **Bounded by design:** Can't exceed 1000 or drop below 0 naturally
+- **Smooth dynamics:** `tanh`-based curves prevent discontinuous jumps
+- **Robustness:** Small noisy events don't dramatically shift stable agents
 
 **Why decay:**
 - Inactive agents drift toward baseline
