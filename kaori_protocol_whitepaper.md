@@ -21,7 +21,7 @@ This paper presents Kaori Protocol—a two-layer architecture that transforms ph
 
 Kaori is operational in the Maldives, providing ground-truth validation for satellite-detected hazards, disasters, maritime activity, and coastal change. The architecture applies beyond maritime—to climate MRV, disaster response, and any domain where physical claims must be verified and defended.
 
-**Keywords:** satellite ground-truthing, oracle problem, verifiable truth, trust networks, event sourcing, maritime domain awareness, remote sensing validation, climate mrv, disaster response
+**Keywords:** satellite ground-truthing, oracle problem, verifiable truth, trust networks, event sourcing, maritime domain awareness, remote sensing validation, climate finance, mrv, disaster response
 
 ---
 
@@ -47,11 +47,11 @@ Kaori is operational in the Maldives, providing ground-truth validation for sate
 11. Trust Snapshot Specification
 12. Implementation Architecture
 
-### PART IV: APPLICATIONS
-13. Primary Use Case: Maritime Ground-Truthing (Maldives)
-14. Potential: Climate Finance & MRV
-15. Potential: Disaster Response
-16. Potential: Autonomous Institutions
+### PART IV: APPLICATIONS OF GROUND-TRUTHING
+13. Deployment: Maritime Domain Awareness (Maldives)
+14. Application: Climate Ground-Truthing (MRV)
+15. Application: Disaster Ground-Truthing
+16. Future: Autonomous Institutions
 
 ### PART V: FORMAL FOUNDATIONS
 17. Topological Properties of Trust Networks
@@ -1408,13 +1408,15 @@ GET    /signals                # Query signal log
 
 ---
 
-# PART IV: APPLICATIONS
+# PART IV: APPLICATIONS OF GROUND-TRUTHING
 
-Kaori Protocol was developed to solve a specific problem: ground-truthing satellite data for maritime domain awareness in the Maldives. This section presents that primary use case and explores potential applications in other domains.
+Kaori Protocol is a general-purpose ground-truthing engine. While born from maritime needs, the pattern is universal: **combine global-scale remote sensing with trusted local observations to verify physical reality.**
 
-## 13. Primary Use Case: Maritime Ground-Truthing (Maldives)
+This section explores how this pattern applies across three critical domains: Maritime Security, Climate Finance, and Disaster Response.
 
-This is where Kaori was born—validating what satellites see with what observers on the ground report.
+## 13. Deployment: Maritime Domain Awareness (Maldives)
+
+This is the protocol's first live deployment—validating what satellites see with what observers on the ground report.
 
 ### 13.1 The Problem
 
@@ -1528,11 +1530,9 @@ ocean:vessel_detection:h3:886142a8e7fffff:surface:2026-01-07T00:00Z
 
 ---
 
-## Potential Applications
+## 14. Application: Climate Ground-Truthing (MRV)
 
-The architecture that powers maritime ground-truthing applies to any domain where physical claims must be verified. The following sections explore promising applications.
-
-## 14. Potential: Climate Finance & MRV
+The same ground-truthing logic applies to carbon markets: **Satellite estimates must be validated by ground samples.**
 
 ### 14.1 The Carbon Credit Problem
 
@@ -1630,7 +1630,7 @@ earth:carbon_sequestration:project:maldives_mangrove_001:P1M:2026-01
 - Confidence → higher prices for quality credits
 - Bad actors isolated by trust network
 
-## 15. Potential: Disaster Response
+## 15. Application: Disaster Ground-Truthing
 
 ### 15.1 The Coordination Problem
 
@@ -1725,7 +1725,7 @@ During disasters:
 - Identify what worked, what didn't
 - Improve ClaimTypes and response protocols
 
-## 16. Potential: Autonomous Institutions
+## 16. Future: Autonomous Institutions
 
 ### 16.1 Smart Contracts on Physical Truth
 
