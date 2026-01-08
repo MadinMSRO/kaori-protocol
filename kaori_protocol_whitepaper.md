@@ -691,8 +691,9 @@ Use bounded nonlinear functions (tanh/sigmoid), not linear updates:
 ```python
 def update_standing(agent, outcome):
     delta = compute_delta(outcome)  # based on verification accuracy
-    new_standing = tanh(agent.standing + delta)
-    agent.standing = new_standing × decay_factor
+    # Bounded nonlinear update (e.g., logistic/sigmoid)
+    new_standing = logistic_curve(agent.standing + delta, min=0, max=1000)
+    agent.standing = new_standing * decay_factor
 ```
 
 **Why nonlinear:**
@@ -758,6 +759,8 @@ Flow MUST adapt by evolving policy versions, not by rewriting history.
 Immutable: Signal log (events never change)
 Mutable: Policy version (interpretation evolves)
 ```
+
+**Note:** The FlowPolicy itself is an Agent (`policy:v2.1`) with its own standing. This allows the network to naturally "vote" on governance upgrades by vouching for specific policy versions.
 
 **Trust computation:**
 ```python
