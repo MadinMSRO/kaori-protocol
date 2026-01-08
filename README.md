@@ -7,9 +7,9 @@ Kaori Protocol exists to close the most expensive gap in modern decision systems
 Kaori transforms raw physical observations into signed, traceable Truth Records and Truth Maps that can be used operationally and defended under scrutiny.
 
 > [!NOTE]
-> This repository follows the **Open Core** architecture. The core truth compilation logic is pure, open source, and deterministic.
+> This repository follows the **Open Core** architecture. The core truth compilation logic and trust physics are pure, open source, and deterministic.
 >
-> **Scope:** Open Core includes deterministic truth compilation and canonical specifications. Production systems typically add identity, orchestration, connectors, and deployment infrastructure.
+> **Scope:** Open Core is production-ready. It includes deterministic truth compilation, trust physics, and canonical specifications. Production systems inject their own identity, orchestration, and connectors.
 
 ---
 
