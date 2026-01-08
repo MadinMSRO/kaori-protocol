@@ -13,15 +13,15 @@
 
 ## Abstract
 
-Modern institutions make high-stakes decisions based on claims about physical reality: whether floods occurred, carbon was sequestered, illegal fishing happened, or infrastructure failed. Yet the systems that verify these claims force a false trade-off between scalability and defensibility. Centralized verification doesn't scale; crowdsourced verification isn't defensible.
+Kaori Protocol was born from a simple question: why don't we have a standardized way of getting truth into our systems?
 
-We present Kaori Protocol—a two-layer architecture that transforms contested physical observations into cryptographically signed, deterministically verifiable truth states. The **TRUTH layer** compiles observations using configurable verification policies, producing signed outputs that anyone can replay and audit years later. The **FLOW layer** manages trust through seven fundamental rules that generate emergent, adversarial-resistant trust networks without central coordination.
+Working on the Unified Data Frontier Initiative at MSRO, we faced a challenge that satellite operators worldwide share—ground-truthing. Satellite data is abundant, but validating what it shows requires observations from people and sensors on the ground. Managing thousands of observations from diverse sources, processing them into verified claims, and defending those claims under scrutiny exposed a gap: **there was no standard protocol for turning contested observations into audit-grade truth.**
 
-Kaori is designed for environments where truth is contested and systems must assume hostility: maritime enforcement, climate finance, disaster response, and legal evidence. It provides what traditional oracles cannot—audit-grade verification with complete evidence trails.
+This paper presents Kaori Protocol—a two-layer architecture that transforms physical observations into cryptographically signed, deterministically verifiable truth states. The **TRUTH layer** compiles observations using configurable verification policies, producing signed outputs governed by **7 Laws** that guarantee replayability forever. The **FLOW layer** manages trust through **7 Rules** that generate emergent, adversarial-resistant networks without central coordination.
 
-The protocol is operational in the Maldives for maritime domain awareness and is being deployed for climate MRV applications. This paper presents the architecture, the mathematical foundations, and the operational implications of turning ground truth into infrastructure.
+Kaori is operational in the Maldives for maritime domain awareness, providing ground-truth validation for satellite-detected vessel activity and coastal change. The architecture applies beyond maritime—to climate MRV, disaster response, and any domain where physical claims must be verified and defended.
 
-**Keywords:** oracle problem, verifiable truth, trust networks, event sourcing, maritime domain awareness, climate finance, MRV, adversarial systems
+**Keywords:** satellite ground-truthing, oracle problem, verifiable truth, trust networks, event sourcing, maritime domain awareness, remote sensing validation
 
 ---
 
@@ -75,6 +75,17 @@ B. Example ClaimType
 C. Trust Dynamics Mathematics
 D. Implementation Guide
 
+---
+
+## The Name: Kaori
+
+**Kaori** is derived from **Cowrie** (كَوْري in Dhivehi)—the small shells that served as currency across Africa, South Asia, and the Indian Ocean for over two thousand years.
+
+The Maldives was the world's largest source of cowrie shells. From the 8th century onward, Maldivian cowries flowed through trade routes from Bengal to West Africa, underpinning commerce across civilizations. They were trusted not because of central authority, but because of their inherent properties: natural, verifiable, and impossible to counterfeit.
+
+Kaori Protocol continues this legacy. Just as cowries provided trusted value transfer without central banks, Kaori provides trusted truth transfer without central authority.
+
+The name reflects both heritage and intention: **infrastructure for truth, built from the islands that once powered global finance.**
 
 ---
 
@@ -82,48 +93,50 @@ D. Implementation Guide
 
 ## 1. The Verification Gap
 
-### 1.1 High-Stakes Decisions Run on Fragile Truth
+### 1.1 The Satellite Ground-Truthing Problem
 
-Institutions increasingly depend on claims about the physical world to make critical decisions:
+Every satellite operator faces the same fundamental challenge: **you can see the world from space, but you can't prove what you see without observations from the ground.**
 
-- **Disaster response:** Is this region flooded? (deploy resources, evacuate populations)
-- **Maritime enforcement:** Did illegal fishing occur in our EEZ? (trigger enforcement, impose sanctions)
-- **Climate finance:** Did this project sequester the claimed carbon? (release payment, issue credits)
-- **Infrastructure:** Did critical systems fail? (insurance payouts, liability determination)
-- **Public health:** Is there disease outbreak in this area? (quarantine, resource allocation)
+A satellite detects what appears to be an illegal fishing vessel. The coastal radar confirms a return in the area. A nearby patrol boat reports seeing a vessel. Three sources—but are they seeing the same thing? Do they agree? Can the combined evidence support enforcement action?
 
-The information driving these decisions typically arrives as:
-- Fragmented reports from multiple sources
-- Isolated images or sensor readings with unclear provenance
-- Dashboard summaries from opaque data pipelines
-- Remote sensing model outputs with uncertain calibration
-- Social media or citizen reports of unknown reliability
-- Official statements that are difficult to audit
+This is the ground-truthing problem:
+- Satellite data is abundant, but its interpretation is contested
+- Ground observations are essential, but arrive from diverse, unreliable sources
+- Combining them into defensible claims requires trust in the observers
+- Defending those claims in court, to insurers, or to the public requires audit trails
 
-**These inputs may be useful, but they are rarely audit-grade or defensible under scrutiny.**
+**The same pattern appears across domains:**
+- **Disaster response:** Satellite shows potential flooding—did local observers confirm it?
+- **Climate finance:** Remote sensing estimates carbon—did ground teams validate measurements?
+- **Infrastructure monitoring:** Sensors detect anomalies—did technicians verify the failure?
+- **Environmental compliance:** Imagery suggests violation—do witness reports corroborate?
+
+The problem isn't sensing. We have abundant data:
+- Satellites providing global coverage every few hours
+- IoT sensors deployed across infrastructure
+- Smartphone-equipped citizens observing in real-time
+
+**The problem is turning contested observations into audit-grade truth.**
 
 When challenged, organizations struggle to prove:
 - What was actually observed (source data)
-- Who observed it (provenance)
+- Who observed it (provenance and trust)
 - What validation methods were applied (process)
 - How confidence was determined (methodology)
-- Why a particular decision was justified (reasoning)
 - Whether the record remained tamper-free (integrity)
 
-**There is no robust "evidence trail" linking decisions back to indisputable facts.**
+### 1.2 The Verification Gap
 
-### 1.2 The Limiting Factor Isn't Sensing—It's Defensible Verification
+The gap isn't data collection—we have satellites, drones, IoT sensors, AI models. The gap is **verification infrastructure**.
 
-We have abundant data sources:
-- Satellites providing global coverage every few hours
-- IoT sensors deployed across infrastructure
-- Drones with high-resolution imaging
-- Citizens with smartphones and cameras
-- AI models that can analyze imagery at scale
+No standard protocol exists for:
+- Aggregating observations from heterogeneous sources
+- Weighting them by trustworthiness
+- Compiling them into auditable claims
+- Signing and storing the evidence trail
+- Enabling replay and independent verification years later
 
-**Yet we lack the means to trust and verify that data in a way that stands up to audits, disputes, or adversarial challenges.**
-
-The bottleneck isn't collecting observations—it's establishing which observations represent truth, with sufficient confidence to act upon and sufficient evidence to defend later.
+**Every organization builds bespoke pipelines. Every pipeline has different assumptions. No two are compatible. None are auditable.**
 
 ### 1.3 Truth is Contested in Adversarial Environments
 
@@ -1398,7 +1411,11 @@ GET    /signals                # Query signal log
 
 # PART IV: APPLICATIONS
 
-## 13. Maritime Domain Awareness (Maldives Deployment)
+Kaori Protocol was developed to solve a specific problem: ground-truthing satellite data for maritime domain awareness in the Maldives. This section presents that primary use case and explores potential applications in other domains.
+
+## 13. Primary Use Case: Maritime Ground-Truthing (Maldives)
+
+This is where Kaori was born—validating what satellites see with what observers on the ground report.
 
 ### 13.1 The Problem
 
@@ -1510,7 +1527,13 @@ ocean:vessel_detection:h3:886142a8e7fffff:surface:2026-01-07T00:00Z
 - Verifiable compliance with fishing agreements
 - Data for regional cooperation
 
-## 14. Climate Finance & MRV
+---
+
+## Potential Applications
+
+The architecture that powers maritime ground-truthing applies to any domain where physical claims must be verified. The following sections explore promising applications.
+
+## 14. Potential: Climate Finance & MRV
 
 ### 14.1 The Carbon Credit Problem
 
@@ -1608,7 +1631,7 @@ earth:carbon_sequestration:project:maldives_mangrove_001:P1M:2026-01
 - Confidence → higher prices for quality credits
 - Bad actors isolated by trust network
 
-## 15. Disaster Response
+## 15. Potential: Disaster Response
 
 ### 15.1 The Coordination Problem
 
@@ -1703,7 +1726,7 @@ During disasters:
 - Identify what worked, what didn't
 - Improve ClaimTypes and response protocols
 
-## 16. Autonomous Institutions
+## 16. Potential: Autonomous Institutions
 
 ### 16.1 Smart Contracts on Physical Truth
 
