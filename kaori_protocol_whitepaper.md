@@ -21,7 +21,7 @@ This paper presents Kaori Protocol—a two-layer architecture that transforms ph
 
 Kaori is operational in the Maldives, providing ground-truth validation for satellite-detected hazards, disasters, maritime activity, and coastal change. The architecture applies beyond maritime—to climate MRV, disaster response, and any domain where physical claims must be verified and defended.
 
-**Keywords:** satellite ground-truthing, oracle problem, verifiable truth, trust networks, event sourcing, maritime domain awareness, remote sensing validation
+**Keywords:** satellite ground-truthing, oracle problem, verifiable truth, trust networks, event sourcing, maritime domain awareness, remote sensing validation, climate mrv, disaster response
 
 ---
 
@@ -905,13 +905,13 @@ trust_snapshot = flow.get_trust_snapshot(
   "flow_policy_hash": "abc123",
   "agent_trusts": {
     "user:amira": {
-      "standing": 0.72,
-      "effective_standing": 0.81,  # includes context modifiers
+      "standing": 720.0,
+      "effective_standing": 810.0,  # includes context modifiers
       "flags": []
     },
     "sensor:jetson_042": {
-      "standing": 0.88,
-      "effective_standing": 0.92,
+      "standing": 880.0,
+      "effective_standing": 920.0,
       "flags": []
     }
   },
@@ -1130,7 +1130,7 @@ validation:
   human_consensus:
     required_when: "ai_confidence < 0.9 OR observations_conflict"
     min_validators: 3
-    min_standing: 0.5
+    min_standing: 500
     voting_method: weighted_majority
     
 confidence:
@@ -1254,8 +1254,8 @@ The interface between Flow and Truth.
   
   "agent_trusts": {
     "user:amira": {
-      "base_standing": 0.72,
-      "effective_standing": 0.81,
+      "base_standing": 720.0,
+      "effective_standing": 810.0,
       
       "context_modifiers": {
         "domain_affinity": {
@@ -1275,8 +1275,8 @@ The interface between Flow and Truth.
     },
     
     "sensor:jetson_042": {
-      "base_standing": 0.88,
-      "effective_standing": 0.92,
+      "base_standing": 880.0,
+      "effective_standing": 920.0,
       
       "context_modifiers": {
         "domain_affinity": {
@@ -1908,7 +1908,7 @@ Let *A* be the set of agents and *C* be the set of contexts (ClaimTypes).
 
 Standing function: 
 ```
-S: A × C × T → [0,1]
+S: A × C × T → [0,1000]
 ```
 
 Where:
@@ -2005,14 +2005,14 @@ Where *w(S_eff)* is the weight in consensus.
 ```
 Standing         Phase        Weight        Behavior
 ─────────────────────────────────────────────────────
-0.0 - 0.3       Dormant      0.1           Minimal influence
-0.3 - 0.7       Active       S_eff         Proportional
-0.7 - 1.0       Dominant     0.7+0.3×...   Diminishing returns
+0 - 100         Dormant      S_eff * 0.5   Reduced weight
+100 - 700       Active       S_eff         Proportional
+700 - 1000      Dominant     700+...       Diminishing returns
 ```
 
 **Critical points:**
-- θ₁ = 0.3: Transition from dormant to active (agent "awakens")
-- θ₂ = 0.7: Transition to dominant (diminishing returns begin)
+- θ₁ = 100: Transition from dormant to active (agent "awakens")
+- θ₂ = 700: Transition to dominant (diminishing returns begin)
 
 Near critical points, small changes in standing produce large changes in influence.
 
@@ -2166,12 +2166,12 @@ Kaori assumes the following adversaries exist:
 
 *Method:*
 - Behave honestly for 6 months
-- Reach dominant standing (0.8+)
+- Reach dominant standing (800+)
 - Submit critical false report with high influence
 
 *Mitigation:*
 1. **Phase transitions with diminishing returns (Rule 6)**
-   - Even at 0.9 standing, weight is capped
+   - Even at 900 standing, weight is capped
    - Need multiple colluding high-standing agents
 
 2. **Multi-source requirements**
