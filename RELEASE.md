@@ -11,7 +11,7 @@
 | ------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `kaori-truth` | **Stable** | Pure deterministic Truth compiler. No runtime dependencies on DB/API/Flow layers. Safe for production verification logic. |
 | `kaori-spec`  | **Stable** | Normative protocol specifications and ClaimType standards.                                                                |
-| `kaori-flow`  | **Beta**   | Trust physics implementation.                                                                                             |
+| `kaori-flow`  | **Stable Core**   | Trust physics implementation (7 Rules of Trust).                                                                                             |
 | `kaori-api`   | **Alpha**  | Reference orchestrator implementation.                                                                                    |
 
 ---

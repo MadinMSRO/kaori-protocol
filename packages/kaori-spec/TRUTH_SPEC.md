@@ -1,6 +1,6 @@
-# Kaori Protocol — Truth Standard (v2.0)
+# Kaori Protocol — Truth Standard (v2.1)
 
-> **Status:** v2.0 (Open-Core Architecture)  
+> **Status:** v2.1 (7 Laws of Truth)  
 > **Maintainer:** MSRO  
 > **Scope:** Defines the protocol for representing, validating, compiling, signing, and serving verifiable truth states derived from ground-based observations.
 
@@ -39,17 +39,99 @@ Kaori implementations **MUST** support:
 6. **Signed Silver ledger** and **signed Gold truth map** for audit-grade trust
 7. **Transparent verification semantics** (what caused verification vs how confident it is)
 
-### 1.2 Critical Invariants
+### 1.3 The 7 Laws of Truth (Normative)
 
-> [!IMPORTANT]
-> **Kaori Truth is Mathematics.** The following invariants MUST NOT be violated:
+These laws are **invariants**. They cannot be changed without a major version bump.
 
-1. **Deterministic Compilation:** Given identical inputs, `compile_truth_state()` MUST produce byte-identical output
-2. **Replayable Truth:** TruthState MUST store enough information to replay compilation
-3. **Auditable Truth:** All inputs to compilation MUST be explicit and stored
-4. **Signed Outputs:** Final TruthStates MUST be cryptographically signed
+---
 
-### 1.3 Non-Goals (v2)
+#### Law 1: Truth is Compiled, Not Declared
+
+Truth MUST be computed from observations through a deterministic compiler, not asserted by authority.
+
+```python
+truth_state = compile(observations, trust_snapshot, policy)
+```
+
+**Implication:** No one can "declare" something true. They can only provide observations.
+
+---
+
+#### Law 2: The Compiler is Pure
+
+The Truth compiler MUST be a pure function — no side effects, no external state, no network calls.
+
+```
+Same inputs → identical output (byte-for-byte)
+```
+
+**Implication:** Truth is mathematics, not consensus.
+
+---
+
+#### Law 3: TruthKey is the Universal Address
+
+Every truth state MUST be addressed by a canonical TruthKey.
+
+```
+{domain}:{topic}:{spatial}:{id}:{z}:{time}
+```
+
+**Implication:** Any physical claim has exactly one address. Truth is joinable across any system.
+
+---
+
+#### Law 4: Evidence Precedes Verification
+
+Truth MUST NOT be compiled without explicit observations.
+
+```python
+if len(observations) == 0:
+    return TruthState(status="UNVERIFIED")
+```
+
+**Implication:** Absence of evidence is not evidence. No observations → no truth.
+
+---
+
+#### Law 5: Trust is Input, Not Computed
+
+The compiler MUST receive trust as frozen snapshot, not compute it.
+
+```python
+def compile(observations, trust_snapshot):  # Trust is DATA
+    # Compiler never calls flow.get_trust()
+```
+
+**Implication:** Truth layer has no opinion on who is trusted. That's Flow's job.
+
+---
+
+#### Law 6: Every Output is Signed
+
+Final TruthStates MUST be cryptographically signed with full provenance.
+
+```python
+signature = sign(canonical_hash(truth_state))
+```
+
+**Implication:** Anyone can verify a truth state is authentic without trusting the verifier.
+
+---
+
+#### Law 7: Truth is Replayable Forever
+
+Given the same inputs, any implementation MUST produce identical output at any future time.
+
+```
+compile(inputs) == compile(inputs)  # Always, forever
+```
+
+**Implication:** You can replay truth 100 years later and get the same answer.
+
+---
+
+### 1.4 Non-Goals (v2)
 
 Kaori v2 does **NOT** attempt to:
 

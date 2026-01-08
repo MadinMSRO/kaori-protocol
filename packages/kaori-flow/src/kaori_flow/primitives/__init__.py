@@ -1,21 +1,28 @@
 """
 Kaori Flow — Primitives
 
-Flow layer primitives for trust physics and orchestration.
+The 4 primitives of Kaori Flow (FLOW_SPEC v4.0 Section 2):
+- Agent: Identity unit
+- Network: Trust edges (inferred from signals)
+- Signal: Immutable event envelope
+- Probe: Coordination object
 """
-
-from .agent import Agent, AgentType
+from .agent import Agent, AgentType, create_agent_id, STANDING_MIN, STANDING_MAX
 from .network import NetworkEdge, EdgeType
-from .signal import Signal, SignalType
 from .probe import Probe, ProbeStatus
+from .signal import Signal, SignalContext, SignalTypes
 
 __all__ = [
     "Agent",
     "AgentType",
+    "create_agent_id",
+    "STANDING_MIN",
+    "STANDING_MAX",
     "NetworkEdge",
     "EdgeType",
-    "Signal",
-    "SignalType",
     "Probe",
     "ProbeStatus",
+    "Signal",
+    "SignalContext",
+    "SignalTypes",
 ]

@@ -30,9 +30,33 @@ Kaori transforms raw physical observations into signed, traceable Truth Records 
 | Truth Compiler | ✅ Production (Pure) | `kaori-truth` |
 | Canonicalization | ✅ Complete | `kaori-truth` |
 | Temporal Engine | ✅ Complete | `kaori-truth` |
-| Specifications | ✅ v2.0 Released | `kaori-spec` |
-| Flow (Trust Physics) | 🚧 Beta | `kaori-flow` |
+| Specifications | ✅ v2.1 Released | `kaori-spec` |
+| Flow (Trust Physics) | ✅ Core Complete | `kaori-flow` |
 | API / DB | 🚧 Reference Impl | `kaori-api` |
+
+### The 14 Laws
+
+Kaori Protocol is governed by two complementary sets of invariant laws:
+
+**7 Laws of Truth** (Verification)
+1. Truth is Compiled, Not Declared
+2. The Compiler is Pure
+3. TruthKey is the Universal Address
+4. Evidence Precedes Verification
+5. Trust is Input, Not Computed
+6. Every Output is Signed
+7. Truth is Replayable Forever
+
+**7 Rules of Trust** (Coordination)
+1. Trust is Event-Sourced
+2. Everything is an Agent
+3. Standing is the Primitive
+4. Standing Global, Trust Local
+5. Nonlinear Updates
+6. Phase Transitions
+7. Policy Interpretation Evolves
+
+See [TRUTH_SPEC.md](packages/kaori-spec/TRUTH_SPEC.md) and [FLOW_SPEC.md](packages/kaori-spec/FLOW_SPEC.md) for normative definitions.
 
 ---
 

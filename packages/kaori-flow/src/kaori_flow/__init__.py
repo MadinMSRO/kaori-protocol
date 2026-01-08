@@ -1,46 +1,72 @@
 """
-Kaori Flow — Trust Physics & Orchestration
+Kaori Flow — The Physics of Trust
 
-This package implements the Flow layer of the Kaori Protocol.
-It handles dynamic trust calculation, agent management, and signal processing.
+Event-sourced, emergent, deterministic trust dynamics.
+Implements the 7 Rules of Trust (FLOW_SPEC v4.0).
 
-Package Structure:
-- primitives/  - Flow primitives (Agent, Network, Signal, Probe)
-- trust_provider.py - TrustProvider implementation
-- signal_processor.py - Signal → Probe logic
-- standing_dynamics.py - Trust evolution
+Core Library API:
+    FlowCore: Main entry point
+    FlowPolicy: Configuration (YAML agent)
+    Signal: Immutable event envelope
+    TrustSnapshot: Frozen trust state for truth compilation
 
-Dependency Rule:
-- kaori-flow MAY import kaori-truth
-- kaori-truth MUST NOT import kaori-flow
+Example:
+    from kaori_flow import FlowCore, FlowPolicy
+    
+    # Initialize with default policy
+    flow = FlowCore(policy=FlowPolicy.default())
+    
+    # Register an agent
+    flow.register_agent("user:amira", role="observer")
+    
+    # Get standing
+    standing = flow.get_standing("user:amira")
+    
+    # Get trust snapshot for truth compilation
+    snapshot = flow.get_trust_snapshot(
+        agent_ids=["user:amira"],
+        context=TrustContext(claimtype_id="earth.flood.v1"),
+    )
 """
-from __future__ import annotations
-
-from kaori_flow.trust_provider import TrustProvider, create_trust_snapshot
-from kaori_flow.primitives import (
-    Agent,
-    AgentType,
-    NetworkEdge,
-    EdgeType,
-    Signal,
-    SignalType,
-    Probe,
-    ProbeStatus,
-)
-
-__version__ = "1.0.0"
+from .core import FlowCore
+from .policy import FlowPolicy
+from .primitives.agent import Agent, AgentType, create_agent_id, STANDING_MIN, STANDING_MAX
+from .primitives.signal import Signal, SignalContext, SignalTypes
+from .reducer import FlowReducer, ReducerState
+from .store import SignalStore, InMemorySignalStore, JSONLSignalStore
+from .trust import TrustComputer, TrustContext, TrustSnapshot, AgentTrust
 
 __all__ = [
-    # Trust Provider
-    "TrustProvider",
-    "create_trust_snapshot",
+    # Core
+    "FlowCore",
+    "FlowPolicy",
+    
     # Primitives
     "Agent",
     "AgentType",
-    "NetworkEdge",
-    "EdgeType",
     "Signal",
-    "SignalType",
-    "Probe",
-    "ProbeStatus",
+    "SignalContext",
+    "SignalTypes",
+    
+    # Trust
+    "TrustComputer",
+    "TrustContext",
+    "TrustSnapshot",
+    "AgentTrust",
+    
+    # Storage
+    "SignalStore",
+    "InMemorySignalStore",
+    "JSONLSignalStore",
+    
+    # Reducer
+    "FlowReducer",
+    "ReducerState",
+    
+    # Helpers
+    "create_agent_id",
+    "STANDING_MIN",
+    "STANDING_MAX",
 ]
+
+__version__ = "2.0.0"
