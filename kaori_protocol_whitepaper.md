@@ -290,7 +290,7 @@ Kaori addresses the verification gap through strict separation of concerns:
 
 **FLOW Layer (Physics of Trust):**
 - Dynamic network managing who provides observations and validations
-- Computes agent reputation (standing) based on historical accuracy
+- Computes agent **standing** based on verifiable signal history
 - Propagates trust through social graph
 - Detects and mitigates abuse (Sybil attacks, collusion, spam)
 - Coordinates observation collection via signals and probes
