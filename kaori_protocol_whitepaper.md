@@ -1932,7 +1932,7 @@ The trust network forms a dynamical system:
 
 **Evolution:**
 ```
-d**S**/dt = **F**(**S**, **E**(t), G)
+dS/dt = F(S, E(t), G)
 ```
 
 Where:
@@ -1944,7 +1944,7 @@ Where:
 
 A standing vector **S**\* is a fixed point if:
 ```
-**F**(**S**\*, 0, G) = 0
+F(S*, 0, G) = 0
 ```
 
 (No events → no change in standing)
@@ -1953,7 +1953,7 @@ A standing vector **S**\* is a fixed point if:
 
 Linearize around fixed point:
 ```
-d**S**/dt ≈ J(**S**\*) · (**S** - **S**\*)
+dS/dt ≈ J(S*) · (S - S*)
 ```
 
 Where *J* is the Jacobian. Fixed point is stable if all eigenvalues of *J* have negative real parts.
@@ -1990,13 +1990,13 @@ Where `p(a) = S(a,c) / ∑(a'∈A) S(a',c)` is normalized standing.
 The network can be modeled as a physical system minimizing an energy function (contradiction).
 
 **Lyapunov Function:**
-Let $L(\mathbf{S})$ be the "stress" or "energy" of the network, defined by the magnitude of unresolved contradictions:
+Let `L(S)` be the "stress" or "energy" of the network, defined by the magnitude of unresolved contradictions:
 
 ```
 L(S) = ∑_{(i,j)∈E} w_ij · (S_i - S_j)²
 ```
 
-Where linked agents $(i,j)$ should ideally have similar standing if they are honest (homophily).
+Where linked agents `(i,j)` should ideally have similar standing if they are honest (homophily).
 
 **Stability Theorem:**
 The update rule (Rule 5) ensures that `dL/dt ≤ 0` in the absence of new signals. The system naturally relaxes into stable configurations (consensus clusters) rather than oscillating chaotically. This provides **thermodynamic guarantees** that the network will converge to a decision.
