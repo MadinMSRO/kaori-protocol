@@ -54,7 +54,7 @@ Kaori is operational in the Maldives, providing ground-truth validation for sate
 16. Future: Autonomous Institutions
 
 ### PART V: FORMAL FOUNDATIONS
-17. Topological Properties of Trust Networks
+17. Formal Foundations of Trust and Truth
 18. Security Model & Threat Analysis
 19. Comparison to Existing Systems
 
@@ -1041,15 +1041,21 @@ The TruthKey is the most critical primitive in Kaori—it's the universal addres
 
 To ensure TruthKeys are canonical:
 
-**1. Temporal normalization:**
-- All timestamps → UTC
-- Bucket boundaries aligned (hourly on hour, daily at midnight UTC)
-- Duration formatting standardized (PT1H not P0.041666D)
+**1. Serialization Rules (Strict JSON):**
+- **Sorted Keys:** Keys MUST be sorted alphabetically to ensure unique binary representation.
+- **Minimal Formatting:** No whitespace allowed between separators (`:` `,`).
+- **Float Quantization:** All floating point numbers truncated to 6 decimal places to prevent platform-specific precision drift.
+- **Unicode Normalization:** All strings MUST be NFC normalized.
 
-**2. Spatial normalization:**
-- Coordinate precision limits (no false precision)
-- H3 resolution consistent within ClaimType
-- Spatial IDs lowercase
+**2. Temporal Normalization (ISO 8601):**
+- UTC only (`Z` suffix required)
+- Buckets aligned to boundaries (e.g., 00:00:00Z)
+- Durations standardized (e.g., `PT1H` not `3600S`)
+
+**3. Spatial Normalization:**
+- Coordinate precision limits verified
+- H3 indices validated
+- IDs forced to lowercase (`[a-z0-9]`)
 
 **3. String formatting:**
 - Lowercase except where system requires (MGRS)
@@ -1796,7 +1802,7 @@ contract CarbonCreditRegistry {
 
 # PART V: FORMAL FOUNDATIONS
 
-## 17. Topological Properties of Trust Networks
+## 17. Formal Foundations of Trust and Truth
 
 ### 17.1 Trust as a Tensor Field
 
@@ -1978,6 +1984,37 @@ Where `p(a) = S(a,c) / ∑(a'∈A) S(a',c)` is normalized standing.
 - Vouch weight (affects trust propagation)
 - Phase transition thresholds (affects concentration)
 - Decay rates (affects stability of dominance)
+
+### 17.6 Thermodynamic Stability of Trust
+
+The network can be modeled as a physical system minimizing an energy function (contradiction).
+
+**Lyapunov Function:**
+Let $L(\mathbf{S})$ be the "stress" or "energy" of the network, defined by the magnitude of unresolved contradictions:
+
+$$ L(\mathbf{S}) = \sum_{(i,j) \in E} w_{ij} (S_i - S_j)^2 $$
+
+Where linked agents $(i,j)$ should ideally have similar standing if they are honest (homophily).
+
+**Stability Theorem:**
+The update rule (Rule 5) ensures that $\frac{dL}{dt} \leq 0$ in the absence of new signals. The system naturally relaxes into stable configurations (consensus clusters) rather than oscillating chaotically. This provides **thermodynamic guarantees** that the network will converge to a decision.
+
+### 17.7 The Algebra of Truth (Axioms)
+
+While Flow is probabilistic and dynamic, Truth is algebraic and static.
+
+**Axiom 1: Functional Purity**
+The Truth Compiler $\tau$ is a pure function.
+$$ \forall I_a, I_b: I_a = I_b \implies \tau(I_a) = \tau(I_b) $$
+This guarantees that **Truth is independent of the observer**. Anyone running the compiler gets the same result.
+
+**Axiom 2: Projection Invariance**
+A TruthState is a faithful projection of a TrustSnapshot onto a ClaimType.
+$$ T = P(\sigma_{trust}, \text{Signal}_{obs}) $$
+Verification does not "compute" new trust; it merely projects existing network standing onto specific evidence.
+
+**Axiom 3: Universal Addressability**
+Every potential truth state exists at a unique address (TruthKey) before it is strictly computed. The map is pre-drawn; observations merely fill in the colors.
 
 ## 18. Security Model & Threat Analysis
 
@@ -2312,7 +2349,7 @@ Kaori assumes the following adversaries exist:
 
 ### 20.2 Future Evolution
 
-**Transition to council (2027-2028):**
+**Transition to council:**
 
 When Kaori achieves sufficient adoption (multiple countries, demonstrated robustness), governance can decentralize.
 
