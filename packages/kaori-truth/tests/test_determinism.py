@@ -84,7 +84,7 @@ def create_test_trust_snapshot(
     for agent_id in agent_ids:
         agent_trusts[agent_id] = AgentTrust(
             agent_id=agent_id,
-            effective_power=150.0,
+            effective_trust=150.0,
             standing=150.0,
             derived_class="silver",
             flags=[],

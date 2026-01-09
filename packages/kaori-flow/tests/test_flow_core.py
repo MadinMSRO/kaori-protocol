@@ -4,7 +4,7 @@ Tests for Kaori Flow Core Library.
 Tests the 7 Rules of Trust implementation.
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from kaori_flow import (
     FlowCore,
@@ -164,7 +164,7 @@ class TestTrustContext:
     def test_self_dealing_penalty(self):
         """Self-dealing reduces effective trust."""
         flow = FlowCore()
-        flow.register_agent("user:creator")
+        flow.register_agent("user:creator", role="authority")
         
         # Boost standing
         for i in range(5):
@@ -192,9 +192,11 @@ class TestTrustContext:
         normal_trust = normal_snapshot.agent_trusts["user:creator"].effective_trust
         self_trust = self_dealing_snapshot.agent_trusts["user:creator"].effective_trust
         
-        # Self-dealing should be ~50% of normal
+        ratio = self_trust / normal_trust
+        if abs(ratio - 0.5) >= 0.05:
+            assert False, f"FAIL: Normal={normal_trust}, Self={self_trust}, Ratio={ratio}"
+        
         assert self_trust < normal_trust
-        assert abs(self_trust / normal_trust - 0.5) < 0.05
 
 
 class TestPolicyAsAgent:
@@ -205,7 +207,7 @@ class TestPolicyAsAgent:
         flow = FlowCore()
         flow.register_policy(flow.policy)
         
-        standing = flow.get_standing(flow.policy.agent_id)
+        standing = flow.get_standing(flow.policy.policy_id)
         assert standing == 500.0  # Initial policy standing
     
     def test_policy_standing_changes(self):
@@ -213,7 +215,7 @@ class TestPolicyAsAgent:
         flow = FlowCore()
         flow.register_policy(flow.policy)
         
-        before = flow.get_standing(flow.policy.agent_id)
+        before = flow.get_standing(flow.policy.policy_id)
         
         flow.emit_truthstate(
             truthkey="test:key:1",
@@ -224,7 +226,7 @@ class TestPolicyAsAgent:
             quality_score=80.0,
         )
         
-        after = flow.get_standing(flow.policy.agent_id)
+        after = flow.get_standing(flow.policy.policy_id)
         
         # Policy should gain standing from correct outcomes
         assert after > before
@@ -237,7 +239,7 @@ class TestSignal:
         """Signals are immutable (frozen)."""
         signal = Signal(
             signal_type=SignalTypes.OBSERVATION_SUBMITTED,
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             agent_id="user:test",
             object_id="probe:1",
             payload={"data": "test"},
@@ -250,7 +252,7 @@ class TestSignal:
         """Signal ID is computed from content."""
         signal = Signal(
             signal_type=SignalTypes.OBSERVATION_SUBMITTED,
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             agent_id="user:test",
             object_id="probe:1",
             payload={"data": "test"},
@@ -319,7 +321,7 @@ class TestReplay:
                 "contributors": ["user:test"],
                 "outcome": "correct",
                 "quality_score": 80.0,
-                "policy_agent_id": flow.policy.agent_id,
+                "policy_agent_id": flow.policy.policy_id,
             },
             policy_version="1.0.0",
         )
@@ -345,7 +347,7 @@ class TestInMemoryStore:
         
         signal = Signal(
             signal_type=SignalTypes.OBSERVATION_SUBMITTED,
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             agent_id="user:test",
             object_id="probe:1",
             payload={},
@@ -362,7 +364,7 @@ class TestInMemoryStore:
         
         signal1 = Signal(
             signal_type=SignalTypes.OBSERVATION_SUBMITTED,
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             agent_id="user:alice",
             object_id="probe:1",
             payload={},
@@ -370,7 +372,7 @@ class TestInMemoryStore:
         
         signal2 = Signal(
             signal_type=SignalTypes.OBSERVATION_SUBMITTED,
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             agent_id="user:bob",
             object_id="probe:1",
             payload={},

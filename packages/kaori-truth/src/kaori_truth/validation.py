@@ -215,51 +215,5 @@ def _check_type(data: Any, expected: str) -> bool:
     return True
 
 
-def load_schema(schema_ref: str, base_path: str = "") -> Dict[str, Any]:
-    """
-    Load JSON Schema from file reference.
-    
-    Args:
-        schema_ref: Path to schema file (relative or absolute)
-        base_path: Base path for relative references
-        
-    Returns:
-        Parsed JSON Schema
-    """
-    from pathlib import Path
-    
-    if base_path:
-        schema_path = Path(base_path) / schema_ref
-    else:
-        schema_path = Path(schema_ref)
-    
-    with open(schema_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-
-def get_output_schema(claim_type_config: Dict[str, Any], schema_base_path: str = "") -> Dict[str, Any]:
-    """
-    Get output schema from ClaimType configuration.
-    
-    Supports:
-    - output_schema: Inline JSON Schema
-    - output_schema_ref: Path to external schema file
-    
-    Args:
-        claim_type_config: ClaimType YAML configuration
-        schema_base_path: Base path for schema references
-        
-    Returns:
-        JSON Schema for output validation
-        
-    Raises:
-        ValueError: If no output schema is defined
-    """
-    if "output_schema" in claim_type_config:
-        return claim_type_config["output_schema"]
-    
-    if "output_schema_ref" in claim_type_config:
-        return load_schema(claim_type_config["output_schema_ref"], schema_base_path)
-    
-    # Default permissive schema (any object)
-    return {"type": "object"}
+# IO Removed: load_schema was moved to kaori_truth.io.loaders
+# validation.py is now strictly PURE.

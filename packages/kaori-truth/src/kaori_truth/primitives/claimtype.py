@@ -139,14 +139,13 @@ class ClaimType(BaseModel):
         """
         Get output schema for claim payload validation.
         
-        Returns inline schema or loads from reference.
+        Must be pre-resolved and injected at construction.
         """
         if self.output_schema:
             return self.output_schema
-        if self.output_schema_ref:
-            from kaori_truth.validation import load_schema
-            return load_schema(self.output_schema_ref)
-        # Default permissive schema
+            
+        # If we only have a ref but no schema, we fallback to permissive.
+        # Ideally, Factory should have resolved this.
         return {"type": "object"}
     
     def validate_domain_config(self) -> None:
@@ -190,36 +189,8 @@ class ClaimType(BaseModel):
         return self.consensus_model.weighted_roles.get(standing.lower(), 1)
 
 
-def load_claimtype_yaml(path: str | Path) -> ClaimType:
-    """
-    Load a ClaimType from YAML file.
-    
-    Args:
-        path: Path to the YAML file
-        
-    Returns:
-        ClaimType with parsed configuration
-    """
-    path = Path(path)
-    
-    with open(path, 'r', encoding='utf-8') as f:
-        raw_config = yaml.safe_load(f)
-    
-    # Parse into ClaimType
-    claim_type = ClaimType(
-        id=raw_config.get("id", ""),
-        version=raw_config.get("version", 1),
-        domain=raw_config.get("domain", "earth"),
-        topic=raw_config.get("topic", ""),
-        risk_profile=raw_config.get("risk_profile", "monitor"),
-        truthkey=TruthKeyConfig(**raw_config.get("truthkey", {})),
-        consensus_model=ConsensusModel(**raw_config.get("consensus_model", {})),
-        autovalidation=AutovalidationConfig(**raw_config.get("autovalidation", {})),
-        temporal_decay=TemporalDecayConfig(**raw_config.get("temporal_decay", {})),
-    )
-    claim_type._raw_config = raw_config
-    
-    return claim_type
+# IO Removed: load_claimtype_yaml moved to kaori_truth.io.loaders / factory
+# claimtype.py is now strictly PURE.
 
 
 def canonical_claimtype(claim_type: ClaimType) -> dict:

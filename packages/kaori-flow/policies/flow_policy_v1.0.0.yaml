@@ -1,0 +1,174 @@
+# Kaori Flow Policy v1.0.0 (Constitutional)
+#
+# CONSTITUTIONAL DOCUMENT — DO NOT EDIT WITHOUT UNDERSTANDING LINEAGE
+#
+# This policy defines the "Physics of Trust" for the Kaori Protocol.
+# It uses a Constitutional Architecture:
+# 1. Constitutional Bounds (Immutable by downstream actors)
+# 2. Profiles (Safe, pre-validated configurations)
+# 3. Lineage (Event-sourced version history)
+#
+# -----------------------------------------------------------------------------
+# I. Identity & Lineage
+# -----------------------------------------------------------------------------
+
+policy_id: "msro.flow.constitution"
+version: "1.0.0"
+parent_version: null
+effective_from: "2026-01-09T00:00:00Z"
+deprecated_at: null
+
+# Computed at load time, never manually set.
+# This hash freezes the policy state for WindowEvents.
+policy_hash: null
+
+metadata:
+  description: "Root MSRO Flow Constitution. Defines the physics of trust."
+  maintainer: "msro:flow_governance"
+  schema_version: "2.0"
+  canonicalization: "json_canonical_v1"
+  hash_algo: "sha256"
+
+# -----------------------------------------------------------------------------
+# II. Active Profile
+# -----------------------------------------------------------------------------
+
+# The active profile determines the runtime settings.
+# Operators should flip this switch rather than tuning raw knobs.
+profile: "STANDARD"
+
+# -----------------------------------------------------------------------------
+# III. Profiles Definition
+# -----------------------------------------------------------------------------
+
+profiles:
+
+  OPEN:
+    description: "Research / sandbox mode. Permissive; not for high-stakes truth."
+    validation_admissibility:
+      theta_min:
+        default: 0
+    standing_dynamics:
+      initialization:
+        probation:
+          enabled: false
+
+  STANDARD:
+    extends: "OPEN"
+    description: "Default mode. Earn-to-influence."
+    validation_admissibility:
+      theta_min:
+        default: 10
+    standing_dynamics:
+      initialization:
+        probation:
+          enabled: true
+          standing_cap: 50
+          duration: "P14D"
+
+  STRICT:
+    extends: "STANDARD"
+    description: "High-stakes mode. Tight standing requirements and faster decay."
+    validation_admissibility:
+      theta_min:
+        default: 50
+    standing_dynamics:
+      decay:
+        half_life: "P30D"
+
+# -----------------------------------------------------------------------------
+# IV. Constitutional Bounds (Immutable)
+# -----------------------------------------------------------------------------
+# ClaimTypes and Probes can NEVER loosen these bounds.
+# They can only tighten (raise min, lower max).
+
+validation_admissibility:
+  theta_min:
+    strict_min: 10      # FLOW-level floor
+    strict_max: 200     # No probe can demand >200 (prevents exclusion attacks)
+    allow_open_override: true # Explicit exception for OPEN profile (theta=0)
+  allow_record_only_signals: true
+
+standing_dynamics:
+  range:
+    min: 0.0
+    max: 1000.0
+  
+  update_limits:
+    max_delta_per_window: 50.0  # Can't gain/lose >50 standing in one window
+    max_delta_per_day: 100.0    # Bounded volatility
+
+  decay:
+    enabled: true
+    half_life: "P60D"
+    floor: 1.0
+    notes: "After ~1 year (6 half-lives) inactivity, standing approaches floor."
+
+  update:
+    reward:
+      correct: 3.0
+      calibrated_abstain: 1.0
+      calibrated_confidence: 5.0  # Reward for high confidence + correct
+    penalty:
+      incorrect: -5.0
+      reckless_confidence: -7.0   # High confidence + incorrect = steep penalty
+      malicious_behavior: -50.0   # Sybil / spam detection
+
+  sensitivities:
+    confidence_penalty:
+      enabled: true
+      curve: "sigmoid"
+      midpoint: 0.7
+      slope: 6.0
+      cap: 20.0
+    confidence_reward:
+      enabled: true
+      curve: "diminishing_power"
+      exponent: 0.5
+      cap: 10.0
+
+  # Advanced Physics (Added for TrustComputer v1 compat)
+  saturation:
+    steepness: 0.01
+    midpoint: 500.0
+    max_standing: 1000.0
+
+  phase_transitions:
+    dormant_threshold: 200.0
+    dormant_weight_multiplier: 0.1
+    dominant_threshold: 850.0
+
+  network_modifiers:
+    claimtype_collaborator_vouch:
+      enabled: true
+      per_vouch_fraction: 0.05
+      max_bonus_fraction: 0.2
+    probe_creator_bonus:
+      enabled: true
+      min_creator_standing: 700.0
+      bonus_fraction: 0.1
+    self_dealing:
+      enabled: true
+      discount_factor: 0.5
+
+  edge_weights:
+    vouch:
+      base_weight: 1.0
+      decay_rate_per_day: 0.05
+
+# -----------------------------------------------------------------------------
+# V. Safety Rails & Telemetry
+# -----------------------------------------------------------------------------
+
+telemetry:
+  concentration_alerts:
+    top5_weight_share_max: 0.65
+    gini_max: 0.80
+  exclusion_alerts:
+    max_excluded_signals_ratio: 0.70
+
+safety:
+  monotonic_tightening_only: true     # Child policies can only tighten bounds
+  forbid_privileged_agents: true      # No agent has "root" bypass
+  require_profile: true               # Must select a defined profile
+  require_policy_lint_pass: true      # Must pass flow_policy_lint.py

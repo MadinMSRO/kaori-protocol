@@ -25,7 +25,7 @@ class AgentTrust(BaseModel):
     This is a frozen snapshot of an agent's trust state.
     """
     agent_id: str
-    effective_power: float  # Computed power including inheritance
+    effective_trust: float  # Computed trust including inheritance
     standing: float  # Raw standing value
     derived_class: str  # "bronze" | "silver" | "expert" | "authority"
     flags: List[str] = Field(default_factory=list)  # e.g., ["ISOLATED", "HIGH_ASSURANCE"]
@@ -34,7 +34,7 @@ class AgentTrust(BaseModel):
         """Get canonical representation."""
         return {
             "agent_id": self.agent_id,
-            "effective_power": round(self.effective_power, 6),
+            "effective_trust": round(self.effective_trust, 6),
             "standing": round(self.standing, 6),
             "derived_class": self.derived_class.lower(),
             "flags": sorted(self.flags),
@@ -101,7 +101,7 @@ class TrustSnapshot(BaseModel):
         """Get trust data for a specific agent."""
         return self.agent_trusts.get(agent_id)
     
-    def get_power(self, agent_id: str) -> float:
-        """Get effective power for an agent (0 if not found)."""
+    def get_trust(self, agent_id: str) -> float:
+        """Get effective trust for an agent (0 if not found)."""
         trust = self.agent_trusts.get(agent_id)
-        return trust.effective_power if trust else 0.0
+        return trust.effective_trust if trust else 0.0

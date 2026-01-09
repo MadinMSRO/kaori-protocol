@@ -90,7 +90,7 @@ class InMemoryTrustProvider:
                 power = self._compute_power(agent_id)
                 agent_trusts[agent_id] = AgentTrust(
                     agent_id=agent_id,
-                    effective_power=power,
+                    effective_trust=power,
                     standing=agent.standing,
                     derived_class=agent.derived_class,
                     flags=["HIGH_ASSURANCE"] if agent.is_high_assurance else [],
@@ -99,7 +99,7 @@ class InMemoryTrustProvider:
                 # Unknown agent gets minimal trust
                 agent_trusts[agent_id] = AgentTrust(
                     agent_id=agent_id,
-                    effective_power=10.0,
+                    effective_trust=10.0,
                     standing=10.0,
                     derived_class="bronze",
                     flags=[],

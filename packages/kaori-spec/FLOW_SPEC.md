@@ -47,11 +47,13 @@ Signal = (agent_id, object_id, signal_type, payload, time, policy_version)
 Every component that emits or receives signals is an Agent.
 
 ```
-user:amira          → human agent
-sensor:jetson_042   → IoT agent
-probe:flood_watch   → probe agent
-claimtype:flood.v1  → claimtype agent
-policy:flow_v1.0.0  → policy agent
+user:amira           → human agent
+sensor:jetson_042    → IoT agent
+ai:bouncer_v1        → AI validator agent
+ai:generalist_v1     → AI validator agent
+probe:flood_watch    → probe agent
+claimtype:flood.v1   → claimtype agent
+policy:flow_v1.0.0   → policy agent
 ```
 
 All agents have **standing** (a quality metric, 0–1000).
@@ -62,6 +64,8 @@ All agents have **standing** (a quality metric, 0–1000).
 - The context (claimtype, probe, network position)
 
 No static "trust-having" vs "non-trust-having" distinction. Trust relevance is determined by role in context.
+
+**Validators:** All validators (human, AI, sensor) are agents with standing. During the Validation Window, they process observations and emit vote signals (RATIFY/REJECT). Kaori never executes validators — it only records their signed outputs. Standing increases when signals align with final TruthStates, and decreases when incorrect.
 
 **Implications:**
 - ✅ Composable: No special-case logic for different types
@@ -82,10 +86,23 @@ class Agent:
 **Standing:** Stored, global, earned from signals.  
 **Trust:** Computed, local, derived from standing at query time.
 
+**Initial Standing (new agents):**
+
+New agents start with a FlowPolicy-defined initial standing (e.g., 100). This follows the *innocent until proven guilty* principle — we don't assume zero trust until proven otherwise.
+
+```yaml
+# In FlowPolicy
+agent_defaults:
+  initial_standing: 100  # New agents start here
+```
+
+Emergence will naturally adjust this to their actual performance-based standing over time.
+
 **Implications:**
 - ✅ Minimal: One variable to track
 - ✅ Robust: Hard to corrupt a single metric
 - ✅ Comparable: All agents on same scale
+- ✅ Fair start: New agents can participate meaningfully
 
 ---
 
@@ -173,6 +190,45 @@ Mutable: Policy version (interpretation evolves)
 | **Signal** | Immutable event envelope — sole source of truth |
 | **Probe** | Coordination object for mission execution |
 
+### 2.1 Probe Specification
+
+A Probe is the **mission runtime agent** that coordinates validation and signs control-plane events.
+
+**Role:**
+- Owns mission execution policy
+- Defines `ValidationWindowPolicy`
+- Signs all `WindowEvents` (WINDOW_OPENED, WINDOW_CLOSED, etc.)
+- Acts as the canonical identity for mission operations
+
+**Mission Hub vs Probe:**
+- Mission Hub is the **user interface** (visualization, control panel)
+- Probe is the **agent** (identity, signer, policy owner)
+- Actions triggered via Mission Hub are signed by the probe
+
+**Probe structure:**
+```yaml
+probe:
+  id: probe:flood_watch_001
+  owner_agent: user:amira
+  claimtypes: [earth.flood.v1, earth.coastal_erosion.v1]
+  
+  validation_window:
+    mode: fixed                    # fixed | rolling | quorum | manual
+    open_trigger: first_observation
+    duration_seconds: 3600         # 1 hour
+    close_trigger: time_elapsed    # time_elapsed | quorum_reached | manual
+    quorum:
+      min_signals: 5
+      required_agent_types: ["user", "ai"]
+    ai_validators: ["ai:bouncer_v1", "ai:generalist_v1"]
+    theta_min_override: null       # If set, tightens (raises) standing threshold
+```
+
+**Key invariants:**
+- Probe may tighten θ_min, never loosen below ClaimType minimum
+- All WindowEvents are signed by the probe identity
+- Resolved policy is committed in `WINDOW_OPENED.policy_hash`
+
 ---
 
 ## 3. Canonical Signal Envelope
@@ -204,8 +260,76 @@ FlowPolicy is a YAML configuration that is itself an agent with standing.
 - Phase transition thresholds
 - Context modifier settings
 - Edge weight decay rates
+- **Default θ_min** (minimum standing for admissible signals)
 
 See `policies/flow_policy_v1.yaml` for the canonical schema.
+
+---
+
+## 4.1 ValidationSignal and WindowEvent Types
+
+### ValidationSignal
+
+Emitted by validators (human, AI, sensor) during a Validation Window:
+
+```python
+class ValidationSignal(BaseModel):
+    agent_id: str               # Validator identity
+    truthkey_id: str            # TruthKey being validated
+    window_id: str              # Must reference an open window
+    vote: Literal["RATIFY", "REJECT", "ABSTAIN"]
+    confidence: Optional[float] # 0.0–1.0
+    timestamp: datetime
+    signature: str              # Agent's signature
+```
+
+### WindowEvent
+
+Emitted by probes to define admissibility bounds:
+
+```python
+class WindowEvent(BaseModel):
+    event_type: Literal["WINDOW_OPENED", "WINDOW_CLOSED", "WINDOW_EXTENDED", "WINDOW_ABORTED"]
+    window_id: str              # Created by WINDOW_OPENED
+    truthkey_id: str
+    probe_id: str               # Probe signs all window events
+    timestamp: datetime
+    policy_hash: Optional[str]  # Hash of resolved ValidationWindowPolicy (on OPEN)
+    t_open: Optional[datetime]  # Start bound (on OPEN)
+    t_close: Optional[datetime] # End bound (on CLOSE)
+    signature: str              # Probe's signature
+```
+
+**Why WindowEvents exist:**
+- Provable admissibility boundaries (not narrative)
+- Replayable compilation (load `window_events[]`)
+- Dispute resolution for late votes / boundary issues
+
+---
+
+## 4.2 θ_min Resolution (Signal Admissibility)
+
+**θ_min** determines the minimum standing required for a signal to be admissible in compilation.
+
+### Resolution Hierarchy
+
+1. **FLOW policy** provides default θ_min (governance baseline)
+2. **ClaimType** may override (domain-specific tightening)
+3. **Probe** may further tighten (mission-specific rules)
+
+> **Probes may only raise θ_min, never lower it below ClaimType minimum.**
+
+The resolved θ_min is committed in `WINDOW_OPENED.policy_hash`.
+
+### Admissibility Rule
+
+A ValidationSignal is **admissible** iff:
+- It references the correct `window_id`
+- It is signed by a registered agent
+- Its timestamp is within `t_open` and `t_close`
+- `standing(agent, claimtype) ≥ θ_min`
+
+**Non-admissible signals** may still be recorded for audit and learning but are excluded from consensus aggregation.
 
 ---
 

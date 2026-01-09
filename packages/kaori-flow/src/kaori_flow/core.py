@@ -9,10 +9,10 @@ Production implementations inject storage backends (PostgreSQL, BigQuery, Pub/Su
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Protocol, runtime_checkable
 
-from .policy import FlowPolicy
+from .flow_policy import FlowPolicy
 from .primitives.signal import Signal, SignalTypes
 from .reducer import FlowReducer, ReducerState
 from .store import SignalStore, InMemorySignalStore
@@ -47,22 +47,45 @@ class FlowCore:
         self,
         store: Optional[SignalStore] = None,
         policy: Optional[FlowPolicy] = None,
+        physics: Optional["TrustPhysics"] = None,
     ):
         """
         Initialize FlowCore.
         
         Args:
             store: Signal store implementation. Defaults to InMemorySignalStore.
-            policy: FlowPolicy configuration. Defaults to FlowPolicy.default().
+            policy: FlowPolicy configuration (will be compiled internally).
+            physics: Pre-compiled TrustPhysics (preferred for constitutional correctness).
+                     If provided, policy is ignored.
         """
+        from .flow_policy import TrustPhysics
+        
         self.store = store or InMemorySignalStore()
-        self.policy = policy or FlowPolicy.default()
-        self.reducer = FlowReducer(self.policy)
-        self.trust_computer = TrustComputer(self.policy)
+        
+        # Two-Stage Architecture:
+        # 1. AST (flow_policy)
+        # 2. Physics (compiled executable)
+        if physics is not None:
+            # Use pre-compiled physics (constitutional path)
+            self.physics = physics
+            self.policy_ast = None  # AST not available when physics is injected
+        else:
+            # Compile from policy AST (convenience path)
+            self.policy_ast = policy or FlowPolicy.default()
+            self.physics = self.policy_ast.compile()
+        
+        # Components execute Physics, not Policy AST
+        self.reducer = FlowReducer(self.physics)
+        self.trust_computer = TrustComputer(self.physics)
         
         # Cache for standings (optimization, can be invalidated)
         self._standings_cache: Optional[Dict[str, float]] = None
         self._cache_valid = False
+    
+    @property
+    def policy(self):
+        """Backwards compatibility accessor for tests accessing .policy.version"""
+        return self.physics
     
     # =========================================================================
     # Public API
@@ -117,7 +140,7 @@ class FlowCore:
         }
         
         # Get policy standing
-        policy_standing = standings.get(self.policy.agent_id, 500.0)
+        policy_standing = standings.get(self.policy.policy_id, 500.0)
         
         return self.trust_computer.build_trust_snapshot(
             agent_standings=agent_standings,
@@ -147,7 +170,7 @@ class FlowCore:
         """
         signal = Signal(
             signal_type=SignalTypes.AGENT_REGISTERED,
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             agent_id="system:flow",
             object_id=agent_id,
             payload={
@@ -167,9 +190,9 @@ class FlowCore:
         """
         signal = Signal(
             signal_type=SignalTypes.POLICY_REGISTERED,
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             agent_id="system:flow",
-            object_id=policy.agent_id,
+            object_id=policy.policy_id,
             payload={
                 "version": policy.version,
                 "agent_type": "policy",
@@ -191,7 +214,7 @@ class FlowCore:
         
         signal = Signal(
             signal_type=SignalTypes.OBSERVATION_SUBMITTED,
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             agent_id=observer_id,
             object_id=probe_id,
             context=SignalContext(
@@ -220,7 +243,7 @@ class FlowCore:
         """
         signal = Signal(
             signal_type=SignalTypes.TRUTHSTATE_EMITTED,
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             agent_id="system:truth",
             object_id=truthkey,
             payload={
@@ -229,7 +252,7 @@ class FlowCore:
                 "contributors": contributors,
                 "outcome": outcome,
                 "quality_score": quality_score,
-                "policy_agent_id": self.policy.agent_id,
+                "policy_agent_id": self.policy.policy_id,
             },
             policy_version=self.policy.version,
         )
@@ -242,7 +265,7 @@ class FlowCore:
         """
         signal = Signal(
             signal_type=SignalTypes.ENDORSEMENT,
-            time=datetime.utcnow(),
+            time=datetime.now(timezone.utc),
             agent_id=endorser_id,
             object_id=endorsed_id,
             payload={},

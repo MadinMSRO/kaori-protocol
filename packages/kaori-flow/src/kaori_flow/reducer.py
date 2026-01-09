@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from .policy import FlowPolicy
+from .flow_policy import TrustPhysics
 from .primitives.signal import Signal, SignalTypes
 
 
@@ -37,7 +37,7 @@ class FlowReducer:
     The reducer is a pure function: same signals + same policy → same state.
     """
     
-    def __init__(self, policy: FlowPolicy):
+    def __init__(self, policy: TrustPhysics):
         self.policy = policy
     
     def reduce(self, signals: List[Signal]) -> ReducerState:
@@ -61,7 +61,7 @@ class FlowReducer:
         Optimization: Only process signals relevant to the agent.
         """
         state = self.reduce(signals)
-        return state.standings.get(agent_id, self.policy.bounds.initial_by_role.get("observer", 200.0))
+        return state.standings.get(agent_id, self.policy.get_initial_standing("observer"))
     
     def _apply_signal(self, state: ReducerState, signal: Signal) -> None:
         """Apply a single signal to state."""
@@ -117,16 +117,25 @@ class FlowReducer:
             
             if outcome == "correct":
                 # Gain: ΔS = a * log(1 + q)
-                delta = self.policy.standing_gain.coefficient * math.log(1 + quality_score)
+                coeff = self.policy.update.reward.get("correct", 3.0)
+                delta = coeff * math.log(1 + quality_score)
             elif outcome == "incorrect":
-                # Penalty: ΔS = -b * log(1 + q) * λ (sharper than gain)
-                delta = -self.policy.penalty.coefficient * math.log(1 + quality_score) * self.policy.penalty.amplifier
+                # Penalty: ΔS = -b * log(1 + q)
+                coeff = self.policy.update.penalty.get("incorrect", -5.0)
+                # Note: Physics doesn't allow 'amplifier' anymore, it's just raw coefficients in the map
+                # So we just use the coeff directly.
+                delta = coeff * math.log(1 + quality_score)
             else:
                 delta = 0.0
             
             # Apply delta and clamp to bounds
+            
+            # Bounds are in self.policy.bounds_range
+            bounds_min = self.policy.bounds_range.get("min", 0.0)
+            bounds_max = self.policy.bounds_range.get("max", 1000.0)
+            
             new_standing = current + delta
-            new_standing = max(self.policy.bounds.min, min(new_standing, self.policy.bounds.max))
+            new_standing = max(bounds_min, min(new_standing, bounds_max))
             state.standings[agent_id] = new_standing
         
         # Update policy standing based on truth outcome quality
@@ -141,8 +150,11 @@ class FlowReducer:
             else:
                 delta = 0.0
             
+            bounds_min = self.policy.bounds_range.get("min", 0.0)
+            bounds_max = self.policy.bounds_range.get("max", 1000.0)
+            
             new_standing = current + delta
-            new_standing = max(self.policy.bounds.min, min(new_standing, self.policy.bounds.max))
+            new_standing = max(bounds_min, min(new_standing, bounds_max))
             state.standings[policy_id] = new_standing
     
     def _handle_penalty(self, state: ReducerState, signal: Signal) -> None:
@@ -155,7 +167,8 @@ class FlowReducer:
             state.standings[agent_id] = self.policy.get_initial_standing("observer")
         
         current = state.standings[agent_id]
-        new_standing = max(self.policy.bounds.min, current - penalty_amount)
+        bounds_min = self.policy.bounds_range.get("min", 0.0)
+        new_standing = max(bounds_min, current - penalty_amount)
         state.standings[agent_id] = new_standing
     
     def _handle_endorsement(self, state: ReducerState, signal: Signal) -> None:

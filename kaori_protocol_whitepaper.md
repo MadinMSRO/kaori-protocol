@@ -346,7 +346,7 @@ This key serves as the **universal join key** for physical truth:
 
 ### 5.2 ClaimTypes: Verification Contracts
 
-A ClaimType is a YAML contract specifying how to verify a particular class of claims.
+A ClaimType is a YAML contract specifying how to verify a particular class of claims. It defines **default routing and policies** that Probes may refine at runtime.
 
 **Structure:**
 ```yaml
@@ -358,19 +358,18 @@ evidence_requirements:
   min_observations: 3
   required_types: [image, sensor_reading]
   
-validation:
-  ai_pipeline:
-    - bouncer: flood_classifier_v1  # filter junk
-    - generalist: flood_detector_v2  # initial assessment
-    - specialist: regional_flood_model_v3  # high accuracy
+# Default validation routing (Probe may override/tighten)
+validation_defaults:
+  ai_validators:
+    - ai:bouncer_v1           # Filter obviously invalid submissions
+    - ai:generalist_v1        # Initial assessment
+    - ai:flood_specialist_v1  # Domain-specific accuracy
+  required_signal_types: [vote, confidence]
+  theta_min: 50               # Minimum standing for admissible signals
   
-  human_consensus:
-    required_when: ai_confidence < 0.9
-    min_validators: 3
-    min_standing: 0.5
-    
 confidence_computation:
-  base: ai_confidence
+  # Deterministic aggregation from signals[] + TrustSnapshot
+  aggregation: weighted_sum
   modifiers:
     multi_source_bonus: 0.1
     time_decay: 0.05_per_hour
@@ -382,38 +381,152 @@ contradiction_handling:
 
 **Key features:**
 
-- **Configurable:** Each domain can define its own verification logic
+- **Default policy:** ClaimType provides default routing, thresholds, and validator lists
+- **Probe resolves final policy:** Probes may tighten (but not loosen) these defaults
 - **Versioned:** ClaimTypes evolve; version is recorded in TruthState
-- **Composable:** Can reference other ClaimTypes or models
 - **Transparent:** Anyone can inspect the verification rules
 
-### 5.3 The Compilation Process
+### 5.3 The Validation Window
+
+Between observations arriving and truth compilation, all validators — human, AI, and sensor — contribute signed signals to a TruthKey. This phase is the **Validation Window**.
+
+**Core principles:**
+
+1. **Kaori records validators, never executes them.** All validators run externally and emit signed outputs.
+2. **Probe owns the window.** The probe defines `ValidationWindowPolicy` and signs `WindowEvents`.
+3. **Mission Hub is an interface, not an agent.** Any actions triggered via Mission Hub occur as the probe identity.
+
+#### Window Lifecycle
+
+```
+          Time ──────────────────────────────────────────────────────────────►
+
+          │◀─────────── Validation Window ──────────▶│
+          │                                          │
+          │  WINDOW_OPENED (probe signs)             │  WINDOW_CLOSED (probe signs)
+          ▼                                          ▼
+Obs ────► ┼──────────────────────────────────────────┼
+          │  Human validators ──► ValidationSignal   │
+          │  AI validators    ──► ValidationSignal   │──► compile() ──► TruthState
+          │  Sensors          ──► ValidationSignal   │
+          │                                          │
+          └──────────────────────────────────────────┘
+                        Window closes
+                        Trust snapshot frozen
+                        Compilation begins
+```
+
+#### WindowEvents
+
+Probes sign control-plane events that define admissibility bounds:
+
+```python
+WindowEvent(
+    event_type="WINDOW_OPENED",
+    window_id="win_2026010912_001",    # Created by this event
+    truthkey_id="earth:flood:h3:...",
+    probe_id="probe:flood_watch_001",
+    t_open="2026-01-09T12:00:00Z",
+    policy_hash="sha256:abc123...",    # Hash of resolved ValidationWindowPolicy
+    signature="sig_probe_..."
+)
+
+WindowEvent(
+    event_type="WINDOW_CLOSED",
+    window_id="win_2026010912_001",
+    truthkey_id="earth:flood:h3:...",
+    probe_id="probe:flood_watch_001",
+    t_close="2026-01-09T13:00:00Z",
+    trust_snapshot_hash="sha256:def456...",
+    signal_set_hash="sha256:ghi789...",
+    signature="sig_probe_..."
+)
+```
+
+**Why WindowEvents exist:**
+- **Provable boundaries:** Admissibility is verifiable, not narrative
+- **Replayability:** Load `window_events[]` to reconstruct exact window state
+- **Dispute resolution:** Late votes, boundary disputes resolved via signed events
+
+#### ValidationSignals
+
+Validators (human, AI, sensor) emit signed votes referencing the window:
+
+```python
+ValidationSignal(
+    agent_id="ai:generalist_v1",
+    truthkey_id="earth:flood:h3:...",
+    window_id="win_2026010912_001",     # Must reference the open window
+    vote="RATIFY",                       # RATIFY / REJECT / ABSTAIN
+    confidence=0.87,
+    signature="sig_agent_..."
+)
+```
+
+Human validators emit identical signals — no special treatment for AI.
+
+#### Admissibility Rule
+
+A signal is **admissible** for compilation iff:
+- It references the correct `window_id`
+- It is signed by a registered agent
+- Its timestamp falls within `t_open` and `t_close` (from WindowEvents)
+- Agent standing in context ≥ resolved θ_min: `standing(agent, claimtype) ≥ θ_min`
+
+**Non-admissible signals** may still be recorded for audit and learning (future standing computation) but are excluded from aggregation.
+
+#### θ_min Resolution
+
+The minimum standing threshold is resolved hierarchically:
+
+1. **FLOW policy** provides default θ_min (governance baseline)
+2. **ClaimType** may override (domain-specific tightening)
+3. **Probe** may further tighten (mission-specific rules)
+
+Probes may only *raise* θ_min, never lower it below ClaimType minimum. The resolved value is committed in `WINDOW_OPENED.policy_hash`.
+
+#### Why This Architecture
+
+- **Compiler stays pure:** No validator execution inside `compile_truth_state()`
+- **Validators have skin in the game:** Standing evolves based on alignment with outcomes
+- **Unified consensus:** Human, AI, and sensor signals aggregated identically
+- **Fully replayable:** Only frozen artifacts required (evidence, signals, window_events, trust_snapshot)
+
+### 5.4 The Compilation Process
 
 ```python
 def compile_truth_state(
-    claim_type: ClaimType,
-    truth_key: TruthKey,
-    observations: List[Observation],
+    claimtype: ClaimType,
+    truthkey: TruthKey,
+    evidence: EvidenceBundle,
+    signals: List[ValidationSignal],
+    window_events: List[WindowEvent],   # WINDOW_OPENED, WINDOW_CLOSED, etc.
     trust_snapshot: TrustSnapshot,
-    policy_version: str,
     compiler_version: str,
-    compile_time: datetime
+    compile_time: datetime               # Passed explicitly, never read from clock
 ) -> TruthState:
     """
     Pure function: same inputs always produce same output.
-    No database queries. No wall clock. No hidden state.
+    No database queries. No wall clock. No network calls. No hidden state.
+    No validator execution — all signals are already frozen artifacts.
     """
 ```
+
+**Compiler guarantees:**
+- No database queries (all data via parameters)
+- No wall-clock dependence (time passed explicitly)
+- No network calls (trust comes via snapshot)
+- No validator execution (signals already frozen)
 
 **Steps:**
 
 1. **Canonicalize inputs:** Normalize timestamps, validate schemas
-2. **Apply AI validation:** Run models specified in ClaimType
-3. **Weight observations:** Use trust_snapshot to compute effective weights
-4. **Compute consensus:** Apply voting/aggregation rules from ClaimType
+2. **Verify admissibility:** Check signal signatures, `window_id` matches, timestamps within `t_open`/`t_close`, `standing(agent, claimtype) ≥ θ_min`
+3. **Weight signals:** Use `trust_snapshot` to compute effective weights
+4. **Compute consensus:** Aggregate weighted admissible signals per ClaimType rules
 5. **Determine status:** VERIFIED_TRUE / VERIFIED_FALSE / INCONCLUSIVE / CONTESTED
-6. **Calculate confidence:** Combine evidence quality, agreement, trust weights
-7. **Generate claim payload:** Extract structured data from observations
+6. **Calculate confidence:** Combine signal weights, agreement, evidence quality
+7. **Generate claim payload:** Extract structured data from evidence
 8. **Hash and sign:** Create tamper-proof record
 
 **Output: TruthState**
@@ -429,14 +542,15 @@ def compile_truth_state(
     "evidence_count": 5
   },
   "compile_inputs": {
-    "observation_ids": ["obs-001", "obs-002", "obs-003"],
-    "trust_snapshot_hash": "abc123...",
+    "evidence_hash": "sha256:abc123...",
+    "signals_hash": "sha256:def456...",
+    "window_events_hash": "sha256:ghi789...",
+    "trust_snapshot_hash": "sha256:jkl012...",
     "compiler_version": "2.0.0",
-    "policy_version": "1.0.0",
     "compile_time": "2026-01-07T12:00:00Z"
   },
   "security": {
-    "state_hash": "def456...",
+    "state_hash": "sha256:mno345...",
     "signature": "sig789...",
     "key_id": "msro:truth:core",
     "signed_at": "2026-01-07T12:00:00Z"
@@ -444,7 +558,7 @@ def compile_truth_state(
 }
 ```
 
-### 5.4 Truth History (Silver) and Truth Map (Gold)
+### 5.5 Truth History (Silver) and Truth Map (Gold)
 
 **Silver - Complete History:**
 - Append-only log of every TruthState ever computed for each TruthKey
@@ -462,23 +576,25 @@ def compile_truth_state(
 - "How did this claim evolve?" → Replay Silver entries
 - "What's the current truth?" → Query Gold
 
-### 5.5 Why Truth is Deterministic
+### 5.6 Why Truth is Deterministic
 
 **No external dependencies in compiler:**
-- No database queries (data comes via parameters)
-- No API calls (trust comes via snapshot)
-- No wall clock (time comes via parameter)
+- No database queries (all data via parameters)
+- No wall-clock dependence (time passed explicitly)
+- No network calls (trust via snapshot)
 - No randomness (pure functions only)
+- No validator execution (signals via parameters)
 
 **Replayability guarantee:**
 ```python
 # Years later, anyone can verify:
 state_2026 = compile_truth_state(
-    claim_type=load_claim_type("earth.flood.v1"),
-    truth_key="earth:flood:h3:886142a8e7fffff:surface:2026-01-07T12:00Z",
-    observations=load_observations(...),
+    claimtype=load_claimtype("earth.flood.v1"),
+    truthkey="earth:flood:h3:886142a8e7fffff:surface:2026-01-07T12:00Z",
+    evidence=load_evidence(...),
+    signals=load_signals(...),               # ValidationSignals
+    window_events=load_window_events(...),   # WINDOW_OPENED, WINDOW_CLOSED
     trust_snapshot=load_snapshot("abc123..."),
-    policy_version="1.0.0",
     compiler_version="2.0.0",
     compile_time="2026-01-07T12:00:00Z"
 )
@@ -488,7 +604,7 @@ assert state_2026.state_hash == original_state.state_hash
 
 If hashes match, verification was identical. If they don't, something changed (evidence tampered, or bug found).
 
-### 5.6 The Seven Laws of Truth
+### 5.7 The Seven Laws of Truth
 
 Truth is governed by seven invariant laws that ensure auditability and replayability forever.
 

@@ -29,7 +29,7 @@ Example:
     )
 """
 from .core import FlowCore
-from .policy import FlowPolicy
+from .flow_policy import FlowPolicy
 from .primitives.agent import Agent, AgentType, create_agent_id, STANDING_MIN, STANDING_MAX
 from .primitives.signal import Signal, SignalContext, SignalTypes
 from .reducer import FlowReducer, ReducerState

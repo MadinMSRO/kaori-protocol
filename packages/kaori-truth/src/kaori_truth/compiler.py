@@ -256,7 +256,7 @@ def _compute_observation_aggregate(
     # Sum of reporter powers from trust snapshot
     network_trust = 0.0
     for obs in observations:
-        power = trust_snapshot.get_power(obs.reporter_id)
+        power = trust_snapshot.get_trust(obs.reporter_id)
         network_trust += power
     
     # AI scores

@@ -50,7 +50,6 @@ from kaori_truth.primitives import (
     ClaimType,
     canonical_claimtype,
     claimtype_hash,
-    load_claimtype_yaml,
     # Evidence
     EvidenceRef,
     canonical_evidence_ref,
@@ -110,7 +109,6 @@ __all__ = [
     "ClaimType",
     "canonical_claimtype",
     "claimtype_hash",
-    "load_claimtype_yaml",
     "EvidenceRef",
     "canonical_evidence_ref",
     # Canonical

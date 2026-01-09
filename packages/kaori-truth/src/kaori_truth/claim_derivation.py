@@ -87,7 +87,7 @@ def _derive_earth_claim(
     total_power = 0.0
     
     for obs in observations:
-        power = trust_snapshot.get_power(obs.reporter_id)
+        power = trust_snapshot.get_trust(obs.reporter_id)
         weighted_payloads.append((obs.payload, power))
         total_power += power
     
@@ -149,7 +149,7 @@ def _derive_space_claim(
     total_power = 0.0
     
     for obs in observations:
-        power = trust_snapshot.get_power(obs.reporter_id)
+        power = trust_snapshot.get_trust(obs.reporter_id)
         weighted_payloads.append((obs.payload, power))
         total_power += power
     
@@ -183,7 +183,7 @@ def _derive_meta_claim(
     total_power = 0.0
     
     for obs in observations:
-        power = trust_snapshot.get_power(obs.reporter_id)
+        power = trust_snapshot.get_trust(obs.reporter_id)
         weighted_payloads.append((obs.payload, power))
         total_power += power
     
@@ -221,7 +221,7 @@ def _derive_generic_claim(
 ) -> dict:
     """Generic claim derivation for unknown domains."""
     total_power = sum(
-        trust_snapshot.get_power(obs.reporter_id) 
+        trust_snapshot.get_trust(obs.reporter_id) 
         for obs in observations
     )
     

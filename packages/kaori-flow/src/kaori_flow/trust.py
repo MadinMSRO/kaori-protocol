@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
-from .policy import FlowPolicy
+from kaori_truth.trust_snapshot import TrustSnapshot, AgentTrust
+from .flow_policy import TrustPhysics
 from .primitives.signal import Signal, SignalTypes
 
 
@@ -37,56 +38,7 @@ class TrustContext:
     snapshot_time: Optional[datetime] = None
 
 
-@dataclass  
-class AgentTrust:
-    """Trust data for a single agent in a snapshot."""
-    agent_id: str
-    standing: float
-    effective_trust: float
-    derived_class: str
-    flags: List[str] = field(default_factory=list)
-    
-    def canonical(self) -> dict:
-        """Get canonical representation for hashing."""
-        return {
-            "agent_id": self.agent_id,
-            "standing": round(self.standing, 6),
-            "effective_trust": round(self.effective_trust, 6),
-            "derived_class": self.derived_class.lower(),
-            "flags": sorted(self.flags),
-        }
-
-
-@dataclass
-class TrustSnapshot:
-    """
-    Frozen snapshot of trust state for truth compilation.
-    
-    This is the interface between Flow and Truth.
-    Truth treats this as immutable input.
-    """
-    snapshot_id: str
-    snapshot_time: datetime
-    policy_id: str
-    policy_version: str
-    policy_standing: float
-    agent_trusts: Dict[str, AgentTrust] = field(default_factory=dict)
-    snapshot_hash: str = ""
-    
-    def compute_hash(self) -> str:
-        """Compute deterministic hash of trust data."""
-        import hashlib
-        import json
-        
-        canonical = {
-            "policy_id": self.policy_id,
-            "policy_version": self.policy_version,
-            "agent_trusts": {
-                k: v.canonical() for k, v in sorted(self.agent_trusts.items())
-            }
-        }
-        canonical_json = json.dumps(canonical, sort_keys=True)
-        return hashlib.sha256(canonical_json.encode()).hexdigest()
+# TrustSnapshot and AgentTrust are imported from kaori_truth
 
 
 class TrustComputer:
@@ -97,7 +49,7 @@ class TrustComputer:
     Rule 6: Trust has phase transitions.
     """
     
-    def __init__(self, policy: FlowPolicy):
+    def __init__(self, policy: TrustPhysics):
         self.policy = policy
     
     def compute_effective_trust(
@@ -206,7 +158,7 @@ class TrustComputer:
         latest = max(endorsements, key=lambda s: s.time)
         
         # Weight decays over time
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         age_days = (now - latest.time).total_seconds() / 86400
         
         weight = config.base_weight * math.exp(-config.decay_rate_per_day * age_days)
@@ -318,11 +270,9 @@ class TrustComputer:
         
         snapshot = TrustSnapshot(
             snapshot_id=str(uuid.uuid4()),
-            snapshot_time=context.snapshot_time or datetime.utcnow(),
-            policy_id=self.policy.agent_id,
-            policy_version=self.policy.version,
-            policy_standing=policy_standing,
+            snapshot_time=context.snapshot_time or datetime.now(timezone.utc),
             agent_trusts=agent_trusts,
+            snapshot_hash="",
         )
         snapshot.snapshot_hash = snapshot.compute_hash()
         
