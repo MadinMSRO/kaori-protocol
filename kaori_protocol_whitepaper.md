@@ -1992,25 +1992,30 @@ The network can be modeled as a physical system minimizing an energy function (c
 **Lyapunov Function:**
 Let $L(\mathbf{S})$ be the "stress" or "energy" of the network, defined by the magnitude of unresolved contradictions:
 
-$$ L(\mathbf{S}) = \sum_{(i,j) \in E} w_{ij} (S_i - S_j)^2 $$
+```
+L(S) = ∑_{(i,j)∈E} w_ij · (S_i - S_j)²
+```
 
 Where linked agents $(i,j)$ should ideally have similar standing if they are honest (homophily).
 
 **Stability Theorem:**
-The update rule (Rule 5) ensures that $\frac{dL}{dt} \leq 0$ in the absence of new signals. The system naturally relaxes into stable configurations (consensus clusters) rather than oscillating chaotically. This provides **thermodynamic guarantees** that the network will converge to a decision.
+The update rule (Rule 5) ensures that `dL/dt ≤ 0` in the absence of new signals. The system naturally relaxes into stable configurations (consensus clusters) rather than oscillating chaotically. This provides **thermodynamic guarantees** that the network will converge to a decision.
 
 ### 17.7 The Algebra of Truth (Axioms)
 
 While Flow is probabilistic and dynamic, Truth is algebraic and static.
 
 **Axiom 1: Functional Purity**
-The Truth Compiler $\tau$ is a pure function.
-$$ \forall I_a, I_b: I_a = I_b \implies \tau(I_a) = \tau(I_b) $$
+```
+∀ I_a, I_b: I_a = I_b ⇒ τ(I_a) = τ(I_b)
+```
 This guarantees that **Truth is independent of the observer**. Anyone running the compiler gets the same result.
 
 **Axiom 2: Projection Invariance**
 A TruthState is a faithful projection of a TrustSnapshot onto a ClaimType.
-$$ T = P(\sigma_{trust}, \text{Signal}_{obs}) $$
+```
+T = P(σ_trust, Signal_obs)
+```
 Verification does not "compute" new trust; it merely projects existing network standing onto specific evidence.
 
 **Axiom 3: Universal Addressability**
