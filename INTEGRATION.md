@@ -211,7 +211,7 @@ flow.emit_truthstate(
 
 ## Enterprise Support
 
-For production deployments, MSRO provides:
+For production deployments, MSRO uses:
 
 - Optimized storage implementations
 - Deployment blueprints
@@ -219,7 +219,6 @@ For production deployments, MSRO provides:
 - Custom ClaimType development
 - Integration consulting
 
-Contact: protocol@kaori.dev
 
 ---
 

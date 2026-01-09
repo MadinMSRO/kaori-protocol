@@ -79,7 +79,7 @@ D. Implementation Guide
 
 ## The Name: Kaori
 
-**Kaori** is derived from **Cowrie** (كَوْري in Dhivehi)—the small shells that served as currency across Africa, South Asia, and the Indian Ocean for over two thousand years.
+**Kaori** is derived from **Cowrie** —the small shells that served as currency across Africa, South Asia, and the Indian Ocean for over two thousand years.
 
 The Maldives was the world's largest source of cowrie shells. From the 8th century onward, Maldivian cowries flowed through trade routes from Bengal to West Africa, underpinning commerce across civilizations. They were trusted not because of central authority, but because of their inherent properties: natural, verifiable, and impossible to counterfeit.
 
@@ -2670,7 +2670,7 @@ kaori truth compile \
 
 ---
 
-*"Centuries ago, Maldivians powered global finance through the cowrie shell. Today, we hope to power global finance and impact the Kaori Protocol."*
+*"Centuries ago, Maldivians powered global finance through the cowrie shell. Today, we hope to power global finance and impact once again, this time through the Kaori Protocol."*
 
 ---
 
