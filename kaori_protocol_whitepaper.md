@@ -2293,12 +2293,12 @@ Kaori assumes the following adversaries exist:
 
 **Why BDFL for now:**
 - Protocol is young, needs coherent vision
-- The 7 Rules are invariants that must be preserved
+- The 14 Laws (7 Laws + 7 Rules) are invariants that must be preserved
 - Premature decentralization could compromise integrity
 - Mathematical properties require disciplined stewardship
 
 **What BDFL controls:**
-- Core protocol rules (the 7 Rules)
+- Core protocol rules (The 14 Laws)
 - TRUTH layer specification
 - FLOW layer specification
 - TruthKey canonicalization standards
@@ -2343,7 +2343,7 @@ When Kaori achieves sufficient adoption (multiple countries, demonstrated robust
 - Members: Institutional stakeholders
 
 **BDFL retains veto on:**
-- Changes to the 7 Rules
+- Changes to the 14 Laws
 - Changes to determinism guarantees
 - Changes to replayability requirements
 - Changes that break backward compatibility
