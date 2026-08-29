@@ -67,6 +67,30 @@ def test_missing_bearer_raises():
         agent_id_from_authorization("Basic abc", SECRET)
 
 
+def test_compile_stamps_reporter_id_from_bearer_not_profile_id():
+    from kaori_api.app import reporter_context_from_flow, stamp_observation
+
+    flow = FlowCore(store=InMemorySignalStore())
+    mapped = f"user:{AUTH_USER_ID}"
+    flow.register_agent(mapped, role="observer")
+    context = reporter_context_from_flow(flow, mapped)
+    stamped = stamp_observation(
+        {
+            "reporter_id": PROFILE_ID,
+            "reporter_context": {
+                "standing": "authority",
+                "trust_score": 1.0,
+                "source_type": "official",
+            },
+        },
+        mapped,
+        context,
+    )
+    assert stamped["reporter_id"] == mapped
+    assert PROFILE_ID not in stamped["reporter_id"]
+    assert stamped["reporter_context"]["standing"] != "authority"
+
+
 def test_http_standing_uses_mapped_agent_id_not_profile_id():
     flow = FlowCore(store=InMemorySignalStore())
     mapped = f"user:{AUTH_USER_ID}"

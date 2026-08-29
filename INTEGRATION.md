@@ -82,7 +82,9 @@ Routes (and only these):
 | `POST` | `/v1/compile` | `TruthOrchestrator.compile_observations` |
 | `GET` | `/v1/standing/{agent_id}` | `FlowCore.get_standing` |
 
-Auth: `Authorization: Bearer <Supabase JWT>`. Agent id is `user:{auth.users.id}`. Never `profiles.id`.
+Auth: `Authorization: Bearer <Supabase JWT>`. Agent id is `user:{auth.users.id}`. Never `profiles.id`. The sidecar stamps `Observation.reporter_id` from that agent and `reporter_context` from Flow.
+
+Compile body (Open Core names only): `{ "truth_key", "claim_type_id", "observations" }`. Observation field is `evidence_refs`. 200 TruthState field is `truthkey`.
 
 Identity:
 

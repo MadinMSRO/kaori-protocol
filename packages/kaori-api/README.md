@@ -30,4 +30,14 @@ uvicorn kaori_api.app:app --host 0.0.0.0 --port 8000
 
 When `DATABASE_URL` is set, `FlowCore` is constructed with `PostgresSignalStore`. Without it, the sidecar uses `InMemorySignalStore` (tests / local smoke only).
 
-`POST /v1/compile` this week accepts only `claim_type_id=ocean.coral_bleaching.v1`. Evidence is on the observation (`observations[].evidence` or `observations[].evidence_refs`); there is no upload route.
+`POST /v1/compile` body is `compile_observations` args only:
+
+```json
+{
+  "truth_key": "<string>",
+  "claim_type_id": "ocean.coral_bleaching.v1",
+  "observations": [Observation]
+}
+```
+
+Observation uses `evidence_refs` (`EvidenceRef[]`). EvidenceRef requires `uri` and `sha256` (`mime_type`, `bytes_size`, `capture_time` optional). This week payload is `{depth_meters, bleaching_percentage}`. The server stamps `reporter_id` from the Bearer agent (`user:{auth.users.id}`) and `reporter_context` from Flow — the client must not mint trust. 200 TruthState uses `truthkey` (not `truth_key`); `TruthState.evidence_refs` is `string[]`. No upload route.
