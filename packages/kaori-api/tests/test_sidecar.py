@@ -1,6 +1,8 @@
 """Sidecar HTTP contract: /v1/compile, /v1/standing/{agent_id}, /v1/truth/{truthkey}."""
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -365,11 +367,15 @@ def test_compile_persists_truthstate_and_standing_from_emit_not_register():
 
     standing = client.get(f"/v1/standing/{AGENT_ID}", headers=auth_header())
     assert standing.status_code == 200
+    assert standing.json() == {"standing": flow.get_standing(AGENT_ID)}
     assert 0.0 <= standing.json()["standing"] <= 1000.0
+    assert AGENT_ID == f"user:{AUTH_USER_ID}"
 
     fetched = client.get(f"/v1/truth/{truthkey}", headers=auth_header())
     assert fetched.status_code == 200
     assert fetched.json() == artifact
+    assert "claim" in fetched.json()
+    assert "claim" not in standing.json()
 
 
 def test_compile_upserts_truthstate_on_truthkey():
@@ -475,14 +481,18 @@ def test_standing_200(client: TestClient, flow: FlowCore):
 
 
 def test_claimtype_standing_200_float_after_compile_unknown_still_404():
-    """GET /v1/standing/claimtype:{id} is Flow rank after compile; never compiled is 404."""
+    """Existing GET /v1/standing/{agent_id} covers claimtype:{id} once registered."""
     from kaori_api.validation import claimtype_agent_id
 
     flow = FlowCore(store=InMemorySignalStore())
-    client = TestClient(create_app(flow=flow, verify_token=verify_token))
+    application = create_app(flow=flow, verify_token=verify_token)
+    client = TestClient(application)
     compiled_id = claimtype_agent_id(CORAL_CLAIM_TYPE)
     never_compiled_id = claimtype_agent_id("ocean.vessel_anomaly.v1")
     unknown_id = claimtype_agent_id("ocean.made_up.v1")
+    paths = {getattr(route, "path", None) for route in application.router.routes}
+    assert "/v1/standing/{agent_id}" in paths
+    assert not any(path and "claimtype" in path for path in paths)
 
     before = client.get(f"/v1/standing/{compiled_id}", headers=auth_header())
     assert before.status_code == 404
@@ -491,14 +501,32 @@ def test_claimtype_standing_200_float_after_compile_unknown_still_404():
     assert compiled.status_code == 200, compiled.text
 
     standing = client.get(f"/v1/standing/{compiled_id}", headers=auth_header())
+    encoded = client.get(
+        f"/v1/standing/{quote(compiled_id, safe='.')}",
+        headers=auth_header(),
+    )
     assert standing.status_code == 200
+    assert encoded.status_code == 200
     body = standing.json()
+    assert body == encoded.json()
     assert set(body) == {"standing"}
+    assert "claim" not in body
     assert isinstance(body["standing"], (int, float))
     assert not isinstance(body["standing"], bool)
     rank = float(body["standing"])
     assert 0.0 <= rank <= 1000.0
     assert rank == flow.get_standing(compiled_id)
+
+    player = client.get(f"/v1/standing/{AGENT_ID}", headers=auth_header())
+    assert AGENT_ID == f"user:{AUTH_USER_ID}"
+    assert player.status_code == 200
+    assert set(player.json()) == {"standing"}
+    assert client.get(f"/v1/standing/{compiled_id}").status_code == 401
+
+    artifact = client.get(f"/v1/truth/{compiled.json()['truthkey']}", headers=auth_header())
+    assert artifact.status_code == 200
+    assert "claim" in artifact.json()
+    assert artifact.json()["claim"] == compiled.json()["claim"]
 
     emitted = flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED)
     assert compiled_id in emitted[0].payload["contributors"]

@@ -216,6 +216,14 @@ def test_integration_describes_pre_compile_validation_vote():
     assert vote_at < compile_at < persist_at < emit_at
     assert "before `compile_observations`" in readme
     assert "VALIDATION" not in {s.value for s in TruthStatus}
+    assert "`GET` | `/v1/standing/{agent_id}`" in integration
+    assert "/v1/standing/claimtype:" not in integration
+    assert "Player standing stays" in integration
+    assert "Artifact `claim` still comes from `GET /v1/truth/{truthkey}`" in integration
+    assert "same `{standing}` body" in integration
+    assert "No fourth path" in integration
+    assert "No fourth path" in readme
+    assert "Player standing stays `user:{id}`" in readme
 
 
 def test_no_claim_type_id_branches_in_production():
