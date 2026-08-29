@@ -138,10 +138,6 @@ def compile_truth_state(
     # 3b. Derive claim payload (Deterministic)
     # =========================================================================
     
-    # =========================================================================
-    # 3b. Derive claim payload (Deterministic)
-    # =========================================================================
-    
     try:
         raw_payload = derive_claim_payload(
             observations=observations,
@@ -274,46 +270,131 @@ def _compute_observation_aggregate(
     }
 
 
+def _human_gating(claim_type: ClaimType) -> dict:
+    """Read human_gating from the ClaimType YAML (via raw config)."""
+    config = claim_type.get_config() if hasattr(claim_type, "get_config") else {}
+    gating = (config or {}).get("human_gating") or {}
+    return gating if isinstance(gating, dict) else {}
+
+
+def _vote_field(vote: dict, *names: str, default=None):
+    for name in names:
+        if name in vote and vote[name] is not None:
+            return vote[name]
+    return default
+
+
+def _vote_value(vote: dict) -> str:
+    return str(_vote_field(vote, "vote", "vote_type", default="") or "").upper()
+
+
+def _vote_agent_id(vote: dict) -> str:
+    return str(_vote_field(vote, "agent_id", "voter_id", default="") or "")
+
+
+def _is_human_vote(vote: dict) -> bool:
+    """FLOW_SPEC: user:/human: agents are human; ai: validators are not."""
+    agent_id = _vote_agent_id(vote)
+    return agent_id.startswith("user:") or agent_id.startswith("human:")
+
+
+def _recorded_ai_mean(votes: List[dict], fallback: float) -> float:
+    """Use recorded vote confidence when present; otherwise compile aggregate."""
+    scores = []
+    for vote in votes:
+        confidence = _vote_field(vote, "confidence")
+        if confidence is None:
+            continue
+        try:
+            scores.append(float(confidence))
+        except (TypeError, ValueError):
+            continue
+    if not scores:
+        return fallback
+    import statistics
+    return round(statistics.mean(scores), 6)
+
+
+def _has_human_consensus(votes: List[dict]) -> bool:
+    """Human RATIFY/REJECT recorded as votes. AI RATIFY is not human consensus."""
+    human = [vote for vote in votes if _is_human_vote(vote)]
+    return any(_vote_value(vote) in ("RATIFY", "REJECT") for vote in human)
+
+
 def _determine_status(
     aggregate: dict,
     claim_type: ClaimType,
     votes: List[dict],
 ) -> tuple[TruthStatus, Optional[VerificationBasis], List[str]]:
-    """Determine truth status based on aggregate and config."""
-    
-    transparency_flags = []
-    
+    """
+    Determine truth status from ClaimType YAML + recorded votes.
+
+    YAML is the law:
+    - always_require_human true → PENDING_HUMAN_REVIEW even after RATIFY
+    - always_require_human false → do not stamp PENDING_HUMAN_REVIEW from
+      risk_profile alone; use autovalidation thresholds + recorded votes
+    - required_for_risk_profiles: those lanes need human consensus before
+      VERIFIED_TRUE / VERIFIED_FALSE (TRUTH_SPEC §15.2). Status stays
+      intermediate (LEANING_* / INVESTIGATING), not a invented VALIDATION.
+    """
+    transparency_flags: List[str] = []
+    gating = _human_gating(claim_type)
+    always_require_human = bool(gating.get("always_require_human"))
+    required_profiles = gating.get("required_for_risk_profiles") or []
+    if not isinstance(required_profiles, list):
+        required_profiles = []
+
     autovalidation = claim_type.autovalidation
     ai_true_threshold = autovalidation.ai_verified_true_threshold
     ai_false_threshold = autovalidation.ai_verified_false_threshold
-    
-    ai_mean = aggregate.get("ai_confidence_mean", 0.0)
+    min_ai = gating.get("min_ai_confidence")
+    if min_ai is not None:
+        try:
+            ai_true_threshold = max(ai_true_threshold, float(min_ai))
+        except (TypeError, ValueError):
+            pass
+
+    ai_mean = _recorded_ai_mean(votes, aggregate.get("ai_confidence_mean", 0.0))
     ai_variance = aggregate.get("ai_variance", 0.0)
-    
-    # Check for contradiction (high variance)
+
     if ai_variance > 0.15:
         transparency_flags.append("CONTRADICTION_DETECTED")
         return TruthStatus.UNDECIDED, None, transparency_flags
-    
-    # Risk profile determines lane
-    risk_profile = claim_type.risk_profile
-    
-    if risk_profile == "monitor":
-        # Monitor Lane: AI can auto-verify
-        if ai_mean >= ai_true_threshold:
-            return TruthStatus.VERIFIED_TRUE, VerificationBasis.AI_AUTOVALIDATION, transparency_flags
-        elif ai_mean <= ai_false_threshold:
-            return TruthStatus.VERIFIED_FALSE, VerificationBasis.AI_AUTOVALIDATION, transparency_flags
-        else:
-            return TruthStatus.INVESTIGATING, None, transparency_flags
-    else:
-        # Critical Lane: Require human consensus
+
+    if always_require_human:
         if ai_mean >= ai_true_threshold:
             transparency_flags.append("AI_RECOMMENDS_TRUE")
         elif ai_mean <= ai_false_threshold:
             transparency_flags.append("AI_RECOMMENDS_FALSE")
         transparency_flags.append("AWAITING_HUMAN_CONSENSUS")
         return TruthStatus.PENDING_HUMAN_REVIEW, None, transparency_flags
+
+    human_required_to_verify = claim_type.risk_profile in required_profiles
+    has_human = _has_human_consensus(votes)
+
+    if ai_mean >= ai_true_threshold:
+        if human_required_to_verify and not has_human:
+            transparency_flags.append("AI_RECOMMENDS_TRUE")
+            return TruthStatus.LEANING_TRUE, None, transparency_flags
+        basis = (
+            VerificationBasis.HUMAN_CONSENSUS
+            if has_human
+            else VerificationBasis.AI_AUTOVALIDATION
+        )
+        return TruthStatus.VERIFIED_TRUE, basis, transparency_flags
+
+    if ai_mean <= ai_false_threshold:
+        if human_required_to_verify and not has_human:
+            transparency_flags.append("AI_RECOMMENDS_FALSE")
+            return TruthStatus.LEANING_FALSE, None, transparency_flags
+        basis = (
+            VerificationBasis.HUMAN_CONSENSUS
+            if has_human
+            else VerificationBasis.AI_AUTOVALIDATION
+        )
+        return TruthStatus.VERIFIED_FALSE, basis, transparency_flags
+
+    return TruthStatus.INVESTIGATING, None, transparency_flags
 
 
 def _compute_confidence(

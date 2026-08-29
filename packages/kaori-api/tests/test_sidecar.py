@@ -200,13 +200,15 @@ def test_compile_missing_payload_fields_400(client: TestClient):
     assert response.status_code == 400
 
 
-def test_compile_missing_required_output_schema_field_400(client: TestClient):
-    """ui_schema still has depth_meters; claim requires bleaching_present."""
+def test_compile_ui_schema_payload_derives_output_boolean(client: TestClient):
+    """Cockpit ui_schema payload (no bleaching_present) compiles; claim is derived."""
     obs = valid_observation(payload={"depth_meters": 8.0, "bleaching_percentage": 40})
     response = client.post("/v1/compile", json=compile_body(observations=[obs]), headers=auth_header())
-    assert response.status_code == 400
-    detail = response.json()["detail"]
-    assert "REQUIRED" in detail or "output_schema" in detail.lower() or "bleaching_present" in detail
+    assert response.status_code == 200, response.text
+    claim = response.json()["claim"]
+    assert claim["bleaching_present"] is True
+    assert claim["bleaching_percentage"] == 40
+    assert "depth_meters" not in claim
 
 
 def test_compile_open_core_flood_missing_output_schema_400(client: TestClient):

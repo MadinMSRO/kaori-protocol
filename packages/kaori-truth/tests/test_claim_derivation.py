@@ -2,7 +2,9 @@
 Schema-driven TruthState.claim derivation.
 
 Claim keys come only from ClaimType.output_schema properties.
-Missing output_schema fails compile. No ui_schema fallback.
+Cockpit ui_schema payloads may omit a required output boolean that is not
+a ui_schema field; that boolean is derived from numeric output keys.
+Missing output_schema fails compile. No ui_schema claim fallback.
 """
 from __future__ import annotations
 
@@ -219,6 +221,17 @@ class TestDeriveClaimPayloadSchemaDriven:
         )
         assert claim["bleaching_present"] is True
 
+    def test_loaded_coral_yaml_derives_boolean_from_ui_schema_payload(self):
+        claim_type = load_claim_type(SCHEMAS / "ocean" / "coral_bleaching_v1.yaml")
+        claim = derive_claim_payload(
+            [_observation(payload={"depth_meters": 8.0, "bleaching_percentage": 40})],
+            _trust("agent-001"),
+            claim_type,
+            "ocean:coral_bleaching:h3:x:underwater:2026-01-07T00:00Z",
+        )
+        assert claim == {"bleaching_percentage": 40, "bleaching_present": True}
+        assert "depth_meters" not in claim
+
     def test_array_highest_power_wins(self):
         claim_type = ClaimType(
             id="earth.coastal_erosion.v1",
@@ -302,21 +315,44 @@ class TestCompileClaimFromOutputSchema:
         assert "network_trust" not in state.claim
         assert "confidence" not in state.claim
 
-    def test_coral_missing_required_output_field_fails_compile(self):
+    def test_coral_ui_schema_payload_derives_bleaching_present(self):
+        """Cockpit sends ui_schema only. Compiler derives the declaration boolean."""
         claim_type = load_claim_type(SCHEMAS / "ocean" / "coral_bleaching_v1.yaml")
-        with pytest.raises(CompilationError, match="REQUIRED"):
-            compile_truth_state(
-                claim_type=claim_type,
-                truth_key="ocean:coral_bleaching:h3:89b12c6b6ffffff:underwater:2026-01-07T00:00Z",
-                observations=[
-                    _observation(
-                        payload={"depth_meters": 8.0, "bleaching_percentage": 40}
-                    )
-                ],
-                trust_snapshot=_trust("agent-001"),
-                policy_version=claim_type.policy_version,
-                compile_time=COMPILE_TIME,
-            )
+        state = compile_truth_state(
+            claim_type=claim_type,
+            truth_key="ocean:coral_bleaching:h3:89b12c6b6ffffff:underwater:2026-01-07T00:00Z",
+            observations=[
+                _observation(
+                    payload={"depth_meters": 8.0, "bleaching_percentage": 40}
+                )
+            ],
+            trust_snapshot=_trust("agent-001"),
+            policy_version=claim_type.policy_version,
+            compile_time=COMPILE_TIME,
+        )
+        assert state.claim == {
+            "bleaching_percentage": 40,
+            "bleaching_present": True,
+        }
+        assert "depth_meters" not in state.claim
+        assert "confidence" not in state.claim
+
+    def test_zero_numeric_output_derives_required_boolean_false(self):
+        claim_type = load_claim_type(SCHEMAS / "ocean" / "coral_bleaching_v1.yaml")
+        state = compile_truth_state(
+            claim_type=claim_type,
+            truth_key="ocean:coral_bleaching:h3:89b12c6b6ffffff:underwater:2026-01-07T00:00Z",
+            observations=[
+                _observation(
+                    payload={"depth_meters": 8.0, "bleaching_percentage": 0}
+                )
+            ],
+            trust_snapshot=_trust("agent-001"),
+            policy_version=claim_type.policy_version,
+            compile_time=COMPILE_TIME,
+        )
+        assert state.claim["bleaching_present"] is False
+        assert state.claim["bleaching_percentage"] == 0
 
     def test_earth_liminal_type_keeps_output_schema_keys(self):
         claim_type = load_claim_type(SCHEMAS / "earth" / "coastal_erosion_v1.yaml")

@@ -1,4 +1,4 @@
-"""CPU CLIP generalist and post-persist vote integration."""
+"""CPU CLIP generalist and pre-compile vote integration."""
 from __future__ import annotations
 
 import io
@@ -376,7 +376,7 @@ def test_prompt_context_falls_back_to_claim_topic_display():
     assert threshold == pytest.approx(0.85)
 
 
-def test_non_coral_compile_gets_post_persist_generalist_vote():
+def test_non_coral_compile_records_generalist_vote():
     clip = FakeClipGeneralist([0.91])
     generalist = ClipGeneralistValidator(
         schema_root=str(SCHEMA_ROOT),

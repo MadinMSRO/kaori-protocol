@@ -7,18 +7,18 @@ Thin FastAPI surface Liminal can call this week:
   GET  /v1/truth/{truthkey}
 
 Wraps TruthOrchestrator.compile_observations and FlowCore.get_standing.
-Compile 200 persists TruthState to kaori.truth_states then emits
-FlowCore.emit_truthstate. CLIP validation is queued after persistence for the
-separate private generalist service. No other HTTP routes. Wire field names match
-Open Core primitives. Compiler stays pure.
+POST /v1/compile order: observation checks → private generalist VALIDATION_VOTE
+into Flow → compile_observations → persist → emit. CLIP stays private. No other
+HTTP routes. Wire field names match Open Core primitives. Compiler stays pure.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from kaori_flow import FlowCore, InMemorySignalStore
@@ -32,7 +32,8 @@ from pydantic import ValidationError
 from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
 from kaori_api.generalist_client import (
     GeneralistClient,
-    validate_persisted_truth_state,
+    validate_and_record_vote,
+    vote_as_compiler_record,
 )
 from kaori_api.orchestrator import TruthOrchestrator, UnknownClaimTypeError
 from kaori_api.trust_adapter import FlowTrustProvider
@@ -253,7 +254,6 @@ def create_app(
     @app.post("/v1/compile")
     async def compile_route(
         request: Request,
-        background_tasks: BackgroundTasks,
         agent_id: str = Depends(require_agent),
     ):
         try:
@@ -297,11 +297,30 @@ def create_app(
         validate_evidence_refs(observations)
         validate_payload_fields(observations, claim_type)
 
+        votes = None
+        ai_scores = None
+        client = request.app.state.generalist_client
+        if client is not None:
+            vote = await asyncio.to_thread(
+                validate_and_record_vote,
+                client=client,
+                flow=flow_core,
+                truthkey_id=truth_key,
+                claim_type_id=claim_type_id,
+                observations=observations,
+            )
+            if vote is not None:
+                votes = [vote_as_compiler_record(vote)]
+                if vote.confidence is not None:
+                    ai_scores = [float(vote.confidence)] * len(observations)
+
         try:
             truth_state: TruthState = request.app.state.orchestrator.compile_observations(
                 observations=observations,
                 truth_key=truth_key,
                 claim_type_id=claim_type_id,
+                ai_scores=ai_scores,
+                votes=votes,
             )
         except UnknownClaimTypeError:
             raise HTTPException(status_code=404, detail="Unknown claim_type_id")
