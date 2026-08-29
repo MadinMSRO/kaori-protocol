@@ -1,70 +1,120 @@
-"""Bearer JWT maps to user:{supabase auth user.id}. Never profiles.id."""
+"""Bearer maps to user:{supabase auth user.id} via GET /auth/v1/user. Never profiles.id."""
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+import json
+import urllib.error
+import urllib.request
 
 import pytest
 from fastapi.testclient import TestClient
-from jose import jwt
 
 from kaori_api.app import create_app
-from kaori_api.auth import AuthError, agent_id_from_authorization, agent_id_from_jwt
+from kaori_api.auth import (
+    AuthError,
+    agent_id_from_authorization,
+    agent_id_from_token,
+    supabase_user_url,
+)
 from kaori_flow import FlowCore, InMemorySignalStore
 
 
-SECRET = "identity-test-secret"
 AUTH_USER_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 PROFILE_ID = "profile-row-should-never-be-used"
+SUPABASE_URL = "https://example.supabase.co"
+PUBLISHABLE_KEY = "sb-publishable-test"
+TOKEN = "supabase-access-token"
 
 
-def mint(sub=AUTH_USER_ID, extra=None, secret=SECRET) -> str:
-    payload = {
-        "sub": sub,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
-    }
-    if extra:
-        payload.update(extra)
-    return jwt.encode(payload, secret, algorithm="HS256")
+class _FakeResponse:
+    def __init__(self, status: int, body: dict | bytes):
+        self.status = status
+        if isinstance(body, bytes):
+            self._raw = body
+        else:
+            self._raw = json.dumps(body).encode("utf-8")
+
+    def read(self) -> bytes:
+        return self._raw
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
 
 
-def test_jwt_sub_maps_to_user_prefixed_auth_id():
-    token = mint()
-    assert agent_id_from_jwt(token, SECRET) == f"user:{AUTH_USER_ID}"
+def test_supabase_user_url():
+    assert supabase_user_url("https://example.supabase.co") == "https://example.supabase.co/auth/v1/user"
+    assert supabase_user_url("https://example.supabase.co/") == "https://example.supabase.co/auth/v1/user"
 
 
-def test_authorization_header_maps_to_user_prefixed_auth_id():
-    token = mint()
-    agent_id = agent_id_from_authorization(f"Bearer {token}", SECRET)
+def test_200_user_id_maps_to_user_prefixed_auth_id(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured["url"] = request.full_url
+        captured["authorization"] = request.get_header("Authorization")
+        captured["apikey"] = request.get_header("apikey") or request.get_header("Apikey")
+        captured["timeout"] = timeout
+        return _FakeResponse(200, {"id": AUTH_USER_ID, "profile_id": PROFILE_ID})
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    agent_id = agent_id_from_token(TOKEN, SUPABASE_URL, PUBLISHABLE_KEY)
     assert agent_id == f"user:{AUTH_USER_ID}"
     assert PROFILE_ID not in agent_id
+    assert captured["url"] == "https://example.supabase.co/auth/v1/user"
+    assert captured["authorization"] == f"Bearer {TOKEN}"
+    assert captured["apikey"] == PUBLISHABLE_KEY
+
+
+def test_authorization_header_maps_via_user_id(monkeypatch):
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda request, timeout=None: _FakeResponse(200, {"id": AUTH_USER_ID}),
+    )
+    agent_id = agent_id_from_authorization(f"Bearer {TOKEN}", SUPABASE_URL, PUBLISHABLE_KEY)
+    assert agent_id == f"user:{AUTH_USER_ID}"
     assert not agent_id.startswith("profile:")
 
 
-def test_profile_id_claim_is_ignored():
-    token = mint(extra={"profile_id": PROFILE_ID, "profiles.id": PROFILE_ID})
-    assert agent_id_from_jwt(token, SECRET) == f"user:{AUTH_USER_ID}"
+def test_non_200_is_invalid(monkeypatch):
+    def fake_urlopen(request, timeout=None):
+        raise urllib.error.HTTPError(
+            url=request.full_url,
+            code=401,
+            msg="Unauthorized",
+            hdrs=None,
+            fp=None,
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(AuthError):
+        agent_id_from_token(TOKEN, SUPABASE_URL, PUBLISHABLE_KEY)
 
 
-def test_missing_sub_is_invalid_even_with_profile_id():
-    token = mint(sub=None, extra={"sub": None, "profile_id": PROFILE_ID})
-    # python-jose will still encode sub=None; decode must reject missing sub
-    token = jwt.encode(
-        {
-            "profile_id": PROFILE_ID,
-            "exp": datetime.now(timezone.utc) + timedelta(hours=1),
-        },
-        SECRET,
-        algorithm="HS256",
+def test_200_without_id_is_invalid_even_with_profile_id(monkeypatch):
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda request, timeout=None: _FakeResponse(200, {"profile_id": PROFILE_ID}),
     )
     with pytest.raises(AuthError):
-        agent_id_from_jwt(token, SECRET)
+        agent_id_from_token(TOKEN, SUPABASE_URL, PUBLISHABLE_KEY)
+
+
+def test_missing_env_is_invalid():
+    with pytest.raises(AuthError):
+        agent_id_from_token(TOKEN, "", PUBLISHABLE_KEY)
+    with pytest.raises(AuthError):
+        agent_id_from_token(TOKEN, SUPABASE_URL, "")
 
 
 def test_missing_bearer_raises():
     with pytest.raises(AuthError):
-        agent_id_from_authorization(None, SECRET)
+        agent_id_from_authorization(None, SUPABASE_URL, PUBLISHABLE_KEY)
     with pytest.raises(AuthError):
-        agent_id_from_authorization("Basic abc", SECRET)
+        agent_id_from_authorization("Basic abc", SUPABASE_URL, PUBLISHABLE_KEY)
 
 
 def test_compile_stamps_reporter_id_from_bearer_not_profile_id():
@@ -91,23 +141,27 @@ def test_compile_stamps_reporter_id_from_bearer_not_profile_id():
     assert stamped["reporter_context"]["standing"] != "authority"
 
 
+def _verify(token: str) -> str:
+    if token != TOKEN:
+        raise AuthError("Invalid Bearer token")
+    return f"user:{AUTH_USER_ID}"
+
+
 def test_http_standing_uses_mapped_agent_id_not_profile_id():
     flow = FlowCore(store=InMemorySignalStore())
     mapped = f"user:{AUTH_USER_ID}"
     flow.register_agent(mapped, role="observer")
-    client = TestClient(create_app(flow=flow, jwt_secret=SECRET))
+    client = TestClient(create_app(flow=flow, verify_token=_verify))
 
-    token = mint(extra={"profile_id": PROFILE_ID})
     response = client.get(
         f"/v1/standing/{mapped}",
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"Authorization": f"Bearer {TOKEN}"},
     )
     assert response.status_code == 200
     assert response.json()["standing"] == flow.get_standing(mapped)
 
-    # Looking up a profiles.id is unknown — we never map to it
     unknown = client.get(
         f"/v1/standing/{PROFILE_ID}",
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"Authorization": f"Bearer {TOKEN}"},
     )
     assert unknown.status_code == 404

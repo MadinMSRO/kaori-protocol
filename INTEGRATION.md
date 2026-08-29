@@ -82,7 +82,7 @@ Routes (and only these):
 | `POST` | `/v1/compile` | `TruthOrchestrator.compile_observations` |
 | `GET` | `/v1/standing/{agent_id}` | `FlowCore.get_standing` |
 
-Auth: `Authorization: Bearer <Supabase JWT>`. Agent id is `user:{auth.users.id}`. Never `profiles.id`. The sidecar stamps `Observation.reporter_id` from that agent and `reporter_context` from Flow.
+Auth: `Authorization: Bearer <token>` verified by `GET {SUPABASE_URL}/auth/v1/user` with `apikey: SUPABASE_PUBLISHABLE_KEY`. Agent id is `user:{user.id}`. Never `profiles.id`. Compile registers the Bearer agent in Flow if unknown. The sidecar stamps `Observation.reporter_id` from that agent and `reporter_context` from Flow.
 
 Compile body (Open Core names only): `{ "truth_key", "claim_type_id", "observations" }`. Observation field is `evidence_refs`. 200 TruthState field is `truthkey`.
 
@@ -96,8 +96,9 @@ def get_agent_id(user) -> str:
 Local run (`DATABASE_URL` is Liminal Supabase Postgres, schema `kaori`, not Cloud SQL):
 
 ```bash
-export DATABASE_URL="postgresql://…supabase…"
-export SUPABASE_JWT_SECRET=your-supabase-jwt-secret
+export SUPABASE_URL=https://your-project.supabase.co
+export SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+# DATABASE_URL is optional (in-memory when unset)
 uvicorn kaori_api.app:app --port 8000
 ```
 

@@ -7,7 +7,7 @@ This week the HTTP surface is only:
 - `POST /v1/compile`
 - `GET /v1/standing/{agent_id}`
 
-Both routes require `Authorization: Bearer <Supabase JWT>`. The sidecar maps `sub` (Supabase `auth.users.id`) to agent_id `user:{id}` and never accepts or emits `profiles.id`.
+Both routes require `Authorization: Bearer <token>`. The sidecar verifies with `GET {SUPABASE_URL}/auth/v1/user` (`Authorization` + `apikey: SUPABASE_PUBLISHABLE_KEY`). 200 + `user.id` → agent_id `user:{id}`. Non-200 → 401. No JWT secret. Never accepts or emits `profiles.id`. Compile registers the Bearer agent in Flow if unknown so standing can 200 on a warm instance.
 
 CORS allows origin `https://kind-keepsake-kingdom.lovable.app` only, methods `GET`, `POST`, `OPTIONS`, and headers `Authorization` and `Content-Type`. No extra routes.
 
@@ -26,13 +26,15 @@ psql "$DATABASE_URL" -f packages/kaori-db/src/kaori_db/schema.sql
 
 ```bash
 pip install -e packages/kaori-truth -e packages/kaori-flow -e packages/kaori-db -e packages/kaori-api
-export DATABASE_URL="postgresql://…supabase…"
-export SUPABASE_JWT_SECRET=your-supabase-jwt-secret
+export SUPABASE_URL=https://your-project.supabase.co
+export SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+# optional — in-memory store when unset
+# export DATABASE_URL="postgresql://…supabase…"
 export KAORI_SCHEMA_PATH=packages/kaori-spec/schemas
 uvicorn kaori_api.app:app --host 0.0.0.0 --port 8000
 ```
 
-When `DATABASE_URL` is set, `FlowCore` is constructed with `PostgresSignalStore` (`kaori.signals`). Without it, the sidecar uses `InMemorySignalStore` (tests / local smoke only).
+When `DATABASE_URL` is set, `FlowCore` is constructed with `PostgresSignalStore` (`kaori.signals`). Without it, the sidecar uses `InMemorySignalStore`.
 
 `POST /v1/compile` body is `compile_observations` args only:
 
@@ -65,12 +67,12 @@ docker build -t kaori-api:local .
 # docker tag kaori-api:local asia-southeast1-docker.pkg.dev/msro-kaori-sandbox/kaori/kaori-api:latest
 ```
 
-The image runs `uvicorn kaori_api.app:app` (two routes only). ClaimType YAML is baked from `packages/kaori-spec/schemas` (`KAORI_SCHEMA_PATH`). Supply `DATABASE_URL` and `SUPABASE_JWT_SECRET` at runtime. Cloud Run sets `PORT` (image default 8080).
+The image runs `uvicorn kaori_api.app:app` (two routes only). ClaimType YAML is baked from `packages/kaori-spec/schemas` (`KAORI_SCHEMA_PATH`). Supply `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` at runtime. `DATABASE_URL` is optional. Cloud Run sets `PORT` (image default 8080).
 
 ```bash
 docker run --rm -p 8080:8080 \
-  -e SUPABASE_JWT_SECRET=your-supabase-jwt-secret \
-  -e DATABASE_URL="postgresql://…supabase…" \
+  -e SUPABASE_URL=https://your-project.supabase.co \
+  -e SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key \
   kaori-api:local
 ```
 

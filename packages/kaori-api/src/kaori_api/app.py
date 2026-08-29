@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from kaori_api.auth import AuthError, agent_id_from_authorization
+from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
 from kaori_api.orchestrator import TruthOrchestrator, UnknownClaimTypeError
 from kaori_api.trust_adapter import FlowTrustProvider
 from kaori_flow import FlowCore, InMemorySignalStore
@@ -134,20 +134,31 @@ def agent_is_known(flow: FlowCore, agent_id: str) -> bool:
     return bool(flow.store.get_for_agent(agent_id))
 
 
+def ensure_agent_registered(flow: FlowCore, agent_id: str) -> None:
+    """Register the Bearer agent in Flow if unknown (warm-instance standing)."""
+    if not agent_is_known(flow, agent_id):
+        flow.register_agent(agent_id, role="observer")
+
+
 def create_app(
     *,
     flow: Optional[FlowCore] = None,
-    jwt_secret: Optional[str] = None,
+    supabase_url: Optional[str] = None,
+    publishable_key: Optional[str] = None,
+    verify_token: Optional[Callable[[str], str]] = None,
     schema_path: Optional[str] = None,
 ) -> FastAPI:
     """
-    Build the sidecar. Tests inject FlowCore + jwt_secret.
-    Production: DATABASE_URL selects PostgresSignalStore; SUPABASE_JWT_SECRET verifies Bearer.
+    Build the sidecar. Tests inject FlowCore + verify_token.
+    Production: GET {SUPABASE_URL}/auth/v1/user with SUPABASE_PUBLISHABLE_KEY.
+    DATABASE_URL is optional (in-memory store when unset).
     """
     flow = flow or create_flow()
-    secret = jwt_secret
-    if secret is None:
-        secret = os.environ.get("SUPABASE_JWT_SECRET") or os.environ.get("KAORI_JWT_SECRET") or ""
+    url = supabase_url if supabase_url is not None else os.environ.get("SUPABASE_URL") or ""
+    key = publishable_key if publishable_key is not None else os.environ.get("SUPABASE_PUBLISHABLE_KEY") or ""
+    if verify_token is None:
+        def verify_token(token: str) -> str:
+            return agent_id_from_token(token, url, key)
     orchestrator = TruthOrchestrator(
         trust_provider=FlowTrustProvider(flow),
         schema_path=schema_path or default_schema_path(),
@@ -166,15 +177,13 @@ def create_app(
         allow_headers=["Authorization", "Content-Type"],
     )
     app.state.flow = flow
-    app.state.jwt_secret = secret
+    app.state.verify_token = verify_token
     app.state.orchestrator = orchestrator
 
     def require_agent(request: Request) -> str:
         try:
-            return agent_id_from_authorization(
-                request.headers.get("Authorization"),
-                request.app.state.jwt_secret,
-            )
+            token = parse_bearer(request.headers.get("Authorization"))
+            return request.app.state.verify_token(token)
         except AuthError:
             raise HTTPException(status_code=401, detail="Missing or invalid Bearer token")
 
@@ -203,7 +212,9 @@ def create_app(
         if not isinstance(raw_observations, list) or not raw_observations:
             raise HTTPException(status_code=400, detail="At least one observation is required")
 
-        context = reporter_context_from_flow(request.app.state.flow, agent_id)
+        flow_core: FlowCore = request.app.state.flow
+        ensure_agent_registered(flow_core, agent_id)
+        context = reporter_context_from_flow(flow_core, agent_id)
         stamped = []
         for item in raw_observations:
             if not isinstance(item, dict):

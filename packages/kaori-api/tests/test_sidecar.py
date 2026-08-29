@@ -1,11 +1,8 @@
 """Sidecar HTTP contract: only /v1/compile and /v1/standing/{agent_id}."""
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
-
 import pytest
 from fastapi.testclient import TestClient
-from jose import jwt
 
 from kaori_api.app import (
     LIMINAL_ORIGIN,
@@ -14,12 +11,13 @@ from kaori_api.app import (
     reporter_context_from_flow,
     stamp_observation,
 )
+from kaori_api.auth import AuthError
 from kaori_flow import FlowCore, InMemorySignalStore
 
 
-JWT_SECRET = "test-sidecar-secret"
 AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"
+TOKEN = "valid-supabase-token"
 TRUTHSTATE_FIELDS = {
     "truthkey",
     "claim_type",
@@ -34,20 +32,14 @@ TRUTHSTATE_FIELDS = {
 }
 
 
-def mint_token(sub: str = AUTH_USER_ID, extra: dict | None = None, secret: str = JWT_SECRET) -> str:
-    payload = {
-        "sub": sub,
-        "aud": "authenticated",
-        "role": "authenticated",
-        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
-    }
-    if extra:
-        payload.update(extra)
-    return jwt.encode(payload, secret, algorithm="HS256")
+def verify_token(token: str) -> str:
+    if token != TOKEN:
+        raise AuthError("Invalid Bearer token")
+    return AGENT_ID
 
 
 def auth_header(token: str | None = None) -> dict:
-    return {"Authorization": f"Bearer {token or mint_token()}"}
+    return {"Authorization": f"Bearer {token or TOKEN}"}
 
 
 def valid_observation(**overrides) -> dict:
@@ -85,11 +77,14 @@ def flow() -> FlowCore:
 
 @pytest.fixture
 def client(flow: FlowCore) -> TestClient:
-    return TestClient(create_app(flow=flow, jwt_secret=JWT_SECRET))
+    return TestClient(create_app(flow=flow, verify_token=verify_token))
 
 
 def test_only_two_http_routes():
-    application = create_app(flow=FlowCore(store=InMemorySignalStore()), jwt_secret=JWT_SECRET)
+    application = create_app(
+        flow=FlowCore(store=InMemorySignalStore()),
+        verify_token=verify_token,
+    )
     paths = {getattr(route, "path", None) for route in application.router.routes}
     paths.discard(None)
     assert paths == {"/v1/compile", "/v1/standing/{agent_id}"}
@@ -143,14 +138,8 @@ def test_compile_invalid_bearer_401(client: TestClient):
     response = client.post(
         "/v1/compile",
         json=compile_body(),
-        headers={"Authorization": "Bearer not-a-jwt"},
+        headers={"Authorization": "Bearer not-a-token"},
     )
-    assert response.status_code == 401
-
-
-def test_compile_wrong_secret_401(client: TestClient):
-    token = mint_token(secret="other-secret")
-    response = client.post("/v1/compile", json=compile_body(), headers=auth_header(token))
     assert response.status_code == 401
 
 
@@ -283,6 +272,20 @@ def test_compile_overwrites_client_minted_trust(client: TestClient):
 def test_compile_200_without_client_reporter_fields(client: TestClient):
     response = client.post("/v1/compile", json=compile_body(), headers=auth_header())
     assert response.status_code == 200, response.text
+
+
+def test_compile_registers_unknown_bearer_agent_for_standing():
+    flow = FlowCore(store=InMemorySignalStore())
+    assert AGENT_ID not in flow.get_all_standings()
+    client = TestClient(create_app(flow=flow, verify_token=verify_token))
+
+    compiled = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+    assert compiled.status_code == 200, compiled.text
+    assert AGENT_ID in flow.get_all_standings()
+
+    standing = client.get(f"/v1/standing/{AGENT_ID}", headers=auth_header())
+    assert standing.status_code == 200
+    assert 0.0 <= standing.json()["standing"] <= 1000.0
 
 
 def test_standing_missing_bearer_401(client: TestClient):

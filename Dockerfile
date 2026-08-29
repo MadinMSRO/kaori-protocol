@@ -21,7 +21,6 @@ RUN pip install --no-cache-dir \
         "fastapi>=0.100.0" \
         "uvicorn[standard]>=0.22.0" \
         "pydantic>=2.0.0" \
-        "python-jose[cryptography]>=3.3.0" \
         "sqlalchemy>=2.0.0" \
         "pyyaml>=6.0" \
         "psycopg2-binary>=2.9.0" \
@@ -32,7 +31,7 @@ ENV PYTHONPATH=/app
 ENV KAORI_SCHEMA_PATH=/app/packages/kaori-spec/schemas
 ENV PYTHONUNBUFFERED=1
 
-# Runtime: DATABASE_URL and SUPABASE_JWT_SECRET. Cloud Run sets PORT.
+# Runtime: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY. DATABASE_URL optional. Cloud Run sets PORT.
 # Compiler reads ClaimType YAML from KAORI_SCHEMA_PATH (not a claim_types table).
 # Evidence uri remains a string pointer.
 EXPOSE 8080
