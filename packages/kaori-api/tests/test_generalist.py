@@ -89,7 +89,11 @@ def raw_observation() -> dict:
             "source_type": "human",
         },
         "geo": {"lat": -8.3405, "lon": 115.0920},
-        "payload": {"depth_meters": 8.0, "bleaching_percentage": 40},
+        "payload": {
+            "depth_meters": 8.0,
+            "bleaching_present": True,
+            "bleaching_percentage": 40,
+        },
         "evidence_refs": [
             {
                 "uri": "https://project.supabase.co/storage/v1/object/public/lm-012/coral1.png",
