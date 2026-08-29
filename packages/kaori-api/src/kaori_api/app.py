@@ -38,7 +38,7 @@ from kaori_api.orchestrator import TruthOrchestrator, UnknownClaimTypeError
 from kaori_api.trust_adapter import FlowTrustProvider
 from kaori_api.validation import (
     agent_is_known,
-    ensure_bouncer_registered,
+    ensure_generalist_registered,
 )
 
 LIMINAL_ORIGIN = "https://kind-keepsake-kingdom.lovable.app"
@@ -223,7 +223,7 @@ def create_app(
     )
     if bouncer_client is None:
         bouncer_client = BouncerClient.from_env()
-    ensure_bouncer_registered(flow)
+    ensure_generalist_registered(flow)
 
     app = FastAPI(
         title="Kaori Sidecar",

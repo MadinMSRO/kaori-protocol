@@ -10,11 +10,11 @@ This week the HTTP surface is only:
 
 All three routes require `Authorization: Bearer <token>`. The sidecar verifies with `GET {SUPABASE_URL}/auth/v1/user` (`Authorization` + `apikey: SUPABASE_PUBLISHABLE_KEY`). 200 + `user.id` → agent_id `user:{id}`. Non-200 → 401. No JWT secret. Never accepts or emits `profiles.id`.
 
-Compile 200 upserts the full `TruthState.model_dump` (including `evidence_refs`) into `kaori.truth_states`, then calls `FlowCore.emit_truthstate` with the Bearer agent as the sole contributor. Standing moves from that signal history — compile does **not** call `register_agent` for the Bearer agent. On startup the sidecar registers Flow agent `ai:bouncer_v1` (role `validator`) if unknown (idempotent).
+Compile 200 upserts the full `TruthState.model_dump` (including `evidence_refs`) into `kaori.truth_states`, then calls `FlowCore.emit_truthstate` with the Bearer agent as the sole contributor. Standing moves from that signal history — compile does **not** call `register_agent` for the Bearer agent. On startup the sidecar registers Flow agent `ai:generalist_v1` (role `validator`) if unknown (idempotent).
 
-For `ocean.coral_bleaching.v1`, the API then queues a post-response call to the separate IAM-protected `kaori-bouncer` Cloud Run service. The compiler remains pure and never executes a validator or writes a `VALIDATION_VOTE`. The bouncer runs the five checks declared in the coral YAML, signs a FLOW_SPEC `ValidationSignal` as `ai:bouncer_v1`, and returns it. Only `kaori-api` calls `record_validation_vote`, so it remains the single SignalStore writer. Other ClaimTypes do not invoke the bouncer.
+For the first-slice `ocean.coral_bleaching.v1`, the API then queues a post-response call to the separate IAM-protected `kaori-bouncer` Cloud Run service. The compiler remains pure and never executes a validator or writes a `VALIDATION_VOTE`. The service runs one open CLIP generalist on CPU, comparing the evidence with the ClaimType's generalist `prompt_context` versus unrelated imagery. It compares the mean relevance probability directly with the YAML `evidence_similarity.embedding.similarity_threshold`, signs a FLOW_SPEC `ValidationSignal` as `ai:generalist_v1`, and returns it. Only `kaori-api` calls `record_validation_vote`, so it remains the single SignalStore writer. Other ClaimTypes do not invoke the first-slice service yet.
 
-The runner fetches `gs://` evidence with its service account. Image evidence must decode; other evidence must contain non-empty bytes. Duplicate content hashes, implausible coordinates, and depth/TruthKey inconsistency reject. It does not call a generalist, specialist, LLM, Vertex AI, or GPU. Coral still has `always_require_human: true`; RATIFY and REJECT both leave the persisted TruthState at `PENDING_HUMAN_REVIEW`.
+Submission checks remain in the existing compile/submit 400 path and are not duplicated in Cloud Run. The model service receives only `truthkey_id`, `claim_type_id`, and `evidence_refs`; it does not receive GPS, depth, or observation payload fields. It does not run YAML bouncer checks, pHash, a specialist, a chat LLM, Vertex AI, or a GPU. Coral still has `always_require_human: true`; RATIFY and REJECT both leave the persisted TruthState at `PENDING_HUMAN_REVIEW`.
 
 CORS allows origins `https://kind-keepsake-kingdom.lovable.app` (live) and `https://id-preview--3edd781a-00a9-4e58-88be-c21405c611ee.lovable.app` (preview), methods `GET`, `POST`, `OPTIONS`, and headers `Authorization` and `Content-Type`. No extra routes.
 
@@ -63,7 +63,7 @@ After persist, emit uses `outcome="correct"` only when `status` is `VERIFIED_TRU
 
 Protocol runtime is GCP project `msro-kaori-sandbox` (`asia-southeast1`). `msro-udfi-sandbox` is off this product — do not build, tag, or push for that project.
 
-`Dockerfile` builds `kaori-api`; `Dockerfile.bouncer` builds the private runner. The existing Artifact Registry repository is `asia-southeast1-docker.pkg.dev/msro-kaori-sandbox/kaori`.
+`Dockerfile` builds `kaori-api`; `Dockerfile.bouncer` builds the private CPU CLIP generalist and bakes the open `ViT-B-32`/`openai` weights into the image. The existing Artifact Registry repository is `asia-southeast1-docker.pkg.dev/msro-kaori-sandbox/kaori`.
 
 Build locally:
 
@@ -99,16 +99,16 @@ gcloud iam service-accounts create kaori-bouncer \
   --display-name="Kaori V4 bouncer runner" \
   --project="$PROJECT"
 
-openssl rand -hex 32 | gcloud secrets create kaori-bouncer-signing-key \
+openssl rand -hex 32 | gcloud secrets create kaori-generalist-signing-key \
   --data-file=- \
   --replication-policy=automatic \
   --project="$PROJECT"
 
-gcloud secrets add-iam-policy-binding kaori-bouncer-signing-key \
+gcloud secrets add-iam-policy-binding kaori-generalist-signing-key \
   --member="serviceAccount:${BOUNCER_SA}" \
   --role=roles/secretmanager.secretAccessor \
   --project="$PROJECT"
-gcloud secrets add-iam-policy-binding kaori-bouncer-signing-key \
+gcloud secrets add-iam-policy-binding kaori-generalist-signing-key \
   --member="serviceAccount:${API_SA}" \
   --role=roles/secretmanager.secretAccessor \
   --project="$PROJECT"
@@ -133,7 +133,10 @@ gcloud run deploy "$BOUNCER_SERVICE" \
   --image="$BOUNCER_IMAGE" \
   --region="$REGION" \
   --service-account="$BOUNCER_SA" \
-  --set-secrets=KAORI_BOUNCER_SIGNING_KEY=kaori-bouncer-signing-key:latest \
+  --cpu=2 \
+  --memory=4Gi \
+  --concurrency=1 \
+  --set-secrets=KAORI_VALIDATOR_SIGNING_KEY=kaori-generalist-signing-key:latest \
   --no-allow-unauthenticated \
   --project="$PROJECT"
 
@@ -148,14 +151,14 @@ gcloud run services update kaori-api \
   --image="$API_IMAGE" \
   --region="$REGION" \
   --update-env-vars="KAORI_BOUNCER_URL=${BOUNCER_URL}" \
-  --update-secrets=KAORI_BOUNCER_SIGNING_KEY=kaori-bouncer-signing-key:latest \
+  --update-secrets=KAORI_VALIDATOR_SIGNING_KEY=kaori-generalist-signing-key:latest \
   --project="$PROJECT"
 ```
 
 If the service account or secret already exists, skip its create command; add a rotated key with:
 
 ```bash
-openssl rand -hex 32 | gcloud secrets versions add kaori-bouncer-signing-key \
+openssl rand -hex 32 | gcloud secrets versions add kaori-generalist-signing-key \
   --data-file=- \
   --project=msro-kaori-sandbox
 ```

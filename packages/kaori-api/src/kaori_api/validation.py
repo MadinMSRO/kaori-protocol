@@ -12,7 +12,7 @@ from typing import Optional
 from kaori_flow import FlowCore
 from kaori_flow.primitives.signal import Signal, SignalTypes
 
-BOUNCER_AGENT_ID = "ai:bouncer_v1"
+GENERALIST_AGENT_ID = "ai:generalist_v1"
 VALIDATION_VOTES = ("RATIFY", "REJECT", "ABSTAIN")
 
 
@@ -22,10 +22,15 @@ def agent_is_known(flow: FlowCore, agent_id: str) -> bool:
     return bool(flow.store.get_for_agent(agent_id))
 
 
-def ensure_bouncer_registered(flow: FlowCore) -> None:
-    """Register Flow agent ai:bouncer_v1 (role validator) if unknown. Idempotent."""
-    if not agent_is_known(flow, BOUNCER_AGENT_ID):
-        flow.register_agent(BOUNCER_AGENT_ID, role="validator")
+def ensure_validator_registered(flow: FlowCore, agent_id: str) -> None:
+    """Register the selected validator agent if unknown. Idempotent."""
+    if not agent_is_known(flow, agent_id):
+        flow.register_agent(agent_id, role="validator")
+
+
+def ensure_generalist_registered(flow: FlowCore) -> None:
+    """Register the CLIP generalist voter. Idempotent."""
+    ensure_validator_registered(flow, GENERALIST_AGENT_ID)
 
 
 def record_validation_vote(

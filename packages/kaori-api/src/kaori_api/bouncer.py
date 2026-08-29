@@ -1,4 +1,4 @@
-"""Deterministic coral bouncer checks and ValidationSignal signing."""
+"""CPU CLIP generalist for the private kaori-bouncer service."""
 from __future__ import annotations
 
 import hashlib
@@ -7,42 +7,40 @@ import io
 import json
 import math
 import os
-import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Optional
+from typing import Callable, List, Literal, Optional, Protocol, Sequence
 from urllib.parse import quote, urlparse
 
 import yaml
-from kaori_truth.primitives.evidence import EvidenceRef
-from kaori_truth.primitives.observation import Observation
-from kaori_truth.primitives.truthkey import parse_truthkey
-from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field, field_validator
 
-from kaori_api.validation import BOUNCER_AGENT_ID
+from kaori_api.validation import GENERALIST_AGENT_ID
+from kaori_truth.primitives.evidence import EvidenceRef
+
 
 CORAL_CLAIM_TYPE = "ocean.coral_bleaching.v1"
-BOUNCER_SIGNING_KEY_ENV = "KAORI_BOUNCER_SIGNING_KEY"
-DEV_BOUNCER_SIGNING_KEY = "kaori-dev-bouncer-key-do-not-use-in-production"
+VALIDATOR_SIGNING_KEY_ENV = "KAORI_VALIDATOR_SIGNING_KEY"
+DEV_VALIDATOR_SIGNING_KEY = "kaori-dev-validator-key-do-not-use-in-production"
 GCP_METADATA_TOKEN_URL = (
     "http://metadata.google.internal/computeMetadata/v1/instance/"
     "service-accounts/default/token"
 )
-IMAGE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
+CLIP_V1_MODEL = "ViT-B-32"
+CLIP_V1_PRETRAINED = "openai"
 
 
-class BouncerRequest(BaseModel):
-    """Private service request produced after a TruthState has been persisted."""
+class ValidatorRequest(BaseModel):
+    """Private request produced after a TruthState has been persisted."""
 
     truthkey_id: str
     claim_type_id: str
-    observations: List[Observation]
+    evidence_refs: List[EvidenceRef]
 
 
 class ValidationVote(BaseModel):
-    """FLOW_SPEC ValidationSignal returned by the private bouncer service."""
+    """FLOW_SPEC ValidationSignal returned by the private validator service."""
 
     agent_id: str
     truthkey_id: str
@@ -60,12 +58,20 @@ class ValidationVote(BaseModel):
         return value.astimezone(timezone.utc)
 
 
+class RelevanceModel(Protocol):
+    """The single generalist model interface."""
+
+    def score(self, images: Sequence[object], *, context: str, engine: str) -> List[float]: ...
+
+
 EvidenceLoader = Callable[[EvidenceRef], bytes]
 
 
-def bouncer_signing_key() -> bytes:
-    """Read the bouncer HMAC key at call time so secret rotation is observable."""
-    return os.environ.get(BOUNCER_SIGNING_KEY_ENV, DEV_BOUNCER_SIGNING_KEY).encode("utf-8")
+def validator_signing_key() -> bytes:
+    return os.environ.get(
+        VALIDATOR_SIGNING_KEY_ENV,
+        DEV_VALIDATOR_SIGNING_KEY,
+    ).encode("utf-8")
 
 
 def canonical_timestamp(value: datetime) -> str:
@@ -75,7 +81,6 @@ def canonical_timestamp(value: datetime) -> str:
 
 
 def validation_vote_signing_payload(vote: ValidationVote) -> bytes:
-    """Canonical bytes signed by ai:bouncer_v1 (signature itself is excluded)."""
     payload = {
         "agent_id": vote.agent_id,
         "truthkey_id": vote.truthkey_id,
@@ -90,7 +95,7 @@ def validation_vote_signing_payload(vote: ValidationVote) -> bytes:
 
 def sign_validation_vote(vote: ValidationVote, key: Optional[bytes] = None) -> ValidationVote:
     signature = hmac.new(
-        key or bouncer_signing_key(),
+        key or validator_signing_key(),
         validation_vote_signing_payload(vote),
         hashlib.sha256,
     ).hexdigest()
@@ -101,7 +106,7 @@ def verify_validation_vote(vote: ValidationVote, key: Optional[bytes] = None) ->
     if not vote.signature:
         return False
     expected = hmac.new(
-        key or bouncer_signing_key(),
+        key or validator_signing_key(),
         validation_vote_signing_payload(vote),
         hashlib.sha256,
     ).hexdigest()
@@ -129,7 +134,7 @@ class GcsEvidenceLoader:
     def __call__(self, evidence: EvidenceRef) -> bytes:
         parsed = urlparse(evidence.uri)
         if parsed.scheme != "gs" or not parsed.netloc or not parsed.path.lstrip("/"):
-            raise ValueError("bouncer evidence must use a gs:// URI")
+            raise ValueError("validator evidence must use a gs:// URI")
         object_name = quote(parsed.path.lstrip("/"), safe="")
         url = (
             "https://storage.googleapis.com/download/storage/v1/b/"
@@ -143,162 +148,134 @@ class GcsEvidenceLoader:
             return response.read()
 
 
-class CoralBouncer:
-    """Execute only the checks listed in coral ai_validation_routing.bouncer."""
+class OpenClipGeneralist:
+    """Open CLIP on CPU: claim-context evidence versus unrelated imagery."""
+
+    def __init__(self) -> None:
+        self._model = None
+        self._preprocess = None
+        self._tokenizer = None
+
+    def _load(self) -> None:
+        if self._model is not None:
+            return
+        import open_clip
+
+        cache_dir = os.environ.get("KAORI_CLIP_CACHE", "/app/.cache/open_clip")
+        self._model, _, self._preprocess = open_clip.create_model_and_transforms(
+            CLIP_V1_MODEL,
+            pretrained=CLIP_V1_PRETRAINED,
+            device="cpu",
+            cache_dir=cache_dir,
+        )
+        self._tokenizer = open_clip.get_tokenizer(CLIP_V1_MODEL)
+        self._model.eval()
+
+    def score(self, images: Sequence[object], *, context: str, engine: str) -> List[float]:
+        if engine != "clip_v1":
+            raise ValueError(f"unsupported generalist engine: {engine}")
+        self._load()
+        import torch
+
+        image_batch = torch.stack([self._preprocess(image) for image in images])
+        text_batch = self._tokenizer(
+            [
+                f"evidence of {context}",
+                f"a random image unrelated to {context}",
+            ]
+        )
+        with torch.inference_mode():
+            image_features = self._model.encode_image(image_batch)
+            text_features = self._model.encode_text(text_batch)
+            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+            logits = self._model.logit_scale.exp() * image_features @ text_features.T
+            relevance = logits.softmax(dim=-1)[:, 0]
+        return relevance.cpu().tolist()
+
+
+class ClipGeneralistValidator:
+    """
+    Run one CLIP generalist for claim-type relevance.
+
+    Submission rules and specialist routing are deliberately absent. The model
+    sees only evidence already accepted by compile and decides whether that
+    evidence is relevant to the ClaimType context or unrelated imagery.
+    """
 
     def __init__(
         self,
         *,
         schema_path: str,
         evidence_loader: Optional[EvidenceLoader] = None,
+        model: Optional[RelevanceModel] = None,
         signing_key: Optional[bytes] = None,
     ):
-        self.schema_path = Path(schema_path)
-        self.evidence_loader = evidence_loader or GcsEvidenceLoader()
-        self.signing_key = signing_key
-        with self.schema_path.open("r", encoding="utf-8") as stream:
+        with Path(schema_path).open("r", encoding="utf-8") as stream:
             self.config = yaml.safe_load(stream)
         if self.config.get("id") != CORAL_CLAIM_TYPE:
-            raise ValueError("bouncer schema must be ocean.coral_bleaching.v1")
-        routing = (self.config.get("ai_validation_routing") or {}).get("bouncer") or {}
-        self.checks = routing.get("checks") or []
-        if not self.checks:
-            raise ValueError("coral bouncer checks are required")
+            raise ValueError("validator schema must be ocean.coral_bleaching.v1")
+
+        routing = self.config.get("ai_validation_routing") or {}
+        generalist = routing.get("generalist") or {}
+        if generalist.get("engine") != "generalist_v1":
+            raise ValueError("claim type must select generalist_v1")
+        self.context = str(generalist.get("prompt_context") or "").strip()
+        if not self.context:
+            raise ValueError("generalist prompt_context is required")
+
+        embedding = (self.config.get("evidence_similarity") or {}).get("embedding") or {}
+        if not embedding.get("enabled"):
+            raise ValueError("claim type must enable CLIP relevance")
+        self.embedding_engine = str(embedding.get("engine"))
+        self.relevance_threshold = float(embedding.get("similarity_threshold"))
+
+        self.evidence_loader = evidence_loader or GcsEvidenceLoader()
+        self.model = model or OpenClipGeneralist()
+        self.signing_key = signing_key
 
     def validate(
         self,
-        request: BouncerRequest,
+        request: ValidatorRequest,
         *,
         timestamp: Optional[datetime] = None,
     ) -> ValidationVote:
         if request.claim_type_id != CORAL_CLAIM_TYPE:
-            raise ValueError("bouncer only supports ocean.coral_bleaching.v1")
+            raise ValueError("validator only supports ocean.coral_bleaching.v1")
 
-        check_results = [
-            self._run_configured_check(check, request)
-            for check in self.checks
-        ]
-        passed = all(check_results)
+        images = [self._load_image(self.evidence_loader(ref)) for ref in request.evidence_refs]
+        relevance = self.model.score(
+            images,
+            context=self.context,
+            engine=self.embedding_engine,
+        )
+        confidence = self._mean_relevance(relevance, len(images))
+        vote: Literal["RATIFY", "REJECT"] = (
+            "RATIFY" if confidence >= self.relevance_threshold else "REJECT"
+        )
         unsigned = ValidationVote(
-            agent_id=BOUNCER_AGENT_ID,
+            agent_id=GENERALIST_AGENT_ID,
             truthkey_id=request.truthkey_id,
             window_id=f"window:{request.truthkey_id}",
-            vote="RATIFY" if passed else "REJECT",
+            vote=vote,
+            confidence=confidence,
             timestamp=timestamp or datetime.now(timezone.utc),
             signature="",
         )
         return sign_validation_vote(unsigned, self.signing_key)
 
-    def _run_configured_check(self, configured: object, request: BouncerRequest) -> bool:
-        if isinstance(configured, str):
-            name, argument = configured, None
-        elif isinstance(configured, dict) and len(configured) == 1:
-            name, argument = next(iter(configured.items()))
-        else:
-            raise ValueError("invalid coral bouncer check configuration")
+    @staticmethod
+    def _load_image(content: bytes) -> object:
+        from PIL import Image
 
-        checks = {
-            "evidence_present": lambda: self._evidence_present(request),
-            "evidence_quality_min": lambda: self._evidence_quality_min(request, float(argument)),
-            "duplicate_hash_check": lambda: self._duplicate_hash_check(request),
-            "geolocation_plausibility": lambda: self._geolocation_plausibility(request),
-            "depth_consistency": lambda: self._depth_consistency(request),
-        }
-        if name not in checks:
-            raise ValueError(f"unsupported coral bouncer check: {name}")
-        return checks[name]()
-
-    def _all_evidence(self, request: BouncerRequest) -> List[EvidenceRef]:
-        return [ref for observation in request.observations for ref in observation.evidence_refs]
-
-    def _evidence_present(self, request: BouncerRequest) -> bool:
-        evidence_config = self.config.get("evidence") or {}
-        count = len(self._all_evidence(request))
-        minimum = int(evidence_config.get("min_count", 1))
-        maximum = int(evidence_config.get("max_count", count))
-        return bool(request.observations) and minimum <= count <= maximum
-
-    def _evidence_quality_min(self, request: BouncerRequest, minimum: float) -> bool:
-        refs = self._all_evidence(request)
-        if not refs:
-            return False
-        usable = 0
-        for ref in refs:
-            try:
-                content = self.evidence_loader(ref)
-                is_usable = self._usable_evidence(ref, content)
-            except (OSError, TypeError, ValueError, TimeoutError, urllib.error.URLError):
-                continue
-            if is_usable:
-                usable += 1
-        return usable / len(refs) >= minimum
+        with Image.open(io.BytesIO(content)) as source:
+            source.load()
+            return source.convert("RGB")
 
     @staticmethod
-    def _usable_evidence(ref: EvidenceRef, content: bytes) -> bool:
-        if not content:
-            return False
-        suffix = Path(urlparse(ref.uri).path).suffix.lower()
-        is_image = (ref.mime_type or "").lower().startswith("image/") or suffix in IMAGE_SUFFIXES
-        if not is_image:
-            return True
-        try:
-            with Image.open(io.BytesIO(content)) as image:
-                image.verify()
-            return True
-        except (OSError, UnidentifiedImageError):
-            return False
-
-    def _duplicate_hash_check(self, request: BouncerRequest) -> bool:
-        hashes = [ref.sha256.lower() for ref in self._all_evidence(request)]
-        return len(hashes) == len(set(hashes))
-
-    @staticmethod
-    def _geolocation_plausibility(request: BouncerRequest) -> bool:
-        for observation in request.observations:
-            lat = observation.geo.get("lat")
-            lon = observation.geo.get("lon")
-            if (
-                isinstance(lat, bool)
-                or isinstance(lon, bool)
-                or not isinstance(lat, (int, float))
-                or not isinstance(lon, (int, float))
-                or not math.isfinite(float(lat))
-                or not math.isfinite(float(lon))
-                or not -90.0 <= float(lat) <= 90.0
-                or not -180.0 <= float(lon) <= 180.0
-            ):
-                return False
-        return bool(request.observations)
-
-    def _depth_consistency(self, request: BouncerRequest) -> bool:
-        try:
-            key = parse_truthkey(request.truthkey_id)
-        except ValueError:
-            return False
-        truthkey_config = self.config.get("truthkey") or {}
-        if key.z_index != truthkey_config.get("z_index"):
-            return False
-
-        depth_field: Dict[str, object] = {}
-        for field in ((self.config.get("ui_schema") or {}).get("fields") or []):
-            if field.get("name") == "depth_meters":
-                depth_field = field
-                break
-        bounds = depth_field.get("validation") or {}
-        minimum = float(bounds.get("min", float("-inf")))
-        maximum = float(bounds.get("max", float("inf")))
-        for observation in request.observations:
-            depth = (observation.payload or {}).get("depth_meters")
-            if (
-                isinstance(depth, bool)
-                or not isinstance(depth, (int, float))
-                or not math.isfinite(float(depth))
-                or not minimum <= float(depth) <= maximum
-            ):
-                return False
-            if (
-                observation.depth_meters is not None
-                and float(observation.depth_meters) != float(depth)
-            ):
-                return False
-        return bool(request.observations)
+    def _mean_relevance(scores: Sequence[float], expected_count: int) -> float:
+        if len(scores) != expected_count or not scores:
+            raise ValueError("generalist returned invalid relevance scores")
+        if not all(math.isfinite(score) and 0.0 <= score <= 1.0 for score in scores):
+            raise ValueError("generalist returned invalid relevance scores")
+        return round(sum(scores) / len(scores), 6)

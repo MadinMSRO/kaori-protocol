@@ -1,4 +1,4 @@
-"""IAM-protected Cloud Run entrypoint for the deterministic coral bouncer."""
+"""IAM-protected Cloud Run entrypoint for the CPU CLIP generalist."""
 from __future__ import annotations
 
 import os
@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 
-from kaori_api.bouncer import BouncerRequest, CoralBouncer, ValidationVote
+from kaori_api.bouncer import ClipGeneralistValidator, ValidationVote, ValidatorRequest
 
 
 def default_coral_schema_path() -> str:
@@ -15,21 +15,21 @@ def default_coral_schema_path() -> str:
     return str(Path(root) / "ocean" / "coral_bleaching_v1.yaml")
 
 
-def create_bouncer_app(runner: Optional[CoralBouncer] = None) -> FastAPI:
-    runner = runner or CoralBouncer(schema_path=default_coral_schema_path())
+def create_bouncer_app(validator: Optional[ClipGeneralistValidator] = None) -> FastAPI:
+    validator = validator or ClipGeneralistValidator(schema_path=default_coral_schema_path())
     application = FastAPI(
         title="Kaori Bouncer",
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
     )
-    application.state.runner = runner
+    application.state.validator = validator
 
     # Cloud Run IAM authenticates this private endpoint before the request reaches ASGI.
     @application.post("/", response_model=ValidationVote, response_model_exclude_none=True)
-    def validate(request: BouncerRequest) -> ValidationVote:
+    def validate(request: ValidatorRequest) -> ValidationVote:
         try:
-            return application.state.runner.validate(request)
+            return application.state.validator.validate(request)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

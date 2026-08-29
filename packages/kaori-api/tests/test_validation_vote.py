@@ -1,4 +1,4 @@
-"""V4 first slice: bouncer agent + record_validation_vote. No new routes, no model."""
+"""V4 first slice: CLIP generalist agent + record_validation_vote."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -10,8 +10,8 @@ from fastapi.testclient import TestClient
 from kaori_api.app import create_app
 from kaori_api.auth import AuthError
 from kaori_api.validation import (
-    BOUNCER_AGENT_ID,
-    ensure_bouncer_registered,
+    GENERALIST_AGENT_ID,
+    ensure_generalist_registered,
     record_validation_vote,
 )
 from kaori_flow import FlowCore, InMemorySignalStore
@@ -60,55 +60,57 @@ def test_coral_still_always_require_human():
     assert spec["risk_profile"] == "critical"
 
 
-def test_bouncer_registered_on_startup_idempotent():
+def test_generalist_registered_on_startup_idempotent():
     flow = FlowCore(store=InMemorySignalStore())
-    assert BOUNCER_AGENT_ID not in flow.get_all_standings()
+    assert GENERALIST_AGENT_ID not in flow.get_all_standings()
     create_app(flow=flow, verify_token=verify_token)
     create_app(flow=flow, verify_token=verify_token)
     registered = [
         s
         for s in flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)
-        if s.object_id == BOUNCER_AGENT_ID
+        if s.object_id == GENERALIST_AGENT_ID
     ]
     assert len(registered) == 1
     assert registered[0].payload["role"] == "validator"
-    assert flow.get_standing(BOUNCER_AGENT_ID) == 250.0
+    assert flow.get_standing(GENERALIST_AGENT_ID) == 250.0
+    assert "ai:bouncer_v1" not in flow.get_all_standings()
+    assert "ai:coral_specialist_v1" not in flow.get_all_standings()
 
 
-def test_ensure_bouncer_skips_when_already_known():
+def test_ensure_generalist_skips_when_already_known():
     flow = FlowCore(store=InMemorySignalStore())
-    flow.register_agent(BOUNCER_AGENT_ID, role="validator")
+    flow.register_agent(GENERALIST_AGENT_ID, role="validator")
     before = len(flow.store.get_by_type(SignalTypes.AGENT_REGISTERED))
-    ensure_bouncer_registered(flow)
+    ensure_generalist_registered(flow)
     assert len(flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)) == before
 
 
 def test_record_validation_vote_emits_flow_spec_payload():
     flow = FlowCore(store=InMemorySignalStore())
-    ensure_bouncer_registered(flow)
+    ensure_generalist_registered(flow)
     truthkey = "ocean:coral_bleaching:h3:89b12c6b6ffffff:underwater:2026-01-07T00:00Z"
     emitted_at = datetime(2026, 1, 7, 12, 30, tzinfo=timezone.utc)
     signal = record_validation_vote(
         flow,
-        agent_id=BOUNCER_AGENT_ID,
+        agent_id=GENERALIST_AGENT_ID,
         truthkey_id=truthkey,
         window_id="window:coral-1",
         vote="RATIFY",
-        signature="sig-bouncer-1",
+        signature="sig-generalist-1",
         confidence=0.91,
         time=emitted_at,
     )
     assert signal.signal_type == SignalTypes.VALIDATION_VOTE
     assert signal.object_id == truthkey
-    assert signal.agent_id == BOUNCER_AGENT_ID
-    assert signal.signature == "sig-bouncer-1"
+    assert signal.agent_id == GENERALIST_AGENT_ID
+    assert signal.signature == "sig-generalist-1"
     assert signal.payload == {
-        "agent_id": BOUNCER_AGENT_ID,
+        "agent_id": GENERALIST_AGENT_ID,
         "truthkey_id": truthkey,
         "window_id": "window:coral-1",
         "vote": "RATIFY",
         "timestamp": "2026-01-07T12:30:00Z",
-        "signature": "sig-bouncer-1",
+        "signature": "sig-generalist-1",
         "confidence": 0.91,
     }
     stored = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
@@ -120,7 +122,7 @@ def test_record_validation_vote_confidence_optional():
     flow = FlowCore(store=InMemorySignalStore())
     signal = record_validation_vote(
         flow,
-        agent_id=BOUNCER_AGENT_ID,
+        agent_id=GENERALIST_AGENT_ID,
         truthkey_id="earth:coastal_erosion:h3:abc:surface:2026-01-07T00:00Z",
         window_id="window:1",
         vote="ABSTAIN",
@@ -135,7 +137,7 @@ def test_record_validation_vote_rejects_bad_vote_and_missing_signature():
     with pytest.raises(ValueError):
         record_validation_vote(
             flow,
-            agent_id=BOUNCER_AGENT_ID,
+            agent_id=GENERALIST_AGENT_ID,
             truthkey_id="k",
             window_id="w",
             vote="APPROVE",
@@ -144,7 +146,7 @@ def test_record_validation_vote_rejects_bad_vote_and_missing_signature():
     with pytest.raises(ValueError):
         record_validation_vote(
             flow,
-            agent_id=BOUNCER_AGENT_ID,
+            agent_id=GENERALIST_AGENT_ID,
             truthkey_id="k",
             window_id="w",
             vote="RATIFY",
@@ -153,7 +155,7 @@ def test_record_validation_vote_rejects_bad_vote_and_missing_signature():
     with pytest.raises(ValueError):
         record_validation_vote(
             flow,
-            agent_id=BOUNCER_AGENT_ID,
+            agent_id=GENERALIST_AGENT_ID,
             truthkey_id="k",
             window_id="w",
             vote="REJECT",
@@ -170,17 +172,17 @@ def test_compile_does_not_record_validation_vote():
     assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
 
 
-def test_bouncer_ratify_does_not_make_coral_verified_true():
+def test_generalist_ratify_does_not_make_coral_verified_true():
     flow = FlowCore(store=InMemorySignalStore())
     client = TestClient(create_app(flow=flow, verify_token=verify_token))
     truth_key = coral_compile_body()["truth_key"]
     record_validation_vote(
         flow,
-        agent_id=BOUNCER_AGENT_ID,
+        agent_id=GENERALIST_AGENT_ID,
         truthkey_id=truth_key,
         window_id="window:coral-1",
         vote="RATIFY",
-        signature="sig-bouncer-1",
+        signature="sig-generalist-1",
         confidence=0.99,
     )
     response = client.post("/v1/compile", json=coral_compile_body(), headers=auth_header())

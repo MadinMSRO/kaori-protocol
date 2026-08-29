@@ -13,12 +13,12 @@ from kaori_truth.primitives.observation import Observation
 
 from kaori_api.bouncer import (
     CORAL_CLAIM_TYPE,
-    BouncerRequest,
     ValidationVote,
-    bouncer_signing_key,
+    ValidatorRequest,
+    validator_signing_key,
     verify_validation_vote,
 )
-from kaori_api.validation import BOUNCER_AGENT_ID, record_validation_vote
+from kaori_api.validation import GENERALIST_AGENT_ID, record_validation_vote
 
 LOGGER = logging.getLogger(__name__)
 BOUNCER_URL_ENV = "KAORI_BOUNCER_URL"
@@ -41,7 +41,7 @@ class BouncerClient:
     ):
         self.url = url.rstrip("/")
         self.token_provider = token_provider or cloud_run_id_token
-        self.signing_key = signing_key or bouncer_signing_key()
+        self.signing_key = signing_key or validator_signing_key()
         self.timeout = timeout
 
     @classmethod
@@ -56,10 +56,14 @@ class BouncerClient:
         claim_type_id: str,
         observations: List[Observation],
     ) -> ValidationVote:
-        payload = BouncerRequest(
+        payload = ValidatorRequest(
             truthkey_id=truthkey_id,
             claim_type_id=claim_type_id,
-            observations=observations,
+            evidence_refs=[
+                ref
+                for observation in observations
+                for ref in observation.evidence_refs
+            ],
         )
         request = urllib.request.Request(
             self.url,
@@ -76,7 +80,7 @@ class BouncerClient:
         return vote
 
     def _validate_vote(self, vote: ValidationVote, truthkey_id: str) -> None:
-        if vote.agent_id != BOUNCER_AGENT_ID:
+        if vote.agent_id != GENERALIST_AGENT_ID:
             raise ValueError("bouncer response has an unexpected agent_id")
         if vote.truthkey_id != truthkey_id:
             raise ValueError("bouncer response has an unexpected truthkey_id")
