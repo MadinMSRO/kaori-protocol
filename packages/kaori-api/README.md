@@ -14,7 +14,7 @@ Compile 200 upserts the full `TruthState.model_dump` (including `evidence_refs`)
 
 After any ClaimType compiles, the API queues a post-response call to the separate IAM-protected `kaori-generalist` Cloud Run service. The compiler remains pure and never executes a validator or writes a `VALIDATION_VOTE`. The service loads that ClaimType's existing YAML and runs one open CLIP generalist on CPU, comparing the evidence with `ai_validation_routing.generalist.prompt_context` (or the schema's display/topic fallback) versus unrelated imagery. It compares the mean relevance probability directly with `evidence_similarity.embedding.similarity_threshold`, signs a FLOW_SPEC `ValidationSignal` as `ai:generalist_v1`, and returns it. Only `kaori-api` calls `record_validation_vote`, so it remains the single SignalStore writer.
 
-Submission checks remain in the existing compile/submit 400 path and are not duplicated in Cloud Run. The model service receives only `truthkey_id`, `claim_type_id`, and `evidence_refs`; it does not receive GPS, depth, or observation payload fields. It does not run submission rules, pHash, a specialist, a chat LLM, Vertex AI, or a GPU. Coral still has `always_require_human: true`; RATIFY and REJECT both leave the persisted TruthState at `PENDING_HUMAN_REVIEW`.
+Submission checks remain in the existing compile/submit 400 path and are not duplicated in Cloud Run. The model service receives only `truthkey_id`, `claim_type_id`, and `evidence_refs`; it does not receive GPS, depth, or observation payload fields. Public `http://` and `https://` evidence (including Supabase public object URLs) is fetched directly; `gs://` evidence continues to use the Cloud Run service account. No new bucket is required. The service does not run submission rules, pHash, a specialist, a chat LLM, Vertex AI, or a GPU. Coral still has `always_require_human: true`; RATIFY and REJECT both leave the persisted TruthState at `PENDING_HUMAN_REVIEW`.
 
 CORS allows origins `https://kind-keepsake-kingdom.lovable.app` (live) and `https://id-preview--3edd781a-00a9-4e58-88be-c21405c611ee.lovable.app` (preview), methods `GET`, `POST`, `OPTIONS`, and headers `Authorization` and `Content-Type`. No extra routes.
 
@@ -112,11 +112,6 @@ gcloud secrets add-iam-policy-binding kaori-generalist-signing-key \
   --member="serviceAccount:${API_SA}" \
   --role=roles/secretmanager.secretAccessor \
   --project="$PROJECT"
-gcloud storage buckets add-iam-policy-binding gs://kaori-evidence \
-  --member="serviceAccount:${GENERALIST_SA}" \
-  --role=roles/storage.objectViewer \
-  --project="$PROJECT"
-
 export TAG="$(git rev-parse --short HEAD)"
 export GENERALIST_IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/kaori-generalist:${TAG}"
 export API_IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/kaori-api:${TAG}"
@@ -154,6 +149,8 @@ gcloud run services update kaori-api \
   --update-secrets=KAORI_VALIDATOR_SIGNING_KEY=kaori-generalist-signing-key:latest \
   --project="$PROJECT"
 ```
+
+For any existing private GCS bucket referenced by a `gs://` EvidenceRef, separately grant `roles/storage.objectViewer` on that bucket to `$GENERALIST_SA`. Supabase public object URLs need no storage IAM or GCS bucket.
 
 If the service account or secret already exists, skip its create command; add a rotated key with:
 

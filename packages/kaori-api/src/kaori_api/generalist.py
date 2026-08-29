@@ -112,8 +112,8 @@ def verify_validation_vote(vote: ValidationVote, key: Optional[bytes] = None) ->
     return hmac.compare_digest(expected, vote.signature)
 
 
-class GcsEvidenceLoader:
-    """Load private gs:// evidence with the Cloud Run service account."""
+class EvidenceContentLoader:
+    """Load public HTTP(S) evidence or private gs:// evidence."""
 
     def __init__(self, timeout: float = 15.0):
         self.timeout = timeout
@@ -132,8 +132,15 @@ class GcsEvidenceLoader:
 
     def __call__(self, evidence: EvidenceRef) -> bytes:
         parsed = urlparse(evidence.uri)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            request = urllib.request.Request(
+                evidence.uri,
+                headers={"User-Agent": "kaori-generalist/1"},
+            )
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                return response.read()
         if parsed.scheme != "gs" or not parsed.netloc or not parsed.path.lstrip("/"):
-            raise ValueError("validator evidence must use a gs:// URI")
+            raise ValueError("validator evidence must use an http://, https://, or gs:// URI")
         object_name = quote(parsed.path.lstrip("/"), safe="")
         url = (
             "https://storage.googleapis.com/download/storage/v1/b/"
@@ -212,7 +219,7 @@ class ClipGeneralistValidator:
     ):
         self.schema_root = Path(schema_root).resolve()
         self._config_cache: Dict[str, dict] = {}
-        self.evidence_loader = evidence_loader or GcsEvidenceLoader()
+        self.evidence_loader = evidence_loader or EvidenceContentLoader()
         self.model = model or OpenClipGeneralist()
         self.signing_key = signing_key
 

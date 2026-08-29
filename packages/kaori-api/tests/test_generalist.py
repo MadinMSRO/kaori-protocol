@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import urllib.request
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +13,7 @@ from kaori_api.app import create_app
 from kaori_api.auth import AuthError
 from kaori_api.generalist import (
     ClipGeneralistValidator,
+    EvidenceContentLoader,
     ValidationVote,
     ValidatorRequest,
     verify_validation_vote,
@@ -45,6 +47,20 @@ PRODUCT_CLAIM_TYPES = [
 ]
 
 
+class FakeResponse:
+    def __init__(self, content: bytes):
+        self.content = content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def read(self):
+        return self.content
+
+
 def verify_token(token: str) -> str:
     if token != TOKEN:
         raise AuthError("Invalid Bearer token")
@@ -75,8 +91,14 @@ def raw_observation() -> dict:
         "geo": {"lat": -8.3405, "lon": 115.0920},
         "payload": {"depth_meters": 8.0, "bleaching_percentage": 40},
         "evidence_refs": [
-            {"uri": "gs://kaori-evidence/coral1.png", "sha256": "a" * 64},
-            {"uri": "gs://kaori-evidence/coral2.png", "sha256": "b" * 64},
+            {
+                "uri": "https://project.supabase.co/storage/v1/object/public/lm-012/coral1.png",
+                "sha256": "a" * 64,
+            },
+            {
+                "uri": "https://project.supabase.co/storage/v1/object/public/lm-012/coral2.png",
+                "sha256": "b" * 64,
+            },
         ],
     }
 
@@ -97,8 +119,14 @@ def validator_request() -> ValidatorRequest:
         truthkey_id=TRUTHKEY,
         claim_type_id=CORAL_CLAIM_TYPE,
         evidence_refs=[
-            EvidenceRef(uri="gs://kaori-evidence/coral1.png", sha256="a" * 64),
-            EvidenceRef(uri="gs://kaori-evidence/coral2.png", sha256="b" * 64),
+            EvidenceRef(
+                uri="https://project.supabase.co/storage/v1/object/public/lm-012/coral1.png",
+                sha256="a" * 64,
+            ),
+            EvidenceRef(
+                uri="https://project.supabase.co/storage/v1/object/public/lm-012/coral2.png",
+                sha256="b" * 64,
+            ),
         ],
     )
 
@@ -126,6 +154,54 @@ def validator(scores) -> ClipGeneralistValidator:
         model=FakeClipGeneralist(scores),
         signing_key=SIGNING_KEY,
     )
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "https://project.supabase.co/storage/v1/object/public/lm-012/photo.jpg",
+        "http://project.supabase.co/storage/v1/object/public/lm-012/photo.jpg",
+    ],
+)
+def test_evidence_loader_fetches_http_urls_directly(monkeypatch, uri):
+    requests = []
+
+    def fake_urlopen(request, timeout):
+        requests.append((request, timeout))
+        return FakeResponse(b"supabase-photo")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    content = EvidenceContentLoader(timeout=4.0)(
+        EvidenceRef(uri=uri, sha256="a" * 64)
+    )
+
+    assert content == b"supabase-photo"
+    assert requests[0][0].full_url == uri
+    assert requests[0][0].get_header("User-agent") == "kaori-generalist/1"
+    assert requests[0][1] == 4.0
+
+
+def test_evidence_loader_preserves_authenticated_gcs_download(monkeypatch):
+    requests = []
+
+    def fake_urlopen(request, timeout):
+        requests.append((request, timeout))
+        if request.full_url.startswith("http://metadata.google.internal"):
+            return FakeResponse(b'{"access_token":"gcs-token"}')
+        return FakeResponse(b"gcs-photo")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    content = EvidenceContentLoader(timeout=4.0)(
+        EvidenceRef(uri="gs://kaori-evidence/path/photo.jpg", sha256="a" * 64)
+    )
+
+    assert content == b"gcs-photo"
+    assert requests[1][0].full_url.endswith(
+        "/download/storage/v1/b/kaori-evidence/o/path%2Fphoto.jpg?alt=media"
+    )
+    assert requests[1][0].get_header("Authorization") == "Bearer gcs-token"
 
 
 class LocalGeneralistClient:
