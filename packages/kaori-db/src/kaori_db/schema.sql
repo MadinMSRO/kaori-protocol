@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS ix_signals_object_id ON kaori.signals (object_id);
 CREATE INDEX IF NOT EXISTS ix_signals_signal_type ON kaori.signals (signal_type);
 
 -- Full TruthState.model_dump (including evidence_refs). Upsert on truthkey.
--- Not public.truths.
+-- Never the public truths table.
 CREATE TABLE IF NOT EXISTS kaori.truth_states (
     truthkey    TEXT PRIMARY KEY,
     artifact    JSONB NOT NULL,

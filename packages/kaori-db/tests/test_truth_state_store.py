@@ -21,7 +21,6 @@ def test_schema_sql_creates_kaori_truth_states_not_public():
     assert "kaori.truth_states" in sql
     assert "artifact    JSONB" in sql or "artifact JSONB" in sql
     assert "public." not in sql
-    assert "public.truths" not in sql
 
 
 def test_upsert_and_get_by_truthkey(tmp_path):
