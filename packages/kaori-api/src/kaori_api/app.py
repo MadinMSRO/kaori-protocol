@@ -333,16 +333,6 @@ def create_app(
 
         artifact = persist_truth_state(request.app.state.truth_store, truth_state)
         emit_compile_truthstate(flow_core, truth_state, agent_id)
-        client = request.app.state.generalist_client
-        if client is not None:
-            background_tasks.add_task(
-                validate_persisted_truth_state,
-                client=client,
-                flow=flow_core,
-                truthkey_id=truth_state.truthkey,
-                claim_type_id=claim_type_id,
-                observations=observations,
-            )
         return JSONResponse(status_code=200, content=artifact)
 
     @app.get("/v1/standing/{agent_id}")
