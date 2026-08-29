@@ -31,9 +31,9 @@ ENV PYTHONPATH=/app
 ENV KAORI_SCHEMA_PATH=/app/packages/kaori-spec/schemas
 ENV PYTHONUNBUFFERED=1
 
-# Runtime: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY. DATABASE_URL optional. Cloud Run sets PORT.
+# Runtime: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY. DATABASE_URL optional (Cloud SQL).
 # Compiler reads ClaimType YAML from KAORI_SCHEMA_PATH (not a claim_types table).
-# Evidence uri remains a string pointer.
+# Evidence uri remains a string pointer. Three routes: compile, standing, truth.
 EXPOSE 8080
 
 USER kaori

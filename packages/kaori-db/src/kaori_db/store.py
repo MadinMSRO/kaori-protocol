@@ -1,15 +1,15 @@
 """
-Kaori DB — Postgres SignalStore
+Kaori DB — Postgres stores for Flow signals and compiled TruthStates.
 
 Append-only SignalStore for production Flow. Satisfies kaori_flow.store.SignalStore.
-Week-1 DATABASE_URL is Liminal Supabase Postgres. Signals live in schema `kaori`,
-never in `public`. Connection string comes from DATABASE_URL only.
+DATABASE_URL is Cloud SQL Postgres. Tables live in schema `kaori`, never in
+`public` (including not public.truths). Does not provision a Cloud SQL instance.
 """
 from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import (
     JSON,
@@ -53,12 +53,27 @@ def _signals_table(metadata: MetaData, schema: Optional[str]) -> Table:
     )
 
 
+def _truth_states_table(metadata: MetaData, schema: Optional[str]) -> Table:
+    # Production column artifact is JSONB (see schema.sql). SQLAlchemy JSON
+    # maps to JSONB on Postgres and JSON on SQLite unit tests.
+    return Table(
+        "truth_states",
+        metadata,
+        Column("truthkey", String, primary_key=True),
+        Column("artifact", JSON, nullable=False),
+        Column("compiled_at", DateTime(timezone=True), nullable=False),
+        schema=schema,
+    )
+
+
 metadata = MetaData(schema=KAORI_SCHEMA)
 signals_table = _signals_table(metadata, KAORI_SCHEMA)
+truth_states_table = _truth_states_table(metadata, KAORI_SCHEMA)
 
 # SQLite (store unit tests) has no schemas; same columns, no public/kaori split.
 _sqlite_metadata = MetaData()
 _sqlite_signals_table = _signals_table(_sqlite_metadata, None)
+_sqlite_truth_states_table = _truth_states_table(_sqlite_metadata, None)
 
 
 def _ensure_utc(value: datetime) -> datetime:
@@ -99,9 +114,43 @@ def _signal_values(signal: Signal) -> dict:
     }
 
 
+def _engine_from_url(database_url: Optional[str] = None, engine: Optional[Engine] = None) -> Engine:
+    if engine is not None:
+        return engine
+    url = database_url if database_url is not None else os.environ.get("DATABASE_URL")
+    if not url:
+        raise ValueError("DATABASE_URL is required")
+    return create_engine(url)
+
+
+def _ensure_kaori_schema(engine: Engine) -> None:
+    """
+    Create schema kaori and kaori tables if missing.
+    Does not provision a database or Cloud SQL instance.
+    """
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conn:
+            conn.execute(text("CREATE SCHEMA IF NOT EXISTS kaori"))
+        metadata.create_all(engine)
+        return
+    _sqlite_metadata.create_all(engine)
+
+
+def _upsert_stmt(table: Table, engine: Engine, values: dict, conflict_col: str, update_cols: List[str]):
+    if engine.dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert
+    else:
+        from sqlalchemy.dialects.sqlite import insert
+    stmt = insert(table).values(**values)
+    return stmt.on_conflict_do_update(
+        index_elements=[conflict_col],
+        set_={col: getattr(stmt.excluded, col) for col in update_cols},
+    )
+
+
 class PostgresSignalStore:
     """
-    SQL SignalStore backed by DATABASE_URL (Liminal Supabase Postgres).
+    SQL SignalStore backed by DATABASE_URL (Cloud SQL Postgres).
 
     Production table is kaori.signals (SQLAlchemy schema='kaori').
     Does not use public and does not invent product tables.
@@ -109,13 +158,11 @@ class PostgresSignalStore:
     """
 
     def __init__(self, database_url: Optional[str] = None, engine: Optional[Engine] = None):
-        if engine is not None:
-            self._engine = engine
-        else:
-            url = database_url if database_url is not None else os.environ.get("DATABASE_URL")
-            if not url:
-                raise ValueError("DATABASE_URL is required for PostgresSignalStore")
-            self._engine = create_engine(url)
+        self._engine = _engine_from_url(database_url, engine)
+
+    @property
+    def engine(self) -> Engine:
+        return self._engine
 
     @classmethod
     def from_env(cls) -> "PostgresSignalStore":
@@ -129,16 +176,8 @@ class PostgresSignalStore:
         return signals_table if self._is_postgres() else _sqlite_signals_table
 
     def ensure_schema(self) -> None:
-        """
-        Create schema kaori and kaori.signals if missing.
-        Does not provision a database or Cloud SQL instance.
-        """
-        if self._is_postgres():
-            with self._engine.begin() as conn:
-                conn.execute(text("CREATE SCHEMA IF NOT EXISTS kaori"))
-            metadata.create_all(self._engine)
-            return
-        _sqlite_metadata.create_all(self._engine)
+        """Create schema kaori, kaori.signals, and kaori.truth_states if missing."""
+        _ensure_kaori_schema(self._engine)
 
     def append(self, signal: Signal) -> None:
         """Append signal. Idempotent on signal_id."""
@@ -189,3 +228,68 @@ class PostgresSignalStore:
                 .order_by(table.c.time)
             ).all()
         return [_row_to_signal(row) for row in rows]
+
+
+class InMemoryTruthStateStore:
+    """TruthState persist used when DATABASE_URL is unset (tests / local smoke)."""
+
+    def __init__(self) -> None:
+        self._by_key: Dict[str, Dict[str, Any]] = {}
+
+    def upsert(self, truthkey: str, artifact: dict, compiled_at: datetime) -> None:
+        self._by_key[truthkey] = {
+            "artifact": dict(artifact),
+            "compiled_at": _ensure_utc(compiled_at),
+        }
+
+    def get(self, truthkey: str) -> Optional[dict]:
+        row = self._by_key.get(truthkey)
+        return None if row is None else dict(row["artifact"])
+
+
+class PostgresTruthStateStore:
+    """
+    Persist compiled TruthState artifacts in kaori.truth_states.
+
+    Production columns: truthkey PK, artifact JSONB (full TruthState.model_dump
+    including evidence_refs), compiled_at. Upsert on truthkey.
+    Never writes to public.truths.
+    """
+
+    def __init__(self, database_url: Optional[str] = None, engine: Optional[Engine] = None):
+        self._engine = _engine_from_url(database_url, engine)
+
+    @property
+    def engine(self) -> Engine:
+        return self._engine
+
+    def _is_postgres(self) -> bool:
+        return self._engine.dialect.name == "postgresql"
+
+    def _table(self) -> Table:
+        return truth_states_table if self._is_postgres() else _sqlite_truth_states_table
+
+    def ensure_schema(self) -> None:
+        _ensure_kaori_schema(self._engine)
+
+    def upsert(self, truthkey: str, artifact: dict, compiled_at: datetime) -> None:
+        table = self._table()
+        values = {
+            "truthkey": truthkey,
+            "artifact": artifact,
+            "compiled_at": _ensure_utc(compiled_at),
+        }
+        stmt = _upsert_stmt(table, self._engine, values, "truthkey", ["artifact", "compiled_at"])
+        with self._engine.begin() as conn:
+            conn.execute(stmt)
+
+    def get(self, truthkey: str) -> Optional[dict]:
+        table = self._table()
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                select(table.c.artifact).where(table.c.truthkey == truthkey)
+            ).first()
+        if row is None:
+            return None
+        artifact = row.artifact
+        return dict(artifact) if artifact is not None else None

@@ -1,4 +1,4 @@
-"""Sidecar HTTP contract: only /v1/compile and /v1/standing/{agent_id}."""
+"""Sidecar HTTP contract: /v1/compile, /v1/standing/{agent_id}, /v1/truth/{truthkey}."""
 from __future__ import annotations
 
 import pytest
@@ -6,13 +6,17 @@ from fastapi.testclient import TestClient
 
 from kaori_api.app import (
     LIMINAL_ORIGIN,
+    LIMINAL_ORIGINS,
+    LIMINAL_PREVIEW_ORIGIN,
     THIS_WEEK_CLAIM_TYPE,
     create_app,
     reporter_context_from_flow,
     stamp_observation,
 )
 from kaori_api.auth import AuthError
+from kaori_db import InMemoryTruthStateStore
 from kaori_flow import FlowCore, InMemorySignalStore
+from kaori_flow.primitives.signal import SignalTypes
 
 
 AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
@@ -80,33 +84,39 @@ def client(flow: FlowCore) -> TestClient:
     return TestClient(create_app(flow=flow, verify_token=verify_token))
 
 
-def test_only_two_http_routes():
+def test_only_three_http_routes():
     application = create_app(
         flow=FlowCore(store=InMemorySignalStore()),
         verify_token=verify_token,
     )
     paths = {getattr(route, "path", None) for route in application.router.routes}
     paths.discard(None)
-    assert paths == {"/v1/compile", "/v1/standing/{agent_id}"}
-
-
-def test_cors_preflight_allows_liminal_origin_only(client: TestClient):
-    allowed = client.options(
+    assert paths == {
         "/v1/compile",
-        headers={
-            "Origin": LIMINAL_ORIGIN,
-            "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "Authorization, Content-Type",
-        },
-    )
-    assert allowed.status_code == 200
-    assert allowed.headers.get("access-control-allow-origin") == LIMINAL_ORIGIN
-    allow_methods = allowed.headers.get("access-control-allow-methods", "")
-    for method in ("GET", "POST", "OPTIONS"):
-        assert method in allow_methods
-    allow_headers = allowed.headers.get("access-control-allow-headers", "").lower()
-    assert "authorization" in allow_headers
-    assert "content-type" in allow_headers
+        "/v1/standing/{agent_id}",
+        "/v1/truth/{truthkey:path}",
+    }
+
+
+def test_cors_preflight_allows_live_and_preview_origins(client: TestClient):
+    assert LIMINAL_ORIGINS == [LIMINAL_ORIGIN, LIMINAL_PREVIEW_ORIGIN]
+    for origin in LIMINAL_ORIGINS:
+        allowed = client.options(
+            "/v1/compile",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "Authorization, Content-Type",
+            },
+        )
+        assert allowed.status_code == 200
+        assert allowed.headers.get("access-control-allow-origin") == origin
+        allow_methods = allowed.headers.get("access-control-allow-methods", "")
+        for method in ("GET", "POST", "OPTIONS"):
+            assert method in allow_methods
+        allow_headers = allowed.headers.get("access-control-allow-headers", "").lower()
+        assert "authorization" in allow_headers
+        assert "content-type" in allow_headers
 
     denied = client.options(
         "/v1/compile",
@@ -116,17 +126,18 @@ def test_cors_preflight_allows_liminal_origin_only(client: TestClient):
             "Access-Control-Request-Headers": "Authorization, Content-Type",
         },
     )
-    assert denied.headers.get("access-control-allow-origin") != LIMINAL_ORIGIN
+    assert denied.headers.get("access-control-allow-origin") not in LIMINAL_ORIGINS
     assert denied.headers.get("access-control-allow-origin") in (None, "null", "")
 
 
-def test_cors_actual_request_echoes_liminal_origin(client: TestClient):
-    response = client.get(
-        f"/v1/standing/{AGENT_ID}",
-        headers={**auth_header(), "Origin": LIMINAL_ORIGIN},
-    )
-    assert response.status_code == 200
-    assert response.headers.get("access-control-allow-origin") == LIMINAL_ORIGIN
+def test_cors_actual_request_echoes_live_and_preview_origins(client: TestClient):
+    for origin in LIMINAL_ORIGINS:
+        response = client.get(
+            f"/v1/standing/{AGENT_ID}",
+            headers={**auth_header(), "Origin": origin},
+        )
+        assert response.status_code == 200
+        assert response.headers.get("access-control-allow-origin") == origin
 
 
 def test_compile_missing_bearer_401(client: TestClient):
@@ -217,6 +228,7 @@ def test_compile_200_signed_truth_state(client: TestClient):
     assert body["security"]["semantic_hash"]
     assert isinstance(body["evidence_refs"], list)
     assert all(isinstance(item, str) for item in body["evidence_refs"])
+    assert "evidence_refs" in body
 
 
 def test_compile_200_mime_type_optional(client: TestClient):
@@ -274,18 +286,111 @@ def test_compile_200_without_client_reporter_fields(client: TestClient):
     assert response.status_code == 200, response.text
 
 
-def test_compile_registers_unknown_bearer_agent_for_standing():
+def test_compile_persists_truthstate_and_standing_from_emit_not_register():
     flow = FlowCore(store=InMemorySignalStore())
+    truth_store = InMemoryTruthStateStore()
     assert AGENT_ID not in flow.get_all_standings()
-    client = TestClient(create_app(flow=flow, verify_token=verify_token))
-
-    compiled = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+    client = TestClient(
+        create_app(flow=flow, verify_token=verify_token, truth_store=truth_store)
+    )
+    body = compile_body()
+    compiled = client.post("/v1/compile", json=body, headers=auth_header())
     assert compiled.status_code == 200, compiled.text
+    artifact = compiled.json()
+    truthkey = artifact["truthkey"]
+    assert ":" in truthkey
+    assert truth_store.get(truthkey) == artifact
+    assert "evidence_refs" in truth_store.get(truthkey)
+
+    registered = flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)
+    assert registered == []
+    emitted = flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED)
+    assert len(emitted) == 1
+    signal = emitted[0]
+    assert signal.object_id == truthkey
+    assert signal.payload["contributors"] == [AGENT_ID]
+    assert signal.payload["status"] == artifact["status"]
+    assert signal.payload["confidence"] == artifact["confidence"]
+    expected_outcome = "correct" if artifact["status"] == "VERIFIED_TRUE" else "unknown"
+    assert signal.payload["outcome"] == expected_outcome
     assert AGENT_ID in flow.get_all_standings()
 
     standing = client.get(f"/v1/standing/{AGENT_ID}", headers=auth_header())
     assert standing.status_code == 200
     assert 0.0 <= standing.json()["standing"] <= 1000.0
+
+    fetched = client.get(f"/v1/truth/{truthkey}", headers=auth_header())
+    assert fetched.status_code == 200
+    assert fetched.json() == artifact
+
+
+def test_compile_upserts_truthstate_on_truthkey():
+    flow = FlowCore(store=InMemorySignalStore())
+    truth_store = InMemoryTruthStateStore()
+    client = TestClient(
+        create_app(flow=flow, verify_token=verify_token, truth_store=truth_store)
+    )
+    first = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+    assert first.status_code == 200, first.text
+    truthkey = first.json()["truthkey"]
+    second = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+    assert second.status_code == 200, second.text
+    assert second.json()["truthkey"] == truthkey
+    stored = truth_store.get(truthkey)
+    assert stored == second.json()
+    emitted = flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED)
+    assert len(emitted) == 2
+
+
+def test_compile_404_does_not_persist_or_emit():
+    flow = FlowCore(store=InMemorySignalStore())
+    truth_store = InMemoryTruthStateStore()
+    client = TestClient(
+        create_app(flow=flow, verify_token=verify_token, truth_store=truth_store)
+    )
+    body = compile_body(claim_type_id="earth.flood.v1")
+    response = client.post("/v1/compile", json=body, headers=auth_header())
+    assert response.status_code == 404
+    assert truth_store.get(body["truth_key"]) is None
+    assert flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED) == []
+    assert flow.store.get_by_type(SignalTypes.AGENT_REGISTERED) == []
+
+
+def test_get_truth_missing_bearer_401(client: TestClient):
+    response = client.get("/v1/truth/ocean:coral_bleaching:missing")
+    assert response.status_code == 401
+
+
+def test_get_truth_invalid_bearer_401(client: TestClient):
+    response = client.get(
+        "/v1/truth/ocean:coral_bleaching:missing",
+        headers={"Authorization": "Bearer not-a-token"},
+    )
+    assert response.status_code == 401
+
+
+def test_get_truth_unknown_404(client: TestClient):
+    response = client.get(
+        "/v1/truth/ocean:coral_bleaching:h3:does-not-exist",
+        headers=auth_header(),
+    )
+    assert response.status_code == 404
+
+
+def test_get_truth_colon_key_200():
+    flow = FlowCore(store=InMemorySignalStore())
+    truth_store = InMemoryTruthStateStore()
+    client = TestClient(
+        create_app(flow=flow, verify_token=verify_token, truth_store=truth_store)
+    )
+    compiled = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+    assert compiled.status_code == 200, compiled.text
+    truthkey = compiled.json()["truthkey"]
+    assert ":" in truthkey
+    fetched = client.get(f"/v1/truth/{truthkey}", headers=auth_header())
+    assert fetched.status_code == 200
+    assert fetched.json() == compiled.json()
+    assert fetched.json()["evidence_refs"] == compiled.json()["evidence_refs"]
 
 
 def test_standing_missing_bearer_401(client: TestClient):

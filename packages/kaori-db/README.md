@@ -1,6 +1,6 @@
 # Kaori DB
 
-Production `SignalStore` for Kaori Flow.
+Production `SignalStore` and TruthState persist for Kaori Flow / the Pattern B sidecar.
 
 `PostgresSignalStore` implements `kaori_flow.store.SignalStore`:
 
@@ -8,6 +8,12 @@ Production `SignalStore` for Kaori Flow.
 - idempotent on `signal_id`
 - `get_all` / `get_for_agent` / `get_since` / `get_by_type`
 
-Connect with `DATABASE_URL` only — week-1 that is the Liminal Supabase Postgres URL (Lovable project `3edd781a`), not Cloud SQL.
+`PostgresTruthStateStore` upserts compiled TruthStates:
 
-The table is `kaori.signals` (`CREATE SCHEMA IF NOT EXISTS kaori`). Do not put `signals` in `public`. `ensure_schema()` creates the schema and table; it does not provision a database or invent product tables. TruthState is not written to `public.truths`.
+- table `kaori.truth_states` (`truthkey` PK, `artifact` JSONB, `compiled_at`)
+- `artifact` is the full `TruthState.model_dump` including `evidence_refs`
+- upsert on `truthkey`
+
+Connect with `DATABASE_URL` only — Cloud SQL Postgres. Do not provision a Cloud SQL instance from this package.
+
+Tables live in schema `kaori` (`CREATE SCHEMA IF NOT EXISTS kaori`). Do not put `signals` or `truth_states` in `public`. Do not write TruthState to `public.truths`. `ensure_schema()` creates the schema and both tables; it does not provision a database.

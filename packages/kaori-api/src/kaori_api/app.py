@@ -4,15 +4,18 @@ Kaori API — Pattern B sidecar.
 Thin FastAPI surface Liminal can call this week:
   POST /v1/compile
   GET  /v1/standing/{agent_id}
+  GET  /v1/truth/{truthkey}
 
 Wraps TruthOrchestrator.compile_observations and FlowCore.get_standing.
-No other HTTP routes. Wire field names match Open Core primitives.
+Compile 200 persists TruthState to kaori.truth_states then emits
+FlowCore.emit_truthstate. No other HTTP routes. Wire field names match
+Open Core primitives. Compiler stays pure.
 """
 from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,11 +29,15 @@ from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.agent import Agent
 from kaori_flow.primitives.signal import SignalTypes
 from kaori_truth.primitives.observation import Observation, ReporterContext, Standing
-from kaori_truth.primitives.truthstate import TruthState
+from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 
 
 THIS_WEEK_CLAIM_TYPE = "ocean.coral_bleaching.v1"
 LIMINAL_ORIGIN = "https://kind-keepsake-kingdom.lovable.app"
+LIMINAL_PREVIEW_ORIGIN = (
+    "https://id-preview--3edd781a-00a9-4e58-88be-c21405c611ee.lovable.app"
+)
+LIMINAL_ORIGINS = [LIMINAL_ORIGIN, LIMINAL_PREVIEW_ORIGIN]
 CORAL_PAYLOAD_FIELDS = ("depth_meters", "bleaching_percentage")
 SOURCE_TYPE_BY_AGENT_TYPE = {
     "individual": "human",
@@ -54,16 +61,24 @@ def default_schema_path() -> str:
     return "packages/kaori-spec/schemas"
 
 
-def create_store():
-    """PostgresSignalStore when DATABASE_URL is set; in-memory otherwise."""
+def create_stores() -> Tuple[Any, Any]:
+    """Postgres stores when DATABASE_URL is set; in-memory otherwise."""
     database_url = os.environ.get("DATABASE_URL")
     if database_url:
-        from kaori_db import PostgresSignalStore
+        from kaori_db import PostgresSignalStore, PostgresTruthStateStore
 
-        store = PostgresSignalStore(database_url)
-        store.ensure_schema()
-        return store
-    return InMemorySignalStore()
+        signals = PostgresSignalStore(database_url)
+        signals.ensure_schema()
+        return signals, PostgresTruthStateStore(engine=signals.engine)
+    from kaori_db import InMemoryTruthStateStore
+
+    return InMemorySignalStore(), InMemoryTruthStateStore()
+
+
+def create_store():
+    """PostgresSignalStore when DATABASE_URL is set; in-memory otherwise."""
+    signals, _ = create_stores()
+    return signals
 
 
 def create_flow(store=None) -> FlowCore:
@@ -134,26 +149,53 @@ def agent_is_known(flow: FlowCore, agent_id: str) -> bool:
     return bool(flow.store.get_for_agent(agent_id))
 
 
-def ensure_agent_registered(flow: FlowCore, agent_id: str) -> None:
-    """Register the Bearer agent in Flow if unknown (warm-instance standing)."""
-    if not agent_is_known(flow, agent_id):
-        flow.register_agent(agent_id, role="observer")
+def persist_truth_state(truth_store: Any, state: TruthState) -> dict:
+    """Upsert full TruthState.model_dump (including evidence_refs) on truthkey."""
+    artifact = state.model_dump(mode="json")
+    truth_store.upsert(
+        truthkey=state.truthkey,
+        artifact=artifact,
+        compiled_at=state.compile_inputs.compile_time,
+    )
+    return artifact
+
+
+def emit_compile_truthstate(flow: FlowCore, state: TruthState, agent_id: str) -> None:
+    """Standing moves from TRUTHSTATE_EMITTED history, not register_agent."""
+    status = state.status.value
+    outcome = "correct" if state.status == TruthStatus.VERIFIED_TRUE else "unknown"
+    flow.emit_truthstate(
+        truthkey=state.truthkey,
+        status=status,
+        confidence=state.confidence,
+        contributors=[agent_id],
+        outcome=outcome,
+    )
 
 
 def create_app(
     *,
     flow: Optional[FlowCore] = None,
+    truth_store: Optional[Any] = None,
     supabase_url: Optional[str] = None,
     publishable_key: Optional[str] = None,
     verify_token: Optional[Callable[[str], str]] = None,
     schema_path: Optional[str] = None,
 ) -> FastAPI:
     """
-    Build the sidecar. Tests inject FlowCore + verify_token.
+    Build the sidecar. Tests inject FlowCore + verify_token + truth_store.
     Production: GET {SUPABASE_URL}/auth/v1/user with SUPABASE_PUBLISHABLE_KEY.
-    DATABASE_URL is optional (in-memory store when unset).
+    DATABASE_URL is optional (in-memory stores when unset); when set it is Cloud SQL.
     """
-    flow = flow or create_flow()
+    if flow is None:
+        signal_store, default_truth_store = create_stores()
+        flow = FlowCore(store=signal_store)
+        if truth_store is None:
+            truth_store = default_truth_store
+    elif truth_store is None:
+        from kaori_db import InMemoryTruthStateStore
+
+        truth_store = InMemoryTruthStateStore()
     url = supabase_url if supabase_url is not None else os.environ.get("SUPABASE_URL") or ""
     key = publishable_key if publishable_key is not None else os.environ.get("SUPABASE_PUBLISHABLE_KEY") or ""
     if verify_token is None:
@@ -172,11 +214,12 @@ def create_app(
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[LIMINAL_ORIGIN],
+        allow_origins=list(LIMINAL_ORIGINS),
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
     app.state.flow = flow
+    app.state.truth_store = truth_store
     app.state.verify_token = verify_token
     app.state.orchestrator = orchestrator
 
@@ -213,7 +256,6 @@ def create_app(
             raise HTTPException(status_code=400, detail="At least one observation is required")
 
         flow_core: FlowCore = request.app.state.flow
-        ensure_agent_registered(flow_core, agent_id)
         context = reporter_context_from_flow(flow_core, agent_id)
         stamped = []
         for item in raw_observations:
@@ -242,7 +284,9 @@ def create_app(
         except ValidationError as exc:
             raise HTTPException(status_code=400, detail="Invalid observation or EvidenceRef") from exc
 
-        return JSONResponse(status_code=200, content=truth_state.model_dump(mode="json"))
+        artifact = persist_truth_state(request.app.state.truth_store, truth_state)
+        emit_compile_truthstate(flow_core, truth_state, agent_id)
+        return JSONResponse(status_code=200, content=artifact)
 
     @app.get("/v1/standing/{agent_id}")
     def standing_route(
@@ -255,6 +299,17 @@ def create_app(
             raise HTTPException(status_code=404, detail="Unknown agent")
         standing = flow_core.get_standing(agent_id)
         return {"standing": standing}
+
+    @app.get("/v1/truth/{truthkey:path}")
+    def truth_route(
+        truthkey: str,
+        request: Request,
+        _caller: str = Depends(require_agent),
+    ):
+        stored = request.app.state.truth_store.get(truthkey)
+        if stored is None:
+            raise HTTPException(status_code=404, detail="Unknown truthkey")
+        return stored
 
     return app
 

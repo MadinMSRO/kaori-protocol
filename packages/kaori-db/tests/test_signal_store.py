@@ -129,8 +129,11 @@ def test_schema_sql_creates_kaori_not_public():
     sql = Path("packages/kaori-db/src/kaori_db/schema.sql").read_text()
     assert "CREATE SCHEMA IF NOT EXISTS kaori" in sql
     assert "kaori.signals" in sql
+    assert "kaori.truth_states" in sql
     assert "public." not in sql
+    assert "public.truths" not in sql
     assert "CREATE TABLE IF NOT EXISTS signals" not in sql
+    assert "CREATE TABLE IF NOT EXISTS truths" not in sql
 
 
 def test_create_store_inmemory_without_database_url(monkeypatch):
