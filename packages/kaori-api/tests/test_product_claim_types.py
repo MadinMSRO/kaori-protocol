@@ -127,9 +127,15 @@ def test_product_claim_type_compiles_200(client: TestClient, claim_type_id, trut
     body = response.json()
     assert body["claim_type"] == claim_type_id
     assert body["truthkey"]
+    for key, value in payload.items():
+        assert key in body["claim"], f"TruthState.claim missing output_schema field {key}"
+        assert body["claim"][key] == value
+    assert "severity" not in body["claim"]
+    assert "network_trust" not in body["claim"]
     fetched = client.get(f"/v1/truth/{body['truthkey']}", headers=auth_header())
     assert fetched.status_code == 200
     assert fetched.json() == body
+    assert fetched.json()["claim"] == body["claim"]
 
 
 def test_product_claim_missing_ui_schema_field_400(client: TestClient):

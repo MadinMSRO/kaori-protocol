@@ -67,6 +67,25 @@ ui_schema:
         max: 50
 
 # ----------------------------------------------------------------------------
+# Output Schema (TruthState.claim — declaration + extent only)
+# ----------------------------------------------------------------------------
+# Declaration: bleaching is present. Extent: bleaching percentage.
+# Confidence lives on TruthState.confidence, not inside claim.
+output_schema:
+  type: object
+  additionalProperties: false
+  required:
+    - bleaching_present
+    - bleaching_percentage
+  properties:
+    bleaching_present:
+      type: boolean
+    bleaching_percentage:
+      type: number
+      minimum: 0
+      maximum: 100
+
+# ----------------------------------------------------------------------------
 # Evidence Requirements
 # ----------------------------------------------------------------------------
 evidence:
