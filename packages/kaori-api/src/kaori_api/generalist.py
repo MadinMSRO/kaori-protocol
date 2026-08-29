@@ -31,7 +31,7 @@ CLIP_V1_PRETRAINED = "openai"
 
 
 class ValidatorRequest(BaseModel):
-    """Private request produced after a TruthState has been persisted."""
+    """Private request produced from accepted observations before compilation."""
 
     truthkey_id: str
     claim_type_id: str
@@ -205,8 +205,8 @@ class ClipGeneralistValidator:
     Run one CLIP generalist for claim-type relevance.
 
     Submission rules and specialist routing are deliberately absent. The model
-    sees only evidence already accepted by compile and decides whether that
-    evidence is relevant to the ClaimType context or unrelated imagery.
+    sees only evidence accepted by the API's submission checks and decides
+    whether it is relevant to the ClaimType context or unrelated imagery.
     """
 
     def __init__(

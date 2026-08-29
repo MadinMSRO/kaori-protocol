@@ -1,14 +1,12 @@
-"""Private kaori-api to kaori-generalist invocation and vote recording."""
+"""Private kaori-api to kaori-generalist invocation."""
 from __future__ import annotations
 
 import json
-import logging
 import os
 import urllib.request
 from typing import Callable, List, Optional
 from urllib.parse import urlencode
 
-from kaori_flow import FlowCore
 from kaori_truth.primitives.observation import Observation
 
 from kaori_api.generalist import (
@@ -17,9 +15,8 @@ from kaori_api.generalist import (
     validator_signing_key,
     verify_validation_vote,
 )
-from kaori_api.validation import GENERALIST_AGENT_ID, record_validation_vote
+from kaori_api.validation import GENERALIST_AGENT_ID
 
-LOGGER = logging.getLogger(__name__)
 GENERALIST_URL_ENV = "KAORI_GENERALIST_URL"
 GCP_IDENTITY_URL = (
     "http://metadata.google.internal/computeMetadata/v1/instance/"
@@ -95,36 +92,3 @@ def cloud_run_id_token(audience: str) -> str:
     request = urllib.request.Request(url, headers={"Metadata-Flavor": "Google"})
     with urllib.request.urlopen(request, timeout=10.0) as response:
         return response.read().decode("utf-8")
-
-
-def validate_persisted_truth_state(
-    *,
-    client: GeneralistClient,
-    flow: FlowCore,
-    truthkey_id: str,
-    claim_type_id: str,
-    observations: List[Observation],
-) -> None:
-    """
-    Post-persist worker: invoke the separate runner, then write its signed vote.
-
-    Errors are logged because validation must never change the compile response.
-    """
-    try:
-        vote = client.validate(
-            truthkey_id=truthkey_id,
-            claim_type_id=claim_type_id,
-            observations=observations,
-        )
-        record_validation_vote(
-            flow,
-            agent_id=vote.agent_id,
-            truthkey_id=vote.truthkey_id,
-            window_id=vote.window_id,
-            vote=vote.vote,
-            confidence=vote.confidence,
-            time=vote.timestamp,
-            signature=vote.signature,
-        )
-    except Exception:
-        LOGGER.exception("kaori-generalist failed for truthkey %s", truthkey_id)

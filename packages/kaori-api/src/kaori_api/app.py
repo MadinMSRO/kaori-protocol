@@ -8,17 +8,19 @@ Thin FastAPI surface Liminal can call this week:
 
 Wraps TruthOrchestrator.compile_observations and FlowCore.get_standing.
 Compile 200 persists TruthState to kaori.truth_states then emits
-FlowCore.emit_truthstate. CLIP validation is queued after persistence for the
-separate private generalist service. No other HTTP routes. Wire field names match
-Open Core primitives. Compiler stays pure.
+FlowCore.emit_truthstate. Before compilation, the API invokes the separate
+private generalist service and records its signed validation vote. No other HTTP
+routes. Wire field names match Open Core primitives. Compiler stays pure.
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from kaori_flow import FlowCore, InMemorySignalStore
@@ -30,17 +32,16 @@ from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 from pydantic import ValidationError
 
 from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
-from kaori_api.generalist_client import (
-    GeneralistClient,
-    validate_persisted_truth_state,
-)
+from kaori_api.generalist_client import GeneralistClient
 from kaori_api.orchestrator import TruthOrchestrator, UnknownClaimTypeError
 from kaori_api.trust_adapter import FlowTrustProvider
 from kaori_api.validation import (
     agent_is_known,
     ensure_generalist_registered,
+    record_validation_vote,
 )
 
+LOGGER = logging.getLogger(__name__)
 LIMINAL_ORIGIN = "https://kind-keepsake-kingdom.lovable.app"
 LIMINAL_PREVIEW_ORIGIN = (
     "https://id-preview--3edd781a-00a9-4e58-88be-c21405c611ee.lovable.app"
@@ -253,7 +254,6 @@ def create_app(
     @app.post("/v1/compile")
     async def compile_route(
         request: Request,
-        background_tasks: BackgroundTasks,
         agent_id: str = Depends(require_agent),
     ):
         try:
@@ -297,11 +297,49 @@ def create_app(
         validate_evidence_refs(observations)
         validate_payload_fields(observations, claim_type)
 
+        client = request.app.state.generalist_client
+        if client is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Generalist validation is unavailable; TruthState was not compiled",
+            )
+
+        try:
+            validation_vote = await run_in_threadpool(
+                client.validate,
+                truthkey_id=truth_key,
+                claim_type_id=claim_type_id,
+                observations=observations,
+            )
+            record_validation_vote(
+                flow_core,
+                agent_id=validation_vote.agent_id,
+                truthkey_id=validation_vote.truthkey_id,
+                window_id=validation_vote.window_id,
+                vote=validation_vote.vote,
+                confidence=validation_vote.confidence,
+                time=validation_vote.timestamp,
+                signature=validation_vote.signature,
+            )
+        except Exception as exc:
+            LOGGER.exception("kaori-generalist failed for truthkey %s", truth_key)
+            raise HTTPException(
+                status_code=503,
+                detail="Generalist validation failed; TruthState was not compiled",
+            ) from exc
+
+        if validation_vote.vote == "REJECT":
+            raise HTTPException(
+                status_code=422,
+                detail="Generalist rejected evidence relevance; TruthState was not compiled",
+            )
+
         try:
             truth_state: TruthState = request.app.state.orchestrator.compile_observations(
                 observations=observations,
                 truth_key=truth_key,
                 claim_type_id=claim_type_id,
+                votes=[validation_vote.model_dump(mode="json", exclude_none=True)],
             )
         except UnknownClaimTypeError:
             raise HTTPException(status_code=404, detail="Unknown claim_type_id")
@@ -314,16 +352,6 @@ def create_app(
 
         artifact = persist_truth_state(request.app.state.truth_store, truth_state)
         emit_compile_truthstate(flow_core, truth_state, agent_id)
-        client = request.app.state.generalist_client
-        if client is not None:
-            background_tasks.add_task(
-                validate_persisted_truth_state,
-                client=client,
-                flow=flow_core,
-                truthkey_id=truth_state.truthkey,
-                claim_type_id=claim_type_id,
-                observations=observations,
-            )
         return JSONResponse(status_code=200, content=artifact)
 
     @app.get("/v1/standing/{agent_id}")

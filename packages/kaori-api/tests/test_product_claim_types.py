@@ -1,17 +1,34 @@
 """Product ClaimTypes compile from on-disk YAML. Do not invent ids."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 
 from kaori_api.auth import AuthError
 from kaori_api.app import create_app
+from kaori_api.generalist import ValidationVote
 from kaori_flow import FlowCore, InMemorySignalStore
 
 
 AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"
 TOKEN = "valid-supabase-token"
+
+
+class RatifyingGeneralistClient:
+    def validate(self, *, truthkey_id, claim_type_id, observations):
+        return ValidationVote(
+            agent_id="ai:generalist_v1",
+            truthkey_id=truthkey_id,
+            window_id=f"window:{truthkey_id}",
+            vote="RATIFY",
+            confidence=0.9,
+            timestamp=datetime(2026, 1, 7, 12, 30, tzinfo=timezone.utc),
+            signature="test-generalist-signature",
+        )
+
 
 PRODUCT_CLAIMS = [
     (
@@ -109,7 +126,13 @@ def observation(claim_type: str, payload: dict) -> dict:
 @pytest.fixture
 def client() -> TestClient:
     flow = FlowCore(store=InMemorySignalStore())
-    return TestClient(create_app(flow=flow, verify_token=verify_token))
+    return TestClient(
+        create_app(
+            flow=flow,
+            verify_token=verify_token,
+            generalist_client=RatifyingGeneralistClient(),
+        )
+    )
 
 
 @pytest.mark.parametrize("claim_type_id,truth_key,payload", PRODUCT_CLAIMS)
@@ -127,6 +150,14 @@ def test_product_claim_type_compiles_200(client: TestClient, claim_type_id, trut
     body = response.json()
     assert body["claim_type"] == claim_type_id
     assert body["truthkey"]
+    if claim_type_id in {
+        "ocean.reef_recovery.v1",
+        "ocean.vessel_anomaly.v1",
+        "space.debris_track.v1",
+    }:
+        assert body["status"] == "PENDING_HUMAN_REVIEW"
+    else:
+        assert body["status"] == "PENDING"
     for key, value in payload.items():
         assert key in body["claim"], f"TruthState.claim missing output_schema field {key}"
         assert body["claim"][key] == value

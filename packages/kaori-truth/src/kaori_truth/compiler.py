@@ -279,9 +279,16 @@ def _determine_status(
     claim_type: ClaimType,
     votes: List[dict],
 ) -> tuple[TruthStatus, Optional[VerificationBasis], List[str]]:
-    """Determine truth status based on aggregate and config."""
+    """Determine truth status from validation inputs and ClaimType policy."""
     
     transparency_flags = []
+    recorded_votes = {
+        str(vote.get("vote", "")).upper()
+        for vote in votes
+        if isinstance(vote, dict)
+    }
+    if "ABSTAIN" in recorded_votes:
+        transparency_flags.append("VALIDATOR_ABSTAINED")
     
     autovalidation = claim_type.autovalidation
     ai_true_threshold = autovalidation.ai_verified_true_threshold
@@ -295,25 +302,44 @@ def _determine_status(
         transparency_flags.append("CONTRADICTION_DETECTED")
         return TruthStatus.UNDECIDED, None, transparency_flags
     
-    # Risk profile determines lane
-    risk_profile = claim_type.risk_profile
+    # ClaimType YAML determines whether compilation enters a human-gated lane.
+    config = claim_type.get_config() or {}
+    human_gating = config.get("human_gating") or {}
+    validation_flow = config.get("validation_flow") or {}
+    risk_profile = str(claim_type.risk_profile).lower()
+    required_profiles = {
+        str(profile).lower()
+        for profile in human_gating.get("required_for_risk_profiles", [])
+    }
+    validation_mode = str(validation_flow.get("mode", "auto")).lower()
+    requires_human = (
+        human_gating.get("always_require_human") is True
+        or risk_profile == "critical"
+        or risk_profile in required_profiles
+        or validation_mode in {"human_peer", "human_expert", "authority_gate"}
+    )
     
-    if risk_profile == "monitor":
-        # Monitor Lane: AI can auto-verify
-        if ai_mean >= ai_true_threshold:
-            return TruthStatus.VERIFIED_TRUE, VerificationBasis.AI_AUTOVALIDATION, transparency_flags
-        elif ai_mean <= ai_false_threshold:
-            return TruthStatus.VERIFIED_FALSE, VerificationBasis.AI_AUTOVALIDATION, transparency_flags
-        else:
-            return TruthStatus.INVESTIGATING, None, transparency_flags
-    else:
-        # Critical Lane: Require human consensus
+    if requires_human:
         if ai_mean >= ai_true_threshold:
             transparency_flags.append("AI_RECOMMENDS_TRUE")
         elif ai_mean <= ai_false_threshold:
             transparency_flags.append("AI_RECOMMENDS_FALSE")
         transparency_flags.append("AWAITING_HUMAN_CONSENSUS")
         return TruthStatus.PENDING_HUMAN_REVIEW, None, transparency_flags
+
+    # A recorded validator output means this compilation is still in the
+    # validation window. PENDING is the protocol's existing initial status;
+    # validation is a step, never a TruthStatus.
+    if recorded_votes:
+        return TruthStatus.PENDING, None, transparency_flags
+
+    # Preserve the standalone monitor-lane behavior when an orchestrator has
+    # not supplied validation votes.
+    if ai_mean >= ai_true_threshold:
+        return TruthStatus.VERIFIED_TRUE, VerificationBasis.AI_AUTOVALIDATION, transparency_flags
+    if ai_mean <= ai_false_threshold:
+        return TruthStatus.VERIFIED_FALSE, VerificationBasis.AI_AUTOVALIDATION, transparency_flags
+    return TruthStatus.INVESTIGATING, None, transparency_flags
 
 
 def _compute_confidence(

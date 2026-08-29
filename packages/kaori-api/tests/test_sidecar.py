@@ -1,6 +1,8 @@
 """Sidecar HTTP contract: /v1/compile, /v1/standing/{agent_id}, /v1/truth/{truthkey}."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -8,11 +10,12 @@ from kaori_api.app import (
     LIMINAL_ORIGIN,
     LIMINAL_ORIGINS,
     LIMINAL_PREVIEW_ORIGIN,
-    create_app,
+    create_app as create_api_app,
     reporter_context_from_flow,
     stamp_observation,
 )
 from kaori_api.auth import AuthError
+from kaori_api.generalist import ValidationVote
 from kaori_db import InMemoryTruthStateStore
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.signal import SignalTypes
@@ -22,6 +25,7 @@ AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"
 TOKEN = "valid-supabase-token"
 CORAL_CLAIM_TYPE = "ocean.coral_bleaching.v1"
+VALIDATION_TIME = datetime(2026, 1, 7, 12, 30, tzinfo=timezone.utc)
 TRUTHSTATE_FIELDS = {
     "truthkey",
     "claim_type",
@@ -34,6 +38,24 @@ TRUTHSTATE_FIELDS = {
     "observation_ids",
     "security",
 }
+
+
+class RatifyingGeneralistClient:
+    def validate(self, *, truthkey_id, claim_type_id, observations):
+        return ValidationVote(
+            agent_id="ai:generalist_v1",
+            truthkey_id=truthkey_id,
+            window_id=f"window:{truthkey_id}",
+            vote="RATIFY",
+            confidence=0.9,
+            timestamp=VALIDATION_TIME,
+            signature="test-generalist-signature",
+        )
+
+
+def create_app(**kwargs):
+    kwargs.setdefault("generalist_client", RatifyingGeneralistClient())
+    return create_api_app(**kwargs)
 
 
 def verify_token(token: str) -> str:
@@ -348,7 +370,9 @@ def test_compile_persists_truthstate_and_standing_from_emit_not_register():
 
     registered = flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)
     assert AGENT_ID not in {s.object_id for s in registered}
-    assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
+    validation_votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
+    assert len(validation_votes) == 1
+    assert validation_votes[0].payload["vote"] == "RATIFY"
     emitted = flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED)
     assert len(emitted) == 1
     signal = emitted[0]

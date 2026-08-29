@@ -1,4 +1,4 @@
-"""CPU CLIP generalist and post-persist vote integration."""
+"""CPU CLIP generalist and validate-before-compile integration."""
 from __future__ import annotations
 
 import io
@@ -20,6 +20,7 @@ from kaori_api.generalist import (
 )
 from kaori_api.generalist_app import create_generalist_app
 from kaori_api.generalist_client import GeneralistClient
+from kaori_db import InMemoryTruthStateStore
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.signal import SignalTypes
 from kaori_truth.primitives.evidence import EvidenceRef
@@ -229,6 +230,28 @@ class LocalGeneralistClient:
         )
 
 
+class StaticVoteGeneralistClient:
+    def __init__(self, vote: str, confidence: float | None = None):
+        self.vote = vote
+        self.confidence = confidence
+
+    def validate(self, *, truthkey_id, claim_type_id, observations) -> ValidationVote:
+        return ValidationVote(
+            agent_id="ai:generalist_v1",
+            truthkey_id=truthkey_id,
+            window_id=f"window:{truthkey_id}",
+            vote=self.vote,
+            confidence=self.confidence,
+            timestamp=datetime(2026, 1, 7, 12, 30, tzinfo=timezone.utc),
+            signature="test-generalist-signature",
+        )
+
+
+class FailingGeneralistClient:
+    def validate(self, **_kwargs):
+        raise OSError("generalist unavailable")
+
+
 def test_relevant_coral_evidence_ratifies_as_generalist():
     clip = FakeClipGeneralist([0.94, 0.90])
     generalist = ClipGeneralistValidator(
@@ -267,11 +290,13 @@ def test_relevant_coral_evidence_ratifies_as_generalist():
     assert votes[0].signature
 
 
-def test_unrelated_image_rejects_and_status_stays_pending_human_review():
+def test_unrelated_image_rejects_before_compile_and_records_vote():
     flow = FlowCore(store=InMemorySignalStore())
+    truth_store = InMemoryTruthStateStore()
     client = TestClient(
         create_app(
             flow=flow,
+            truth_store=truth_store,
             verify_token=verify_token,
             generalist_client=LocalGeneralistClient(validator([0.12, 0.18])),
         )
@@ -279,13 +304,115 @@ def test_unrelated_image_rejects_and_status_stays_pending_human_review():
 
     response = client.post("/v1/compile", json=compile_body(), headers=auth_header())
 
-    assert response.status_code == 200, response.text
-    assert response.json()["status"] == "PENDING_HUMAN_REVIEW"
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == (
+        "Generalist rejected evidence relevance; TruthState was not compiled"
+    )
     votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
     assert len(votes) == 1
     assert votes[0].agent_id == "ai:generalist_v1"
     assert votes[0].payload["vote"] == "REJECT"
     assert votes[0].payload["confidence"] == pytest.approx(0.15)
+    assert truth_store.get(TRUTHKEY) is None
+    assert flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED) == []
+
+
+def test_abstain_records_vote_then_compiles_with_transparency():
+    flow = FlowCore(store=InMemorySignalStore())
+    client = TestClient(
+        create_app(
+            flow=flow,
+            verify_token=verify_token,
+            generalist_client=StaticVoteGeneralistClient("ABSTAIN"),
+        )
+    )
+
+    response = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "PENDING_HUMAN_REVIEW"
+    assert "VALIDATOR_ABSTAINED" in response.json()["transparency_flags"]
+    votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
+    assert len(votes) == 1
+    assert votes[0].payload["vote"] == "ABSTAIN"
+
+
+def test_generalist_failure_stops_before_compile():
+    flow = FlowCore(store=InMemorySignalStore())
+    truth_store = InMemoryTruthStateStore()
+    client = TestClient(
+        create_app(
+            flow=flow,
+            truth_store=truth_store,
+            verify_token=verify_token,
+            generalist_client=FailingGeneralistClient(),
+        )
+    )
+
+    response = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "Generalist validation failed; TruthState was not compiled"
+    )
+    assert truth_store.get(TRUTHKEY) is None
+    assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
+    assert flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED) == []
+
+
+def test_missing_generalist_configuration_stops_before_compile(monkeypatch):
+    monkeypatch.delenv("KAORI_GENERALIST_URL", raising=False)
+    flow = FlowCore(store=InMemorySignalStore())
+    truth_store = InMemoryTruthStateStore()
+    client = TestClient(
+        create_app(
+            flow=flow,
+            truth_store=truth_store,
+            verify_token=verify_token,
+        )
+    )
+
+    response = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "Generalist validation is unavailable; TruthState was not compiled"
+    )
+    assert truth_store.get(TRUTHKEY) is None
+
+
+def test_vote_is_recorded_before_compiler_runs(monkeypatch):
+    flow = FlowCore(store=InMemorySignalStore())
+    truth_store = InMemoryTruthStateStore()
+    application = create_app(
+        flow=flow,
+        truth_store=truth_store,
+        verify_token=verify_token,
+        generalist_client=StaticVoteGeneralistClient("RATIFY", 0.9),
+    )
+    compile_observations = application.state.orchestrator.compile_observations
+
+    def assert_order_then_compile(*args, **kwargs):
+        votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
+        assert len(votes) == 1
+        assert votes[0].payload["vote"] == "RATIFY"
+        assert truth_store.get(TRUTHKEY) is None
+        assert flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED) == []
+        return compile_observations(*args, **kwargs)
+
+    monkeypatch.setattr(
+        application.state.orchestrator,
+        "compile_observations",
+        assert_order_then_compile,
+    )
+
+    response = TestClient(application).post(
+        "/v1/compile",
+        json=compile_body(),
+        headers=auth_header(),
+    )
+
+    assert response.status_code == 200, response.text
 
 
 def test_generalist_signature_covers_flow_spec_payload():
@@ -376,7 +503,7 @@ def test_prompt_context_falls_back_to_claim_topic_display():
     assert threshold == pytest.approx(0.85)
 
 
-def test_non_coral_compile_gets_post_persist_generalist_vote():
+def test_non_coral_compile_gets_precompile_generalist_vote():
     clip = FakeClipGeneralist([0.91])
     generalist = ClipGeneralistValidator(
         schema_root=str(SCHEMA_ROOT),
@@ -420,6 +547,7 @@ def test_non_coral_compile_gets_post_persist_generalist_vote():
     )
 
     assert response.status_code == 200, response.text
+    assert response.json()["status"] == "PENDING"
     assert clip.calls == [
         {
             "count": 1,

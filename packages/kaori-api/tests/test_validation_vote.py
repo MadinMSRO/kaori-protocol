@@ -9,6 +9,7 @@ import yaml
 from fastapi.testclient import TestClient
 from kaori_api.app import create_app
 from kaori_api.auth import AuthError
+from kaori_api.generalist import ValidationVote
 from kaori_api.validation import (
     GENERALIST_AGENT_ID,
     ensure_generalist_registered,
@@ -22,6 +23,19 @@ AGENT_ID = f"user:{AUTH_USER_ID}"
 TOKEN = "valid-supabase-token"
 CORAL_CLAIM_TYPE = "ocean.coral_bleaching.v1"
 CORAL_YAML = Path("packages/kaori-spec/schemas/ocean/coral_bleaching_v1.yaml")
+
+
+class RatifyingGeneralistClient:
+    def validate(self, *, truthkey_id, claim_type_id, observations):
+        return ValidationVote(
+            agent_id=GENERALIST_AGENT_ID,
+            truthkey_id=truthkey_id,
+            window_id=f"window:{truthkey_id}",
+            vote="RATIFY",
+            confidence=0.9,
+            timestamp=datetime(2026, 1, 7, 12, 30, tzinfo=timezone.utc),
+            signature="test-generalist-signature",
+        )
 
 
 def verify_token(token: str) -> str:
@@ -167,17 +181,31 @@ def test_record_validation_vote_rejects_bad_vote_and_missing_signature():
         )
 
 
-def test_compile_does_not_record_validation_vote():
+def test_compile_records_generalist_validation_vote():
     flow = FlowCore(store=InMemorySignalStore())
-    client = TestClient(create_app(flow=flow, verify_token=verify_token))
+    client = TestClient(
+        create_app(
+            flow=flow,
+            verify_token=verify_token,
+            generalist_client=RatifyingGeneralistClient(),
+        )
+    )
     response = client.post("/v1/compile", json=coral_compile_body(), headers=auth_header())
     assert response.status_code == 200, response.text
-    assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
+    votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
+    assert len(votes) == 1
+    assert votes[0].payload["vote"] == "RATIFY"
 
 
 def test_generalist_ratify_does_not_make_coral_verified_true():
     flow = FlowCore(store=InMemorySignalStore())
-    client = TestClient(create_app(flow=flow, verify_token=verify_token))
+    client = TestClient(
+        create_app(
+            flow=flow,
+            verify_token=verify_token,
+            generalist_client=RatifyingGeneralistClient(),
+        )
+    )
     truth_key = coral_compile_body()["truth_key"]
     record_validation_vote(
         flow,
@@ -193,7 +221,7 @@ def test_generalist_ratify_does_not_make_coral_verified_true():
     body = response.json()
     assert body["status"] != "VERIFIED_TRUE"
     assert body["claim_type"] == CORAL_CLAIM_TYPE
-    assert len(flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)) == 1
+    assert len(flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)) == 2
 
 
 def test_no_new_http_routes_for_validation_vote():
