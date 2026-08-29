@@ -67,10 +67,36 @@ standing = flow.get_standing("user:amira")
 
 ### Pattern B: Sidecar Service
 
-Kaori runs as a separate service with REST/gRPC API.
+Kaori runs as a separate service with a REST API. The Open Core sidecar this week is FastAPI in `kaori-api`:
 
 ```
-Your App ──HTTP──▶ Kaori Service ──▶ Storage
+Liminal ──HTTP──▶ kaori_api.app ──▶ FlowCore(store=PostgresSignalStore)
+                         │
+                         └── TruthOrchestrator.compile_observations
+```
+
+Routes (and only these):
+
+| Method | Path | Wraps |
+|--------|------|--------|
+| `POST` | `/v1/compile` | `TruthOrchestrator.compile_observations` |
+| `GET` | `/v1/standing/{agent_id}` | `FlowCore.get_standing` |
+
+Auth: `Authorization: Bearer <Supabase JWT>`. Agent id is `user:{auth.users.id}`. Never `profiles.id`.
+
+Identity:
+
+```python
+def get_agent_id(user) -> str:
+    return f"user:{user.id}"  # Supabase auth user.id
+```
+
+Local run (you provide PostgreSQL via `DATABASE_URL`):
+
+```bash
+export DATABASE_URL=postgresql://user:pass@localhost:5432/kaori
+export SUPABASE_JWT_SECRET=your-supabase-jwt-secret
+uvicorn kaori_api.app:app --port 8000
 ```
 
 **Best for:** Polyglot environments, microservices.
