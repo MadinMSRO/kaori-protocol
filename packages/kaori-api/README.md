@@ -40,4 +40,34 @@ When `DATABASE_URL` is set, `FlowCore` is constructed with `PostgresSignalStore`
 }
 ```
 
-Observation uses `evidence_refs` (`EvidenceRef[]`). EvidenceRef requires `uri` and `sha256` (`mime_type`, `bytes_size`, `capture_time` optional). This week payload is `{depth_meters, bleaching_percentage}`. The server stamps `reporter_id` from the Bearer agent (`user:{auth.users.id}`) and `reporter_context` from Flow — the client must not mint trust. 200 TruthState uses `truthkey` (not `truth_key`); `TruthState.evidence_refs` is `string[]`. No upload route.
+Observation uses `evidence_refs` (`EvidenceRef[]`). EvidenceRef requires `uri` and `sha256` (`mime_type`, `bytes_size`, `capture_time` optional). This week payload is `{depth_meters, bleaching_percentage}`. The server stamps `reporter_id` from the Bearer agent (`user:{auth.users.id}`) and `reporter_context` from Flow — the client must not mint trust. 200 TruthState uses `truthkey` (not `truth_key`); `TruthState.evidence_refs` is `string[]`. `EvidenceRef.uri` is a string pointer (Supabase `file_url` this week). No upload route and no GCS upload.
+
+## Container image (build only)
+
+Protocol runtime is GCP project `msro-kaori-sandbox` (`asia-southeast1`). `msro-udfi-sandbox` is off this product — do not build, tag, or push for that project.
+
+This PR ships a Dockerfile. It does **not** deploy, enable APIs, or create Artifact Registry / Cloud Run / Cloud SQL.
+
+Future Cloud Run service name: `kaori-api`  
+Future image (do not create the registry in this PR):
+
+`asia-southeast1-docker.pkg.dev/msro-kaori-sandbox/kaori/kaori-api`
+
+Build locally:
+
+```bash
+docker build -t kaori-api:local .
+# later, when Artifact Registry exists in msro-kaori-sandbox:
+# docker tag kaori-api:local asia-southeast1-docker.pkg.dev/msro-kaori-sandbox/kaori/kaori-api:latest
+```
+
+The image runs `uvicorn kaori_api.app:app` (two routes only). ClaimType YAML is baked from `packages/kaori-spec/schemas` (`KAORI_SCHEMA_PATH`). Supply `DATABASE_URL` and `SUPABASE_JWT_SECRET` at runtime. Cloud Run sets `PORT` (image default 8080).
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e SUPABASE_JWT_SECRET=your-supabase-jwt-secret \
+  -e DATABASE_URL=postgresql://user:pass@host:5432/kaori \
+  kaori-api:local
+```
+
+Do not `gcloud run deploy` from this repo in this PR.
