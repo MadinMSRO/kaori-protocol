@@ -8,7 +8,8 @@ Thin FastAPI surface Liminal can call this week:
 
 Wraps TruthOrchestrator.compile_observations and FlowCore.get_standing.
 Compile 200 persists TruthState to kaori.truth_states then emits
-FlowCore.emit_truthstate. No other HTTP routes. Wire field names match
+FlowCore.emit_truthstate. Coral validation is queued after persistence for the
+separate private bouncer service. No other HTTP routes. Wire field names match
 Open Core primitives. Compiler stays pure.
 """
 from __future__ import annotations
@@ -17,12 +18,17 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
+from kaori_api.bouncer import CORAL_CLAIM_TYPE
+from kaori_api.bouncer_client import (
+    BouncerClient,
+    validate_persisted_truth_state,
+)
 from kaori_api.orchestrator import TruthOrchestrator, UnknownClaimTypeError
 from kaori_api.trust_adapter import FlowTrustProvider
 from kaori_api.validation import (
@@ -191,6 +197,7 @@ def create_app(
     publishable_key: Optional[str] = None,
     verify_token: Optional[Callable[[str], str]] = None,
     schema_path: Optional[str] = None,
+    bouncer_client: Optional[BouncerClient] = None,
 ) -> FastAPI:
     """
     Build the sidecar. Tests inject FlowCore + verify_token + truth_store.
@@ -215,6 +222,8 @@ def create_app(
         trust_provider=FlowTrustProvider(flow),
         schema_path=schema_path or default_schema_path(),
     )
+    if bouncer_client is None:
+        bouncer_client = BouncerClient.from_env()
     ensure_bouncer_registered(flow)
 
     app = FastAPI(
@@ -233,6 +242,7 @@ def create_app(
     app.state.truth_store = truth_store
     app.state.verify_token = verify_token
     app.state.orchestrator = orchestrator
+    app.state.bouncer_client = bouncer_client
 
     def require_agent(request: Request) -> str:
         try:
@@ -244,6 +254,7 @@ def create_app(
     @app.post("/v1/compile")
     async def compile_route(
         request: Request,
+        background_tasks: BackgroundTasks,
         agent_id: str = Depends(require_agent),
     ):
         try:
@@ -302,6 +313,16 @@ def create_app(
 
         artifact = persist_truth_state(request.app.state.truth_store, truth_state)
         emit_compile_truthstate(flow_core, truth_state, agent_id)
+        client = request.app.state.bouncer_client
+        if client is not None and claim_type_id == CORAL_CLAIM_TYPE:
+            background_tasks.add_task(
+                validate_persisted_truth_state,
+                client=client,
+                flow=flow_core,
+                truthkey_id=truth_state.truthkey,
+                claim_type_id=claim_type_id,
+                observations=observations,
+            )
         return JSONResponse(status_code=200, content=artifact)
 
     @app.get("/v1/standing/{agent_id}")

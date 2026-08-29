@@ -10,7 +10,11 @@ This week the HTTP surface is only:
 
 All three routes require `Authorization: Bearer <token>`. The sidecar verifies with `GET {SUPABASE_URL}/auth/v1/user` (`Authorization` + `apikey: SUPABASE_PUBLISHABLE_KEY`). 200 + `user.id` → agent_id `user:{id}`. Non-200 → 401. No JWT secret. Never accepts or emits `profiles.id`.
 
-Compile 200 upserts the full `TruthState.model_dump` (including `evidence_refs`) into `kaori.truth_states`, then calls `FlowCore.emit_truthstate` with the Bearer agent as the sole contributor. Standing moves from that signal history — compile does **not** call `register_agent` for the Bearer agent. On startup the sidecar registers Flow agent `ai:bouncer_v1` (role `validator`) if unknown (idempotent). Internal helper `record_validation_vote` emits `SignalTypes.VALIDATION_VOTE` into the existing SignalStore (FLOW_SPEC ValidationSignal payload). It is not an HTTP route and is not called from compile. Kaori does not execute a model. Coral (`ocean.coral_bleaching.v1`) still has `always_require_human: true`; a recorded bouncer vote does not set TruthState status to `VERIFIED_TRUE`. `GET /v1/standing/{agent_id}` already reads Flow; there are no Flow HTTP routes.
+Compile 200 upserts the full `TruthState.model_dump` (including `evidence_refs`) into `kaori.truth_states`, then calls `FlowCore.emit_truthstate` with the Bearer agent as the sole contributor. Standing moves from that signal history — compile does **not** call `register_agent` for the Bearer agent. On startup the sidecar registers Flow agent `ai:bouncer_v1` (role `validator`) if unknown (idempotent).
+
+For `ocean.coral_bleaching.v1`, the API then queues a post-response call to the separate IAM-protected `kaori-bouncer` Cloud Run service. The compiler remains pure and never executes a validator or writes a `VALIDATION_VOTE`. The bouncer runs the five checks declared in the coral YAML, signs a FLOW_SPEC `ValidationSignal` as `ai:bouncer_v1`, and returns it. Only `kaori-api` calls `record_validation_vote`, so it remains the single SignalStore writer. Other ClaimTypes do not invoke the bouncer.
+
+The runner fetches `gs://` evidence with its service account. Image evidence must decode; other evidence must contain non-empty bytes. Duplicate content hashes, implausible coordinates, and depth/TruthKey inconsistency reject. It does not call a generalist, specialist, LLM, Vertex AI, or GPU. Coral still has `always_require_human: true`; RATIFY and REJECT both leave the persisted TruthState at `PENDING_HUMAN_REVIEW`.
 
 CORS allows origins `https://kind-keepsake-kingdom.lovable.app` (live) and `https://id-preview--3edd781a-00a9-4e58-88be-c21405c611ee.lovable.app` (preview), methods `GET`, `POST`, `OPTIONS`, and headers `Authorization` and `Content-Type`. No extra routes.
 
@@ -55,26 +59,20 @@ Observation uses `evidence_refs` (`EvidenceRef[]`). EvidenceRef requires `uri` a
 
 After persist, emit uses `outcome="correct"` only when `status` is `VERIFIED_TRUE`; otherwise `"unknown"`.
 
-## Container image (build only)
+## Container images
 
 Protocol runtime is GCP project `msro-kaori-sandbox` (`asia-southeast1`). `msro-udfi-sandbox` is off this product — do not build, tag, or push for that project.
 
-This PR ships a Dockerfile. It does **not** deploy, enable APIs, or create Artifact Registry / Cloud Run / Cloud SQL.
-
-Future Cloud Run service name: `kaori-api`  
-Future image (do not create the registry in this PR):
-
-`asia-southeast1-docker.pkg.dev/msro-kaori-sandbox/kaori/kaori-api`
+`Dockerfile` builds `kaori-api`; `Dockerfile.bouncer` builds the private runner. The existing Artifact Registry repository is `asia-southeast1-docker.pkg.dev/msro-kaori-sandbox/kaori`.
 
 Build locally:
 
 ```bash
 docker build -t kaori-api:local .
-# later, when Artifact Registry exists in msro-kaori-sandbox:
-# docker tag kaori-api:local asia-southeast1-docker.pkg.dev/msro-kaori-sandbox/kaori/kaori-api:latest
+docker build -f Dockerfile.bouncer -t kaori-bouncer:local .
 ```
 
-The image runs `uvicorn kaori_api.app:app` (three routes only). ClaimType YAML is baked from `packages/kaori-spec/schemas` (`KAORI_SCHEMA_PATH`). Supply `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` at runtime. `DATABASE_URL` is optional (Cloud SQL when set). Cloud Run sets `PORT` (image default 8080).
+The API image runs `uvicorn kaori_api.app:app` (three public routes only). The bouncer image runs `uvicorn kaori_api.bouncer_app:app`; Cloud Run IAM protects its sole internal POST endpoint. ClaimType YAML is baked into both images. Cloud Run sets `PORT` (image default 8080).
 
 ```bash
 docker run --rm -p 8080:8080 \
@@ -83,4 +81,81 @@ docker run --rm -p 8080:8080 \
   kaori-api:local
 ```
 
-Do not `gcloud run deploy` from this repo in this PR.
+## Cloud Run deployment
+
+These commands deploy both revisions in `msro-kaori-sandbox` / `asia-southeast1`, preserve the API's existing Cloud SQL configuration, and grant invocation only to the service account already used by `kaori-api`.
+
+```bash
+export PROJECT=msro-kaori-sandbox
+export REGION=asia-southeast1
+export REPOSITORY=kaori
+export BOUNCER_SERVICE=kaori-bouncer
+export BOUNCER_SA="kaori-bouncer@${PROJECT}.iam.gserviceaccount.com"
+export PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
+export API_SA="$(gcloud run services describe kaori-api --region="$REGION" --project="$PROJECT" --format='value(spec.template.spec.serviceAccountName)')"
+test -n "$API_SA" || export API_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+gcloud iam service-accounts create kaori-bouncer \
+  --display-name="Kaori V4 bouncer runner" \
+  --project="$PROJECT"
+
+openssl rand -hex 32 | gcloud secrets create kaori-bouncer-signing-key \
+  --data-file=- \
+  --replication-policy=automatic \
+  --project="$PROJECT"
+
+gcloud secrets add-iam-policy-binding kaori-bouncer-signing-key \
+  --member="serviceAccount:${BOUNCER_SA}" \
+  --role=roles/secretmanager.secretAccessor \
+  --project="$PROJECT"
+gcloud secrets add-iam-policy-binding kaori-bouncer-signing-key \
+  --member="serviceAccount:${API_SA}" \
+  --role=roles/secretmanager.secretAccessor \
+  --project="$PROJECT"
+gcloud storage buckets add-iam-policy-binding gs://kaori-evidence \
+  --member="serviceAccount:${BOUNCER_SA}" \
+  --role=roles/storage.objectViewer \
+  --project="$PROJECT"
+
+export TAG="$(git rev-parse --short HEAD)"
+export BOUNCER_IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/kaori-bouncer:${TAG}"
+export API_IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/kaori-api:${TAG}"
+
+gcloud builds submit . \
+  --config=cloudbuild.bouncer.yaml \
+  --substitutions="_IMAGE=${BOUNCER_IMAGE}" \
+  --project="$PROJECT"
+gcloud builds submit . \
+  --tag="$API_IMAGE" \
+  --project="$PROJECT"
+
+gcloud run deploy "$BOUNCER_SERVICE" \
+  --image="$BOUNCER_IMAGE" \
+  --region="$REGION" \
+  --service-account="$BOUNCER_SA" \
+  --set-secrets=KAORI_BOUNCER_SIGNING_KEY=kaori-bouncer-signing-key:latest \
+  --no-allow-unauthenticated \
+  --project="$PROJECT"
+
+export BOUNCER_URL="$(gcloud run services describe "$BOUNCER_SERVICE" --region="$REGION" --project="$PROJECT" --format='value(status.url)')"
+gcloud run services add-iam-policy-binding "$BOUNCER_SERVICE" \
+  --region="$REGION" \
+  --member="serviceAccount:${API_SA}" \
+  --role=roles/run.invoker \
+  --project="$PROJECT"
+
+gcloud run services update kaori-api \
+  --image="$API_IMAGE" \
+  --region="$REGION" \
+  --update-env-vars="KAORI_BOUNCER_URL=${BOUNCER_URL}" \
+  --update-secrets=KAORI_BOUNCER_SIGNING_KEY=kaori-bouncer-signing-key:latest \
+  --project="$PROJECT"
+```
+
+If the service account or secret already exists, skip its create command; add a rotated key with:
+
+```bash
+openssl rand -hex 32 | gcloud secrets versions add kaori-bouncer-signing-key \
+  --data-file=- \
+  --project=msro-kaori-sandbox
+```

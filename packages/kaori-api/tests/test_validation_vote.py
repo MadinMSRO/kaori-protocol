@@ -1,6 +1,7 @@
 """V4 first slice: bouncer agent + record_validation_vote. No new routes, no model."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -88,6 +89,7 @@ def test_record_validation_vote_emits_flow_spec_payload():
     flow = FlowCore(store=InMemorySignalStore())
     ensure_bouncer_registered(flow)
     truthkey = "ocean:coral_bleaching:h3:89b12c6b6ffffff:underwater:2026-01-07T00:00Z"
+    emitted_at = datetime(2026, 1, 7, 12, 30, tzinfo=timezone.utc)
     signal = record_validation_vote(
         flow,
         agent_id=BOUNCER_AGENT_ID,
@@ -96,6 +98,7 @@ def test_record_validation_vote_emits_flow_spec_payload():
         vote="RATIFY",
         signature="sig-bouncer-1",
         confidence=0.91,
+        time=emitted_at,
     )
     assert signal.signal_type == SignalTypes.VALIDATION_VOTE
     assert signal.object_id == truthkey
@@ -106,6 +109,7 @@ def test_record_validation_vote_emits_flow_spec_payload():
         "truthkey_id": truthkey,
         "window_id": "window:coral-1",
         "vote": "RATIFY",
+        "timestamp": "2026-01-07T12:30:00Z",
         "signature": "sig-bouncer-1",
         "confidence": 0.91,
     }

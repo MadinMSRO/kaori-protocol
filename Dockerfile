@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir \
         "fastapi>=0.100.0" \
         "uvicorn[standard]>=0.22.0" \
         "pydantic>=2.0.0" \
+        "Pillow>=12.3.0" \
         "sqlalchemy>=2.0.0" \
         "pyyaml>=6.0" \
         "psycopg2-binary>=2.9.0" \

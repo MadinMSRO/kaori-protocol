@@ -1,8 +1,8 @@
 """
 Internal Flow helpers for V4 validation signals.
 
-Kaori records signed validator output. It does not execute a model.
-record_validation_vote is not an HTTP route and is not called from compile.
+Kaori records signed validator output. It does not execute validators inside
+the compiler. record_validation_vote is not an HTTP route.
 """
 from __future__ import annotations
 
@@ -59,6 +59,7 @@ def record_validation_vote(
         "truthkey_id": truthkey_id,
         "window_id": window_id,
         "vote": vote,
+        "timestamp": emitted_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
         "signature": signature,
     }
     if confidence is not None:

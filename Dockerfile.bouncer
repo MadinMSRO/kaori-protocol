@@ -1,0 +1,28 @@
+# Private deterministic V4 bouncer runner for Cloud Run service `kaori-bouncer`.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY packages/kaori-truth/src/kaori_truth /app/kaori_truth
+COPY packages/kaori-flow/src/kaori_flow /app/kaori_flow
+COPY packages/kaori-api/src/kaori_api /app/kaori_api
+COPY packages/kaori-spec/schemas /app/packages/kaori-spec/schemas
+
+RUN pip install --no-cache-dir \
+        "fastapi>=0.100.0" \
+        "uvicorn[standard]>=0.22.0" \
+        "pydantic>=2.0.0" \
+        "pyyaml>=6.0" \
+        "Pillow>=12.3.0" \
+    && useradd --create-home --uid 10001 kaori \
+    && chown -R kaori:kaori /app
+
+ENV PYTHONPATH=/app
+ENV KAORI_SCHEMA_PATH=/app/packages/kaori-spec/schemas
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8080
+
+USER kaori
+
+CMD ["sh", "-c", "uvicorn kaori_api.bouncer_app:app --host 0.0.0.0 --port ${PORT:-8080}"]
