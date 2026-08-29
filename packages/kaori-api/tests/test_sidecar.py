@@ -5,21 +5,21 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-
 from kaori_api.app import (
     LIMINAL_ORIGIN,
     LIMINAL_ORIGINS,
     LIMINAL_PREVIEW_ORIGIN,
-    create_app as create_api_app,
     reporter_context_from_flow,
     stamp_observation,
+)
+from kaori_api.app import (
+    create_app as create_api_app,
 )
 from kaori_api.auth import AuthError
 from kaori_api.generalist import ValidationVote
 from kaori_db import InMemoryTruthStateStore
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.signal import SignalTypes
-
 
 AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"

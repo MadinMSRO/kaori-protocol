@@ -16,28 +16,20 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import List, Optional
-from uuid import UUID
 
-from kaori_truth.canonical import canonical_hash
-from kaori_truth.canonical.datetime import canonical_datetime
+from kaori_truth.claim_derivation import ClaimDerivationError, derive_claim_payload
 from kaori_truth.primitives.claimtype import ClaimType
 from kaori_truth.primitives.observation import Observation
-from kaori_truth.primitives.truthkey import build_truthkey, TruthKey
 from kaori_truth.primitives.truthstate import (
+    CompileInputs,
+    ConfidenceBreakdown,
+    SecurityBlock,
     TruthState,
     TruthStatus,
     VerificationBasis,
-    CompileInputs,
-    SecurityBlock,
-    ConfidenceBreakdown,
-    ConsensusRecord,
 )
 from kaori_truth.trust_snapshot import TrustSnapshot
-from kaori_truth.confidence import compute_confidence
-from kaori_truth.consensus import compute_consensus
-from kaori_truth.validation import validate_claim_payload, SchemaValidationError
-from kaori_truth.claim_derivation import derive_claim_payload, ClaimDerivationError
-
+from kaori_truth.validation import SchemaValidationError, validate_claim_payload
 
 # Compiler version - bump when algorithm changes
 COMPILER_VERSION = "1.0.0"
