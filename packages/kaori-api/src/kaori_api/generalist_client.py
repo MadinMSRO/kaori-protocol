@@ -97,18 +97,30 @@ def cloud_run_id_token(audience: str) -> str:
         return response.read().decode("utf-8")
 
 
-def validate_persisted_truth_state(
+def vote_as_compiler_record(vote: ValidationVote) -> dict:
+    """Compiler input: FLOW_SPEC vote fields. Not a TruthStatus."""
+    record = {
+        "agent_id": vote.agent_id,
+        "vote": vote.vote,
+        "vote_type": vote.vote,
+        "confidence": vote.confidence,
+    }
+    return {key: value for key, value in record.items() if value is not None}
+
+
+def validate_and_record_vote(
     *,
     client: GeneralistClient,
     flow: FlowCore,
     truthkey_id: str,
     claim_type_id: str,
     observations: List[Observation],
-) -> None:
+) -> Optional[ValidationVote]:
     """
-    Post-persist worker: invoke the separate runner, then write its signed vote.
+    Pre-compile step: invoke the private generalist, then write its signed vote.
 
-    Errors are logged because validation must never change the compile response.
+    Validation is a step, not a status. Errors are logged; the caller still
+    compiles. Returns the vote so compile_truth_state can use recorded votes.
     """
     try:
         vote = client.validate(
@@ -126,5 +138,25 @@ def validate_persisted_truth_state(
             time=vote.timestamp,
             signature=vote.signature,
         )
+        return vote
     except Exception:
         LOGGER.exception("kaori-generalist failed for truthkey %s", truthkey_id)
+        return None
+
+
+def validate_persisted_truth_state(
+    *,
+    client: GeneralistClient,
+    flow: FlowCore,
+    truthkey_id: str,
+    claim_type_id: str,
+    observations: List[Observation],
+) -> Optional[ValidationVote]:
+    """Backward-compatible name. Validation now runs before compile."""
+    return validate_and_record_vote(
+        client=client,
+        flow=flow,
+        truthkey_id=truthkey_id,
+        claim_type_id=claim_type_id,
+        observations=observations,
+    )

@@ -10,8 +10,10 @@ Kaori's core integrity guarantee that TruthState is a pure function
 of Bronze-layer observations.
 
 TruthState.claim is filled ONLY from ClaimType.output_schema properties.
-The compiler MUST NOT invent keys, MUST NOT read ui_schema, and MUST NOT
-guess a generic {severity, network_trust} payload when output_schema is absent.
+ui_schema is read only to decide whether a missing required boolean is an
+observer field (do not invent it) versus a derived declaration. The
+compiler MUST NOT copy ui_schema-only keys into claim and MUST NOT guess a
+generic {severity, network_trust} payload when output_schema is absent.
 """
 from __future__ import annotations
 
@@ -51,10 +53,14 @@ def derive_claim_payload(
     External claim payloads are NOT accepted by default.
 
     Derivation:
-    1. Require ClaimType.output_schema.properties (no ui_schema fallback)
-    2. For each property, power-weight values from observation payloads
-       (numbers averaged, booleans/enums consensus, arrays/objects highest power)
-    3. Emit only those property keys — never invented extras
+    1. Require ClaimType.output_schema.properties (no ui_schema claim fallback)
+    2. For each property, copy/aggregate values from observation payloads
+       when present (numbers averaged, booleans/enums consensus,
+       arrays/objects highest power)
+    3. For a required output_schema boolean that is absent from the payload
+       and is not a ui_schema field, derive it from numeric output_schema
+       properties that ARE in the payload (present and != 0 → true, else false)
+    4. Emit only output_schema property keys — never invented extras
 
     Args:
         observations: List of Bronze-layer observations
@@ -94,7 +100,63 @@ def derive_claim_payload(
         if value is not _MISSING:
             claim[key] = value
 
+    _fill_derived_required_booleans(claim, output_schema, properties, claim_type)
+
     return canonical_dict(claim)
+
+
+def _ui_schema_field_names(claim_type: "ClaimType") -> set:
+    """Observer payload names from ClaimType ui_schema. Not claim keys."""
+    config = claim_type.get_config() if hasattr(claim_type, "get_config") else {}
+    fields = ((config or {}).get("ui_schema") or {}).get("fields") or []
+    names: set = set()
+    for field in fields:
+        if isinstance(field, dict) and field.get("name"):
+            names.add(str(field["name"]))
+    return names
+
+
+def _boolean_from_numeric_outputs(
+    properties: Dict[str, Any],
+    claim: Dict[str, Any],
+) -> bool:
+    """present and != 0 → true; missing or all-zero numerics → false."""
+    for key, prop_schema in properties.items():
+        if not isinstance(prop_schema, dict):
+            continue
+        if prop_schema.get("type") not in ("number", "integer"):
+            continue
+        if key not in claim:
+            continue
+        value = claim[key]
+        if _is_number(value) and value != 0:
+            return True
+    return False
+
+
+def _fill_derived_required_booleans(
+    claim: Dict[str, Any],
+    output_schema: Dict[str, Any],
+    properties: Dict[str, Any],
+    claim_type: "ClaimType",
+) -> None:
+    """
+    Derive required output_schema booleans that the observer did not send
+    and that are not ui_schema fields, from numeric output keys in claim.
+    """
+    required = output_schema.get("required") or []
+    if not isinstance(required, list):
+        return
+    ui_fields = _ui_schema_field_names(claim_type)
+    for key in required:
+        if key in claim:
+            continue
+        if key in ui_fields:
+            continue
+        prop_schema = properties.get(key)
+        if not isinstance(prop_schema, dict) or prop_schema.get("type") != "boolean":
+            continue
+        claim[key] = _boolean_from_numeric_outputs(properties, claim)
 
 
 def _weighted_observations(

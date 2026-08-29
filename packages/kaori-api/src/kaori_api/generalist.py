@@ -31,7 +31,7 @@ CLIP_V1_PRETRAINED = "openai"
 
 
 class ValidatorRequest(BaseModel):
-    """Private request produced after a TruthState has been persisted."""
+    """Private request: truthkey, claim type, and EvidenceRefs. No observation payload."""
 
     truthkey_id: str
     claim_type_id: str
