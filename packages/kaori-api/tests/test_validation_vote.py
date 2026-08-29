@@ -73,8 +73,7 @@ def test_generalist_registered_on_startup_idempotent():
     assert len(registered) == 1
     assert registered[0].payload["role"] == "validator"
     assert flow.get_standing(GENERALIST_AGENT_ID) == 250.0
-    assert "ai:bouncer_v1" not in flow.get_all_standings()
-    assert "ai:coral_specialist_v1" not in flow.get_all_standings()
+    assert set(flow.get_all_standings()) == {GENERALIST_AGENT_ID}
 
 
 def test_ensure_generalist_skips_when_already_known():

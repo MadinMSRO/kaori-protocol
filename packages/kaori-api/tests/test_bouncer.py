@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from PIL import Image
-
 from kaori_api.app import create_app
 from kaori_api.auth import AuthError
 from kaori_api.bouncer import (
@@ -24,7 +22,7 @@ from kaori_api.bouncer_client import BouncerClient
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.signal import SignalTypes
 from kaori_truth.primitives.evidence import EvidenceRef
-
+from PIL import Image
 
 AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"
@@ -228,7 +226,7 @@ def test_api_client_rejects_wrong_signer_and_tampered_vote():
     client._validate_vote(vote, TRUTHKEY)
     with pytest.raises(ValueError, match="unexpected agent_id"):
         client._validate_vote(
-            vote.model_copy(update={"agent_id": "ai:coral_specialist_v1"}),
+            vote.model_copy(update={"agent_id": "ai:other_validator"}),
             TRUTHKEY,
         )
     with pytest.raises(ValueError, match="invalid signature"):

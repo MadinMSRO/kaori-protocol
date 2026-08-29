@@ -14,11 +14,10 @@ from typing import Callable, List, Literal, Optional, Protocol, Sequence
 from urllib.parse import quote, urlparse
 
 import yaml
+from kaori_truth.primitives.evidence import EvidenceRef
 from pydantic import BaseModel, Field, field_validator
 
 from kaori_api.validation import GENERALIST_AGENT_ID
-from kaori_truth.primitives.evidence import EvidenceRef
-
 
 CORAL_CLAIM_TYPE = "ocean.coral_bleaching.v1"
 VALIDATOR_SIGNING_KEY_ENV = "KAORI_VALIDATOR_SIGNING_KEY"
