@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.agent import Agent
 from kaori_flow.primitives.signal import SignalTypes
+from kaori_truth.compiler import CompilationError
 from kaori_truth.primitives.observation import Observation, ReporterContext, Standing
 from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 from pydantic import ValidationError
@@ -306,6 +307,8 @@ def create_app(
             raise HTTPException(status_code=404, detail="Unknown claim_type_id")
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="Unknown claim_type_id")
+        except CompilationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ValidationError as exc:
             raise HTTPException(status_code=400, detail="Invalid observation or EvidenceRef") from exc
 

@@ -29,6 +29,7 @@ GLOBAL_BANS = {
 # MUST NOT call open(), datetime.now()
 PURE_MODULES_GLOBS = [
     "compiler.py",
+    "claim_derivation.py",
     "primitives/*.py",
     "validation/*.py",
     "hashing/*.py",

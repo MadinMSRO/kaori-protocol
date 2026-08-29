@@ -52,7 +52,11 @@ def valid_observation(**overrides) -> dict:
         "claim_type": CORAL_CLAIM_TYPE,
         "reported_at": "2026-01-07T12:00:00Z",
         "geo": {"lat": -8.3405, "lon": 115.0920},
-        "payload": {"depth_meters": 8.0, "bleaching_percentage": 40},
+        "payload": {
+            "depth_meters": 8.0,
+            "bleaching_present": True,
+            "bleaching_percentage": 40,
+        },
         "evidence_refs": [
             {"uri": "gs://kaori-evidence/coral1.jpg", "sha256": "a" * 64},
             {"uri": "gs://kaori-evidence/coral2.jpg", "sha256": "b" * 64},
@@ -196,6 +200,40 @@ def test_compile_missing_payload_fields_400(client: TestClient):
     assert response.status_code == 400
 
 
+def test_compile_missing_required_output_schema_field_400(client: TestClient):
+    """ui_schema still has depth_meters; claim requires bleaching_present."""
+    obs = valid_observation(payload={"depth_meters": 8.0, "bleaching_percentage": 40})
+    response = client.post("/v1/compile", json=compile_body(observations=[obs]), headers=auth_header())
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "REQUIRED" in detail or "output_schema" in detail.lower() or "bleaching_present" in detail
+
+
+def test_compile_open_core_flood_missing_output_schema_400(client: TestClient):
+    """Flood stays Open Core and has no output_schema — compile must not guess claim keys."""
+    obs = {
+        "observation_id": "11111111-1111-1111-1111-111111111111",
+        "claim_type": "earth.flood.v1",
+        "reported_at": "2026-01-07T12:00:00Z",
+        "geo": {"lat": 4.175, "lon": 73.509},
+        "payload": {"water_level_cm": 12},
+        "evidence_refs": [
+            {"uri": "gs://kaori-evidence/flood1.jpg", "sha256": "a" * 64},
+        ],
+    }
+    response = client.post(
+        "/v1/compile",
+        json={
+            "truth_key": "earth:flood:h3:886142a8e7fffff:surface:2026-01-07T12:00Z",
+            "claim_type_id": "earth.flood.v1",
+            "observations": [obs],
+        },
+        headers=auth_header(),
+    )
+    assert response.status_code == 400
+    assert "output_schema" in response.json()["detail"]
+
+
 def test_compile_unknown_claim_type_404(client: TestClient):
     response = client.post(
         "/v1/compile",
@@ -229,6 +267,12 @@ def test_compile_200_signed_truth_state(client: TestClient):
     assert isinstance(body["evidence_refs"], list)
     assert all(isinstance(item, str) for item in body["evidence_refs"])
     assert "evidence_refs" in body
+    assert body["claim"]["bleaching_present"] is True
+    assert body["claim"]["bleaching_percentage"] == 40
+    assert "depth_meters" not in body["claim"]
+    assert "severity" not in body["claim"]
+    assert "network_trust" not in body["claim"]
+    assert "confidence" not in body["claim"]
 
 
 def test_compile_200_mime_type_optional(client: TestClient):

@@ -44,7 +44,11 @@ def coral_compile_body() -> dict:
                 "claim_type": CORAL_CLAIM_TYPE,
                 "reported_at": "2026-01-07T12:00:00Z",
                 "geo": {"lat": -8.3405, "lon": 115.0920},
-                "payload": {"depth_meters": 8.0, "bleaching_percentage": 40},
+                "payload": {
+                    "depth_meters": 8.0,
+                    "bleaching_present": True,
+                    "bleaching_percentage": 40,
+                },
                 "evidence_refs": [
                     {"uri": "gs://kaori-evidence/coral1.jpg", "sha256": "a" * 64},
                     {"uri": "gs://kaori-evidence/coral2.jpg", "sha256": "b" * 64},
