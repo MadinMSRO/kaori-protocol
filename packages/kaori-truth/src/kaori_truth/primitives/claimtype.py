@@ -5,14 +5,11 @@ YAML contract definition with canonicalization and version pinning.
 """
 from __future__ import annotations
 
-import hashlib
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import yaml
 from pydantic import BaseModel, Field
 
-from kaori_truth.canonical import canonical_hash, canonical_json
+from kaori_truth.canonical import canonical_hash
 from kaori_truth.canonical.json import canonical_dict
 
 

@@ -12,10 +12,9 @@ Usage:
     from kaori_truth.factory import load_claim_type
     
     # Returns a pure ClaimType object with fully resolved schemas
-    ct = load_claim_type("claim.yaml") 
+    ct = load_claim_type("claim.yaml")
 """
 from pathlib import Path
-from typing import Optional
 
 from kaori_truth.io.loaders import load_yaml_file, resolve_schema_ref
 from kaori_truth.primitives.claimtype import (
@@ -27,6 +26,7 @@ from kaori_truth.primitives.claimtype import (
     TruthKeyConfig,
     ValidationFlowConfig,
 )
+
 
 def load_claim_type(path: str | Path, schema_base_path: str = "") -> ClaimType:
     """
