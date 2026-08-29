@@ -9,6 +9,8 @@ This week the HTTP surface is only:
 
 Both routes require `Authorization: Bearer <Supabase JWT>`. The sidecar maps `sub` (Supabase `auth.users.id`) to agent_id `user:{id}` and never accepts or emits `profiles.id`.
 
+CORS allows origin `https://kind-keepsake-kingdom.lovable.app` only, methods `GET`, `POST`, `OPTIONS`, and headers `Authorization` and `Content-Type`. No extra routes.
+
 ## Run locally against DATABASE_URL
 
 Week-1 `DATABASE_URL` is the Liminal Supabase Postgres URL (Lovable project `3edd781a`). Do not create a Cloud SQL instance. Do not deploy.

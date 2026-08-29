@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from jose import jwt
 
 from kaori_api.app import (
+    LIMINAL_ORIGIN,
     THIS_WEEK_CLAIM_TYPE,
     create_app,
     reporter_context_from_flow,
@@ -92,6 +93,45 @@ def test_only_two_http_routes():
     paths = {getattr(route, "path", None) for route in application.router.routes}
     paths.discard(None)
     assert paths == {"/v1/compile", "/v1/standing/{agent_id}"}
+
+
+def test_cors_preflight_allows_liminal_origin_only(client: TestClient):
+    allowed = client.options(
+        "/v1/compile",
+        headers={
+            "Origin": LIMINAL_ORIGIN,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Authorization, Content-Type",
+        },
+    )
+    assert allowed.status_code == 200
+    assert allowed.headers.get("access-control-allow-origin") == LIMINAL_ORIGIN
+    allow_methods = allowed.headers.get("access-control-allow-methods", "")
+    for method in ("GET", "POST", "OPTIONS"):
+        assert method in allow_methods
+    allow_headers = allowed.headers.get("access-control-allow-headers", "").lower()
+    assert "authorization" in allow_headers
+    assert "content-type" in allow_headers
+
+    denied = client.options(
+        "/v1/compile",
+        headers={
+            "Origin": "https://evil.example",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Authorization, Content-Type",
+        },
+    )
+    assert denied.headers.get("access-control-allow-origin") != LIMINAL_ORIGIN
+    assert denied.headers.get("access-control-allow-origin") in (None, "null", "")
+
+
+def test_cors_actual_request_echoes_liminal_origin(client: TestClient):
+    response = client.get(
+        f"/v1/standing/{AGENT_ID}",
+        headers={**auth_header(), "Origin": LIMINAL_ORIGIN},
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == LIMINAL_ORIGIN
 
 
 def test_compile_missing_bearer_401(client: TestClient):

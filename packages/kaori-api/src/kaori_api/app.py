@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -29,6 +30,7 @@ from kaori_truth.primitives.truthstate import TruthState
 
 
 THIS_WEEK_CLAIM_TYPE = "ocean.coral_bleaching.v1"
+LIMINAL_ORIGIN = "https://kind-keepsake-kingdom.lovable.app"
 CORAL_PAYLOAD_FIELDS = ("depth_meters", "bleaching_percentage")
 SOURCE_TYPE_BY_AGENT_TYPE = {
     "individual": "human",
@@ -156,6 +158,12 @@ def create_app(
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[LIMINAL_ORIGIN],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
     )
     app.state.flow = flow
     app.state.jwt_secret = secret
