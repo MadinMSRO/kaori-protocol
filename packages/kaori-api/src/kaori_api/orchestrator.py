@@ -132,7 +132,11 @@ class TruthOrchestrator:
         
         return truth_state
     
-    def _get_claim_type(self, claim_type_id: str) -> ClaimType:
+    def get_claim_type(self, claim_type_id: str):
+        """Load ClaimType YAML for this id. Missing file → UnknownClaimTypeError."""
+        return self._get_claim_type(claim_type_id)
+
+    def _get_claim_type(self, claim_type_id: str):
         """Load ClaimType from cache or file."""
         if claim_type_id not in self._claimtype_cache:
             # Parse claim type ID to path

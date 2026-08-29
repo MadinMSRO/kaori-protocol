@@ -7,11 +7,20 @@ This directory contains **ClaimType YAML contracts** that define validation rule
 ```
 schemas/
 ├── earth/
-│   └── flood_v1.yaml        # Flood detection (critical lane)
+│   ├── flood_v1.yaml
+│   ├── coastal_erosion_v1.yaml
+│   ├── infrastructure_v1.yaml
+│   └── vegetation_v1.yaml
 ├── ocean/
-│   └── coral_bleaching_v1.yaml  # Coral bleaching monitoring
+│   ├── coral_bleaching_v1.yaml
+│   ├── reef_recovery_v1.yaml
+│   ├── sea_temperature_v1.yaml
+│   └── vessel_anomaly_v1.yaml
 ├── space/
-│   └── orbital_debris_v1.yaml   # Orbital debris tracking
+│   ├── orbital_debris_v1.yaml
+│   ├── debris_track_v1.yaml
+│   ├── light_pollution_v1.yaml
+│   └── satellite_pass_v1.yaml
 └── meta/
     └── claimtype.schema.json    # JSON Schema for validation
 ```

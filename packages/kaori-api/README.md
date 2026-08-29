@@ -49,7 +49,7 @@ When `DATABASE_URL` is set, `FlowCore` uses `PostgresSignalStore` (`kaori.signal
 }
 ```
 
-Observation uses `evidence_refs` (`EvidenceRef[]`). EvidenceRef requires `uri` and `sha256` (`mime_type`, `bytes_size`, `capture_time` optional). This week payload is `{depth_meters, bleaching_percentage}`. The server stamps `reporter_id` from the Bearer agent (`user:{auth.users.id}`) and `reporter_context` from Flow — the client must not mint trust. 200 TruthState uses `truthkey` (not `truth_key`); `TruthState.evidence_refs` is `string[]`. `EvidenceRef.uri` is a string pointer (Supabase `file_url` this week). No upload route and no GCS upload.
+Observation uses `evidence_refs` (`EvidenceRef[]`). EvidenceRef requires `uri` and `sha256` (`mime_type`, `bytes_size`, `capture_time` optional). Required observation payload fields come from the loaded ClaimType `ui_schema` (`required: true`). The sidecar loads YAML for whatever `claim_type_id` arrives; missing YAML → 404. Do not invent ClaimType ids. Existing `ocean.coral_bleaching.v1` YAML is unchanged. The server stamps `reporter_id` from the Bearer agent (`user:{auth.users.id}`) and `reporter_context` from Flow — the client must not mint trust. 200 TruthState uses `truthkey` (not `truth_key`); `TruthState.evidence_refs` is `string[]`. `EvidenceRef.uri` is a string pointer (Supabase `file_url` this week). No upload route and no GCS upload.
 
 `GET /v1/truth/{truthkey}` returns the stored TruthState artifact. Unknown truthkey → 404.
 

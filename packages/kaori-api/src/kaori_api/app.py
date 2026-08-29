@@ -32,13 +32,11 @@ from kaori_truth.primitives.observation import Observation, ReporterContext, Sta
 from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 
 
-THIS_WEEK_CLAIM_TYPE = "ocean.coral_bleaching.v1"
 LIMINAL_ORIGIN = "https://kind-keepsake-kingdom.lovable.app"
 LIMINAL_PREVIEW_ORIGIN = (
     "https://id-preview--3edd781a-00a9-4e58-88be-c21405c611ee.lovable.app"
 )
 LIMINAL_ORIGINS = [LIMINAL_ORIGIN, LIMINAL_PREVIEW_ORIGIN]
-CORAL_PAYLOAD_FIELDS = ("depth_meters", "bleaching_percentage")
 SOURCE_TYPE_BY_AGENT_TYPE = {
     "individual": "human",
     "sensor": "sensor",
@@ -134,11 +132,25 @@ def validate_evidence_refs(observations: List[Observation]) -> None:
             _require_field(getattr(ref, "sha256", None), "sha256")
 
 
-def validate_coral_payload(observations: List[Observation]) -> None:
-    """This week ocean.coral_bleaching.v1 payload is {depth_meters, bleaching_percentage}."""
+def required_payload_fields(claim_type) -> List[str]:
+    """Required observation payload names from ClaimType ui_schema (required: true)."""
+    config = claim_type.get_config() if hasattr(claim_type, "get_config") else {}
+    fields = ((config or {}).get("ui_schema") or {}).get("fields") or []
+    names: List[str] = []
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        if field.get("required") is True and field.get("name"):
+            names.append(str(field["name"]))
+    return names
+
+
+def validate_payload_fields(observations: List[Observation], claim_type) -> None:
+    """Required payload fields come from the loaded spec ui_schema, not a hardcoded claim type."""
+    required = required_payload_fields(claim_type)
     for obs in observations:
         payload = obs.payload or {}
-        for field in CORAL_PAYLOAD_FIELDS:
+        for field in required:
             if field not in payload or payload[field] is None:
                 raise HTTPException(status_code=400, detail=f"Missing payload field: {field}")
 
@@ -250,10 +262,15 @@ def create_app(
             raise HTTPException(status_code=400, detail="Missing truth_key")
         if not claim_type_id:
             raise HTTPException(status_code=400, detail="Missing claim_type_id")
-        if claim_type_id != THIS_WEEK_CLAIM_TYPE:
-            raise HTTPException(status_code=404, detail="Unknown claim_type_id")
         if not isinstance(raw_observations, list) or not raw_observations:
             raise HTTPException(status_code=400, detail="At least one observation is required")
+
+        try:
+            claim_type = request.app.state.orchestrator.get_claim_type(claim_type_id)
+        except UnknownClaimTypeError:
+            raise HTTPException(status_code=404, detail="Unknown claim_type_id")
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Unknown claim_type_id")
 
         flow_core: FlowCore = request.app.state.flow
         context = reporter_context_from_flow(flow_core, agent_id)
@@ -269,7 +286,7 @@ def create_app(
             raise HTTPException(status_code=400, detail="Invalid observation or EvidenceRef") from exc
 
         validate_evidence_refs(observations)
-        validate_coral_payload(observations)
+        validate_payload_fields(observations, claim_type)
 
         try:
             truth_state: TruthState = request.app.state.orchestrator.compile_observations(

@@ -8,7 +8,6 @@ from kaori_api.app import (
     LIMINAL_ORIGIN,
     LIMINAL_ORIGINS,
     LIMINAL_PREVIEW_ORIGIN,
-    THIS_WEEK_CLAIM_TYPE,
     create_app,
     reporter_context_from_flow,
     stamp_observation,
@@ -22,6 +21,7 @@ from kaori_flow.primitives.signal import SignalTypes
 AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"
 TOKEN = "valid-supabase-token"
+CORAL_CLAIM_TYPE = "ocean.coral_bleaching.v1"
 TRUTHSTATE_FIELDS = {
     "truthkey",
     "claim_type",
@@ -49,7 +49,7 @@ def auth_header(token: str | None = None) -> dict:
 def valid_observation(**overrides) -> dict:
     obs = {
         "observation_id": "11111111-1111-1111-1111-111111111111",
-        "claim_type": THIS_WEEK_CLAIM_TYPE,
+        "claim_type": CORAL_CLAIM_TYPE,
         "reported_at": "2026-01-07T12:00:00Z",
         "geo": {"lat": -8.3405, "lon": 115.0920},
         "payload": {"depth_meters": 8.0, "bleaching_percentage": 40},
@@ -65,7 +65,7 @@ def valid_observation(**overrides) -> dict:
 def compile_body(**overrides) -> dict:
     body = {
         "truth_key": "ocean:coral_bleaching:h3:89b12c6b6ffffff:underwater:2026-01-07T00:00Z",
-        "claim_type_id": THIS_WEEK_CLAIM_TYPE,
+        "claim_type_id": CORAL_CLAIM_TYPE,
         "observations": [valid_observation()],
     }
     body.update(overrides)
@@ -199,7 +199,7 @@ def test_compile_missing_payload_fields_400(client: TestClient):
 def test_compile_unknown_claim_type_404(client: TestClient):
     response = client.post(
         "/v1/compile",
-        json=compile_body(claim_type_id="earth.flood.v1"),
+        json=compile_body(claim_type_id="earth.made_up.v1"),
         headers=auth_header(),
     )
     assert response.status_code == 404
@@ -222,7 +222,7 @@ def test_compile_200_signed_truth_state(client: TestClient):
         assert field in body
     assert "truth_key" not in body
     assert body["truthkey"]
-    assert body["claim_type"] == THIS_WEEK_CLAIM_TYPE
+    assert body["claim_type"] == CORAL_CLAIM_TYPE
     assert body["security"]["signature"]
     assert body["security"]["state_hash"]
     assert body["security"]["semantic_hash"]
@@ -348,7 +348,7 @@ def test_compile_404_does_not_persist_or_emit():
     client = TestClient(
         create_app(flow=flow, verify_token=verify_token, truth_store=truth_store)
     )
-    body = compile_body(claim_type_id="earth.flood.v1")
+    body = compile_body(claim_type_id="ocean.made_up.v1")
     response = client.post("/v1/compile", json=body, headers=auth_header())
     assert response.status_code == 404
     assert truth_store.get(body["truth_key"]) is None
