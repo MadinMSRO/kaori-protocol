@@ -93,10 +93,10 @@ def get_agent_id(user) -> str:
     return f"user:{user.id}"  # Supabase auth user.id
 ```
 
-Local run (you provide PostgreSQL via `DATABASE_URL`):
+Local run (`DATABASE_URL` is Liminal Supabase Postgres, schema `kaori`, not Cloud SQL):
 
 ```bash
-export DATABASE_URL=postgresql://user:pass@localhost:5432/kaori
+export DATABASE_URL="postgresql://…supabase…"
 export SUPABASE_JWT_SECRET=your-supabase-jwt-secret
 uvicorn kaori_api.app:app --port 8000
 ```

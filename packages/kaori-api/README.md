@@ -11,8 +11,10 @@ Both routes require `Authorization: Bearer <Supabase JWT>`. The sidecar maps `su
 
 ## Run locally against DATABASE_URL
 
-1. Create a PostgreSQL database yourself (this repo does not provision one).
-2. Apply the signals table (or let the sidecar call `ensure_schema()` on boot):
+Week-1 `DATABASE_URL` is the Liminal Supabase Postgres URL (Lovable project `3edd781a`). Do not create a Cloud SQL instance. Do not deploy.
+
+1. Point `DATABASE_URL` at that Supabase database (you provide the URL; this repo does not store it).
+2. Apply `kaori.signals` (or let the sidecar call `ensure_schema()` on boot). That creates schema `kaori` and table `kaori.signals` only — never `public.signals`:
 
 ```bash
 psql "$DATABASE_URL" -f packages/kaori-db/src/kaori_db/schema.sql
@@ -22,13 +24,13 @@ psql "$DATABASE_URL" -f packages/kaori-db/src/kaori_db/schema.sql
 
 ```bash
 pip install -e packages/kaori-truth -e packages/kaori-flow -e packages/kaori-db -e packages/kaori-api
-export DATABASE_URL=postgresql://user:pass@localhost:5432/kaori
+export DATABASE_URL="postgresql://…supabase…"
 export SUPABASE_JWT_SECRET=your-supabase-jwt-secret
 export KAORI_SCHEMA_PATH=packages/kaori-spec/schemas
 uvicorn kaori_api.app:app --host 0.0.0.0 --port 8000
 ```
 
-When `DATABASE_URL` is set, `FlowCore` is constructed with `PostgresSignalStore`. Without it, the sidecar uses `InMemorySignalStore` (tests / local smoke only).
+When `DATABASE_URL` is set, `FlowCore` is constructed with `PostgresSignalStore` (`kaori.signals`). Without it, the sidecar uses `InMemorySignalStore` (tests / local smoke only).
 
 `POST /v1/compile` body is `compile_observations` args only:
 
@@ -66,7 +68,7 @@ The image runs `uvicorn kaori_api.app:app` (two routes only). ClaimType YAML is 
 ```bash
 docker run --rm -p 8080:8080 \
   -e SUPABASE_JWT_SECRET=your-supabase-jwt-secret \
-  -e DATABASE_URL=postgresql://user:pass@host:5432/kaori \
+  -e DATABASE_URL="postgresql://…supabase…" \
   kaori-api:local
 ```
 

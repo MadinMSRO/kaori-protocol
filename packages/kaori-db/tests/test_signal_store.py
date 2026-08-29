@@ -5,7 +5,10 @@ from datetime import datetime, timezone
 
 import pytest
 
+from pathlib import Path
+
 from kaori_db import PostgresSignalStore
+from kaori_db.store import KAORI_SCHEMA, signals_table
 from kaori_flow import FlowCore, SignalStore
 from kaori_flow.primitives.signal import Signal, SignalTypes
 
@@ -114,6 +117,20 @@ def test_create_store_uses_database_url(monkeypatch, tmp_path):
     assert isinstance(store, PostgresSignalStore)
     store.append(_signal())
     assert len(store.get_all()) == 1
+
+
+def test_signals_table_sqlalchemy_schema_is_kaori():
+    assert KAORI_SCHEMA == "kaori"
+    assert signals_table.schema == "kaori"
+    assert signals_table.fullname == "kaori.signals"
+
+
+def test_schema_sql_creates_kaori_not_public():
+    sql = Path("packages/kaori-db/src/kaori_db/schema.sql").read_text()
+    assert "CREATE SCHEMA IF NOT EXISTS kaori" in sql
+    assert "kaori.signals" in sql
+    assert "public." not in sql
+    assert "CREATE TABLE IF NOT EXISTS signals" not in sql
 
 
 def test_create_store_inmemory_without_database_url(monkeypatch):
