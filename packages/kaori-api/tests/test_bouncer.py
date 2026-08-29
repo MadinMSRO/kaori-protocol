@@ -1,28 +1,28 @@
 """Deterministic coral runner and post-persist bouncer integration."""
 from __future__ import annotations
 
+import io
 from copy import deepcopy
 from datetime import datetime, timezone
-import io
 from pathlib import Path
 
-from fastapi.testclient import TestClient
-from PIL import Image
 import pytest
-
+from fastapi.testclient import TestClient
 from kaori_api.app import create_app
 from kaori_api.auth import AuthError
 from kaori_api.bouncer import (
-    BouncerRequest,
     CORAL_CLAIM_TYPE,
+    BouncerRequest,
     CoralBouncer,
     ValidationVote,
     verify_validation_vote,
 )
+from kaori_api.bouncer_app import create_bouncer_app
+from kaori_api.bouncer_client import BouncerClient
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.signal import SignalTypes
 from kaori_truth.primitives.observation import Observation
-
+from PIL import Image
 
 AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"
@@ -184,6 +184,78 @@ def test_runner_signature_covers_flow_spec_payload():
     assert vote.vote == "RATIFY"
     assert verify_validation_vote(vote, SIGNING_KEY)
     assert not verify_validation_vote(vote.model_copy(update={"vote": "REJECT"}), SIGNING_KEY)
+
+
+def test_api_client_rejects_a_tampered_bouncer_vote():
+    vote = runner().validate(bouncer_request())
+    client = BouncerClient(
+        "https://kaori-bouncer.example",
+        token_provider=lambda _audience: "token",
+        signing_key=SIGNING_KEY,
+    )
+
+    client._validate_vote(vote, TRUTHKEY)
+    with pytest.raises(ValueError, match="invalid signature"):
+        client._validate_vote(vote.model_copy(update={"vote": "REJECT"}), TRUTHKEY)
+
+
+def test_private_runner_endpoint_returns_only_validation_signal_fields():
+    client = TestClient(create_bouncer_app(runner()))
+
+    response = client.post("/", json=bouncer_request().model_dump(mode="json"))
+
+    assert response.status_code == 200, response.text
+    assert response.json().keys() == {
+        "agent_id",
+        "truthkey_id",
+        "window_id",
+        "vote",
+        "timestamp",
+        "signature",
+    }
+
+
+def test_other_claim_type_does_not_invoke_bouncer():
+    class UnexpectedBouncerClient:
+        def validate(self, **_kwargs):
+            raise AssertionError("non-coral claim must not invoke bouncer")
+
+    flow = FlowCore(store=InMemorySignalStore())
+    client = TestClient(
+        create_app(
+            flow=flow,
+            verify_token=verify_token,
+            bouncer_client=UnexpectedBouncerClient(),
+        )
+    )
+    claim_type = "earth.coastal_erosion.v1"
+    response = client.post(
+        "/v1/compile",
+        json={
+            "truth_key": "earth:coastal_erosion:h3:abc:surface:2026-01-07T00:00Z",
+            "claim_type_id": claim_type,
+            "observations": [
+                {
+                    "observation_id": "22222222-2222-2222-2222-222222222222",
+                    "claim_type": claim_type,
+                    "reported_at": "2026-01-07T12:00:00Z",
+                    "geo": {"lat": -8.3405, "lon": 115.092},
+                    "payload": {
+                        "recession_m": 1.5,
+                        "scarp_present": True,
+                        "stake_readings": [0.1, 0.2],
+                    },
+                    "evidence_refs": [
+                        {"uri": "gs://kaori-evidence/a.jpg", "sha256": "a" * 64}
+                    ],
+                }
+            ],
+        },
+        headers=auth_header(),
+    )
+
+    assert response.status_code == 200, response.text
+    assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
 
 
 @pytest.mark.parametrize(

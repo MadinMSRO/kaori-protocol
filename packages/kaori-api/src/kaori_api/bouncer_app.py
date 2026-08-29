@@ -26,7 +26,7 @@ def create_bouncer_app(runner: Optional[CoralBouncer] = None) -> FastAPI:
     application.state.runner = runner
 
     # Cloud Run IAM authenticates this private endpoint before the request reaches ASGI.
-    @application.post("/", response_model=ValidationVote)
+    @application.post("/", response_model=ValidationVote, response_model_exclude_none=True)
     def validate(request: BouncerRequest) -> ValidationVote:
         try:
             return application.state.runner.validate(request)

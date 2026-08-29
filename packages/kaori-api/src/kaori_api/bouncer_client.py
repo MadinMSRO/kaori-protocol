@@ -4,21 +4,21 @@ from __future__ import annotations
 import json
 import logging
 import os
+import urllib.request
 from typing import Callable, List, Optional
 from urllib.parse import urlencode
-import urllib.request
+
+from kaori_flow import FlowCore
+from kaori_truth.primitives.observation import Observation
 
 from kaori_api.bouncer import (
-    BouncerRequest,
     CORAL_CLAIM_TYPE,
+    BouncerRequest,
     ValidationVote,
     bouncer_signing_key,
     verify_validation_vote,
 )
 from kaori_api.validation import BOUNCER_AGENT_ID, record_validation_vote
-from kaori_flow import FlowCore
-from kaori_truth.primitives.observation import Observation
-
 
 LOGGER = logging.getLogger(__name__)
 BOUNCER_URL_ENV = "KAORI_BOUNCER_URL"

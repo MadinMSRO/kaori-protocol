@@ -7,22 +7,21 @@ import io
 import json
 import math
 import os
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Callable, Dict, List, Optional
-from urllib.parse import quote, urlparse
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Callable, Dict, List, Literal, Optional
+from urllib.parse import quote, urlparse
 
 import yaml
+from kaori_truth.primitives.evidence import EvidenceRef
+from kaori_truth.primitives.observation import Observation
+from kaori_truth.primitives.truthkey import parse_truthkey
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field, field_validator
 
 from kaori_api.validation import BOUNCER_AGENT_ID
-from kaori_truth.primitives.evidence import EvidenceRef
-from kaori_truth.primitives.observation import Observation
-from kaori_truth.primitives.truthkey import parse_truthkey
-
 
 CORAL_CLAIM_TYPE = "ocean.coral_bleaching.v1"
 BOUNCER_SIGNING_KEY_ENV = "KAORI_BOUNCER_SIGNING_KEY"
@@ -48,17 +47,10 @@ class ValidationVote(BaseModel):
     agent_id: str
     truthkey_id: str
     window_id: str
-    vote: str
+    vote: Literal["RATIFY", "REJECT", "ABSTAIN"]
     confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     timestamp: datetime
     signature: str
-
-    @field_validator("vote")
-    @classmethod
-    def validate_vote(cls, value: str) -> str:
-        if value not in {"RATIFY", "REJECT", "ABSTAIN"}:
-            raise ValueError("invalid validation vote")
-        return value
 
     @field_validator("timestamp")
     @classmethod
@@ -170,6 +162,8 @@ class CoralBouncer:
             raise ValueError("bouncer schema must be ocean.coral_bleaching.v1")
         routing = (self.config.get("ai_validation_routing") or {}).get("bouncer") or {}
         self.checks = routing.get("checks") or []
+        if not self.checks:
+            raise ValueError("coral bouncer checks are required")
 
     def validate(
         self,
@@ -180,7 +174,11 @@ class CoralBouncer:
         if request.claim_type_id != CORAL_CLAIM_TYPE:
             raise ValueError("bouncer only supports ocean.coral_bleaching.v1")
 
-        passed = all(self._run_configured_check(check, request) for check in self.checks)
+        check_results = [
+            self._run_configured_check(check, request)
+            for check in self.checks
+        ]
+        passed = all(check_results)
         unsigned = ValidationVote(
             agent_id=BOUNCER_AGENT_ID,
             truthkey_id=request.truthkey_id,
@@ -228,9 +226,10 @@ class CoralBouncer:
         for ref in refs:
             try:
                 content = self.evidence_loader(ref)
-            except (OSError, ValueError, TimeoutError, urllib.error.URLError):
+                is_usable = self._usable_evidence(ref, content)
+            except (OSError, TypeError, ValueError, TimeoutError, urllib.error.URLError):
                 continue
-            if self._usable_evidence(ref, content):
+            if is_usable:
                 usable += 1
         return usable / len(refs) >= minimum
 

@@ -21,6 +21,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from kaori_flow import FlowCore, InMemorySignalStore
+from kaori_flow.primitives.agent import Agent
+from kaori_flow.primitives.signal import SignalTypes
+from kaori_truth.primitives.observation import Observation, ReporterContext, Standing
+from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 from pydantic import ValidationError
 
 from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
@@ -35,12 +40,6 @@ from kaori_api.validation import (
     agent_is_known,
     ensure_bouncer_registered,
 )
-from kaori_flow import FlowCore, InMemorySignalStore
-from kaori_flow.primitives.agent import Agent
-from kaori_flow.primitives.signal import SignalTypes
-from kaori_truth.primitives.observation import Observation, ReporterContext, Standing
-from kaori_truth.primitives.truthstate import TruthState, TruthStatus
-
 
 LIMINAL_ORIGIN = "https://kind-keepsake-kingdom.lovable.app"
 LIMINAL_PREVIEW_ORIGIN = (

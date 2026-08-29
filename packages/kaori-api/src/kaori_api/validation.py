@@ -12,7 +12,6 @@ from typing import Optional
 from kaori_flow import FlowCore
 from kaori_flow.primitives.signal import Signal, SignalTypes
 
-
 BOUNCER_AGENT_ID = "ai:bouncer_v1"
 VALIDATION_VOTES = ("RATIFY", "REJECT", "ABSTAIN")
 
