@@ -10,13 +10,12 @@ from fastapi import FastAPI, HTTPException
 from kaori_api.bouncer import ClipGeneralistValidator, ValidationVote, ValidatorRequest
 
 
-def default_coral_schema_path() -> str:
-    root = os.environ.get("KAORI_SCHEMA_PATH", "packages/kaori-spec/schemas")
-    return str(Path(root) / "ocean" / "coral_bleaching_v1.yaml")
+def default_schema_root() -> str:
+    return str(Path(os.environ.get("KAORI_SCHEMA_PATH", "packages/kaori-spec/schemas")))
 
 
 def create_bouncer_app(validator: Optional[ClipGeneralistValidator] = None) -> FastAPI:
-    validator = validator or ClipGeneralistValidator(schema_path=default_coral_schema_path())
+    validator = validator or ClipGeneralistValidator(schema_root=default_schema_root())
     application = FastAPI(
         title="Kaori Bouncer",
         docs_url=None,

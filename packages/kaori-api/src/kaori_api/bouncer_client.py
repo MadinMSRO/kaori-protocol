@@ -12,7 +12,6 @@ from kaori_flow import FlowCore
 from kaori_truth.primitives.observation import Observation
 
 from kaori_api.bouncer import (
-    CORAL_CLAIM_TYPE,
     ValidationVote,
     ValidatorRequest,
     validator_signing_key,
@@ -111,8 +110,6 @@ def validate_persisted_truth_state(
 
     Errors are logged because validation must never change the compile response.
     """
-    if claim_type_id != CORAL_CLAIM_TYPE:
-        return
     try:
         vote = client.validate(
             truthkey_id=truthkey_id,

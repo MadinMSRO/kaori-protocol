@@ -7,10 +7,11 @@ import io
 import json
 import math
 import os
+import re
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, List, Literal, Optional, Protocol, Sequence
+from typing import Callable, Dict, List, Literal, Optional, Protocol, Sequence
 from urllib.parse import quote, urlparse
 
 import yaml
@@ -19,7 +20,6 @@ from pydantic import BaseModel, Field, field_validator
 
 from kaori_api.validation import GENERALIST_AGENT_ID
 
-CORAL_CLAIM_TYPE = "ocean.coral_bleaching.v1"
 VALIDATOR_SIGNING_KEY_ENV = "KAORI_VALIDATOR_SIGNING_KEY"
 DEV_VALIDATOR_SIGNING_KEY = "kaori-dev-validator-key-do-not-use-in-production"
 GCP_METADATA_TOKEN_URL = (
@@ -205,30 +205,13 @@ class ClipGeneralistValidator:
     def __init__(
         self,
         *,
-        schema_path: str,
+        schema_root: str,
         evidence_loader: Optional[EvidenceLoader] = None,
         model: Optional[RelevanceModel] = None,
         signing_key: Optional[bytes] = None,
     ):
-        with Path(schema_path).open("r", encoding="utf-8") as stream:
-            self.config = yaml.safe_load(stream)
-        if self.config.get("id") != CORAL_CLAIM_TYPE:
-            raise ValueError("validator schema must be ocean.coral_bleaching.v1")
-
-        routing = self.config.get("ai_validation_routing") or {}
-        generalist = routing.get("generalist") or {}
-        if generalist.get("engine") != "generalist_v1":
-            raise ValueError("claim type must select generalist_v1")
-        self.context = str(generalist.get("prompt_context") or "").strip()
-        if not self.context:
-            raise ValueError("generalist prompt_context is required")
-
-        embedding = (self.config.get("evidence_similarity") or {}).get("embedding") or {}
-        if not embedding.get("enabled"):
-            raise ValueError("claim type must enable CLIP relevance")
-        self.embedding_engine = str(embedding.get("engine"))
-        self.relevance_threshold = float(embedding.get("similarity_threshold"))
-
+        self.schema_root = Path(schema_root).resolve()
+        self._config_cache: Dict[str, dict] = {}
         self.evidence_loader = evidence_loader or GcsEvidenceLoader()
         self.model = model or OpenClipGeneralist()
         self.signing_key = signing_key
@@ -239,18 +222,18 @@ class ClipGeneralistValidator:
         *,
         timestamp: Optional[datetime] = None,
     ) -> ValidationVote:
-        if request.claim_type_id != CORAL_CLAIM_TYPE:
-            raise ValueError("validator only supports ocean.coral_bleaching.v1")
+        config = self._load_claim_type(request.claim_type_id)
+        context, embedding_engine, relevance_threshold = self._generalist_settings(config)
 
         images = [self._load_image(self.evidence_loader(ref)) for ref in request.evidence_refs]
         relevance = self.model.score(
             images,
-            context=self.context,
-            engine=self.embedding_engine,
+            context=context,
+            engine=embedding_engine,
         )
         confidence = self._mean_relevance(relevance, len(images))
         vote: Literal["RATIFY", "REJECT"] = (
-            "RATIFY" if confidence >= self.relevance_threshold else "REJECT"
+            "RATIFY" if confidence >= relevance_threshold else "REJECT"
         )
         unsigned = ValidationVote(
             agent_id=GENERALIST_AGENT_ID,
@@ -262,6 +245,54 @@ class ClipGeneralistValidator:
             signature="",
         )
         return sign_validation_vote(unsigned, self.signing_key)
+
+    def _load_claim_type(self, claim_type_id: str) -> dict:
+        cached = self._config_cache.get(claim_type_id)
+        if cached is not None:
+            return cached
+        parts = claim_type_id.split(".")
+        if (
+            len(parts) != 3
+            or not re.fullmatch(r"[a-z0-9_]+", parts[0])
+            or not re.fullmatch(r"[a-z0-9_]+", parts[1])
+            or not re.fullmatch(r"v[0-9]+", parts[2])
+        ):
+            raise ValueError("invalid claim_type_id")
+        path = self.schema_root / parts[0] / f"{parts[1]}_{parts[2]}.yaml"
+        try:
+            with path.open("r", encoding="utf-8") as stream:
+                config = yaml.safe_load(stream)
+        except FileNotFoundError as exc:
+            raise ValueError("unknown claim_type_id") from exc
+        if not isinstance(config, dict) or config.get("id") != claim_type_id:
+            raise ValueError("claim type schema id mismatch")
+        self._config_cache[claim_type_id] = config
+        return config
+
+    @staticmethod
+    def _generalist_settings(config: dict) -> tuple[str, str, float]:
+        routing = config.get("ai_validation_routing") or {}
+        generalist = routing.get("generalist") or {}
+        if generalist.get("engine") != "generalist_v1":
+            raise ValueError("claim type must select generalist_v1")
+        context = str(generalist.get("prompt_context") or "").strip()
+        if not context:
+            display = (
+                config.get("display_name")
+                or config.get("name")
+                or config.get("title")
+                or str(config.get("topic") or "").replace("_", " ")
+            )
+            context = str(display).strip()
+        if not context:
+            raise ValueError("claim type display context is required")
+
+        embedding = (config.get("evidence_similarity") or {}).get("embedding") or {}
+        if not embedding.get("enabled"):
+            raise ValueError("claim type must enable CLIP relevance")
+        engine = str(embedding.get("engine") or "")
+        threshold = float(embedding.get("similarity_threshold"))
+        return context, engine, threshold
 
     @staticmethod
     def _load_image(content: bytes) -> object:

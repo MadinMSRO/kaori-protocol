@@ -8,7 +8,7 @@ Thin FastAPI surface Liminal can call this week:
 
 Wraps TruthOrchestrator.compile_observations and FlowCore.get_standing.
 Compile 200 persists TruthState to kaori.truth_states then emits
-FlowCore.emit_truthstate. Coral validation is queued after persistence for the
+FlowCore.emit_truthstate. CLIP validation is queued after persistence for the
 separate private bouncer service. No other HTTP routes. Wire field names match
 Open Core primitives. Compiler stays pure.
 """
@@ -29,7 +29,6 @@ from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 from pydantic import ValidationError
 
 from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
-from kaori_api.bouncer import CORAL_CLAIM_TYPE
 from kaori_api.bouncer_client import (
     BouncerClient,
     validate_persisted_truth_state,
@@ -313,7 +312,7 @@ def create_app(
         artifact = persist_truth_state(request.app.state.truth_store, truth_state)
         emit_compile_truthstate(flow_core, truth_state, agent_id)
         client = request.app.state.bouncer_client
-        if client is not None and claim_type_id == CORAL_CLAIM_TYPE:
+        if client is not None:
             background_tasks.add_task(
                 validate_persisted_truth_state,
                 client=client,

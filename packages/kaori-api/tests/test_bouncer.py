@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 from kaori_api.app import create_app
 from kaori_api.auth import AuthError
 from kaori_api.bouncer import (
-    CORAL_CLAIM_TYPE,
     ClipGeneralistValidator,
     ValidationVote,
     ValidatorRequest,
@@ -27,9 +26,23 @@ from PIL import Image
 AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"
 TOKEN = "valid-supabase-token"
+CORAL_CLAIM_TYPE = "ocean.coral_bleaching.v1"
 TRUTHKEY = "ocean:coral_bleaching:h3:89b12c6b6ffffff:underwater:2026-01-07T00:00Z"
 CORAL_YAML = Path("packages/kaori-spec/schemas/ocean/coral_bleaching_v1.yaml")
+SCHEMA_ROOT = CORAL_YAML.parents[1]
 SIGNING_KEY = b"unit-test-generalist-key"
+PRODUCT_CLAIM_TYPES = [
+    "earth.coastal_erosion.v1",
+    "earth.infrastructure.v1",
+    "earth.vegetation.v1",
+    "ocean.coral_bleaching.v1",
+    "ocean.reef_recovery.v1",
+    "ocean.sea_temperature.v1",
+    "ocean.vessel_anomaly.v1",
+    "space.debris_track.v1",
+    "space.light_pollution.v1",
+    "space.satellite_pass.v1",
+]
 
 
 def verify_token(token: str) -> str:
@@ -108,7 +121,7 @@ class FakeClipGeneralist:
 
 def validator(scores) -> ClipGeneralistValidator:
     return ClipGeneralistValidator(
-        schema_path=str(CORAL_YAML),
+        schema_root=str(SCHEMA_ROOT),
         evidence_loader=lambda _ref: png_bytes(),
         model=FakeClipGeneralist(scores),
         signing_key=SIGNING_KEY,
@@ -139,7 +152,7 @@ class LocalBouncerClient:
 def test_relevant_coral_evidence_ratifies_as_generalist():
     clip = FakeClipGeneralist([0.94, 0.90])
     generalist = ClipGeneralistValidator(
-        schema_path=str(CORAL_YAML),
+        schema_root=str(SCHEMA_ROOT),
         evidence_loader=lambda _ref: png_bytes(),
         model=clip,
         signing_key=SIGNING_KEY,
@@ -250,17 +263,54 @@ def test_private_endpoint_accepts_no_submission_rule_payload():
     assert "checks" not in response.json()
 
 
-def test_other_claim_type_does_not_invoke_first_slice_generalist():
-    class UnexpectedBouncerClient:
-        def validate(self, **_kwargs):
-            raise AssertionError("non-coral claim must not invoke first-slice validator")
+def test_all_product_claim_types_load_their_generalist_config():
+    generalist = validator([0.9, 0.9])
+    request = validator_request()
+
+    votes = [
+        generalist.validate(request.model_copy(update={"claim_type_id": claim_type_id}))
+        for claim_type_id in PRODUCT_CLAIM_TYPES
+    ]
+
+    assert {vote.agent_id for vote in votes} == {"ai:generalist_v1"}
+    assert {vote.vote for vote in votes} == {"RATIFY"}
+
+
+def test_prompt_context_falls_back_to_claim_topic_display():
+    context, engine, threshold = ClipGeneralistValidator._generalist_settings(
+        {
+            "topic": "coastal_erosion",
+            "ai_validation_routing": {"generalist": {"engine": "generalist_v1"}},
+            "evidence_similarity": {
+                "embedding": {
+                    "enabled": True,
+                    "engine": "clip_v1",
+                    "similarity_threshold": 0.85,
+                }
+            },
+        }
+    )
+
+    assert context == "coastal erosion"
+    assert engine == "clip_v1"
+    assert threshold == pytest.approx(0.85)
+
+
+def test_non_coral_compile_gets_post_persist_generalist_vote():
+    clip = FakeClipGeneralist([0.91])
+    generalist = ClipGeneralistValidator(
+        schema_root=str(SCHEMA_ROOT),
+        evidence_loader=lambda _ref: png_bytes(),
+        model=clip,
+        signing_key=SIGNING_KEY,
+    )
 
     flow = FlowCore(store=InMemorySignalStore())
     client = TestClient(
         create_app(
             flow=flow,
             verify_token=verify_token,
-            bouncer_client=UnexpectedBouncerClient(),
+            bouncer_client=LocalBouncerClient(generalist),
         )
     )
     claim_type = "earth.coastal_erosion.v1"
@@ -290,4 +340,15 @@ def test_other_claim_type_does_not_invoke_first_slice_generalist():
     )
 
     assert response.status_code == 200, response.text
-    assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
+    assert clip.calls == [
+        {
+            "count": 1,
+            "context": "Coastal erosion monitoring",
+            "engine": "clip_v1",
+        }
+    ]
+    votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
+    assert len(votes) == 1
+    assert votes[0].agent_id == "ai:generalist_v1"
+    assert votes[0].object_id == response.json()["truthkey"]
+    assert votes[0].payload["vote"] == "RATIFY"
