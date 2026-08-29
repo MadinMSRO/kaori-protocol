@@ -335,7 +335,7 @@ def _determine_status(
       risk_profile alone; use autovalidation thresholds + recorded votes
     - required_for_risk_profiles: those lanes need human consensus before
       VERIFIED_TRUE / VERIFIED_FALSE (TRUTH_SPEC §15.2). Status stays
-      intermediate (LEANING_* / INVESTIGATING), not a invented VALIDATION.
+      intermediate (LEANING_* / INVESTIGATING), not an invented VALIDATION.
     """
     transparency_flags: List[str] = []
     gating = _human_gating(claim_type)
