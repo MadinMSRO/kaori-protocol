@@ -3,7 +3,7 @@ steps:
     args:
       - build
       - --file
-      - Dockerfile.bouncer
+      - Dockerfile.generalist
       - --tag
       - ${_IMAGE}
       - .

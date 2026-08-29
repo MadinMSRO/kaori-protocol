@@ -7,17 +7,17 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 
-from kaori_api.bouncer import ClipGeneralistValidator, ValidationVote, ValidatorRequest
+from kaori_api.generalist import ClipGeneralistValidator, ValidationVote, ValidatorRequest
 
 
 def default_schema_root() -> str:
     return str(Path(os.environ.get("KAORI_SCHEMA_PATH", "packages/kaori-spec/schemas")))
 
 
-def create_bouncer_app(validator: Optional[ClipGeneralistValidator] = None) -> FastAPI:
+def create_generalist_app(validator: Optional[ClipGeneralistValidator] = None) -> FastAPI:
     validator = validator or ClipGeneralistValidator(schema_root=default_schema_root())
     application = FastAPI(
-        title="Kaori Bouncer",
+        title="Kaori Generalist",
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
@@ -35,4 +35,4 @@ def create_bouncer_app(validator: Optional[ClipGeneralistValidator] = None) -> F
     return application
 
 
-app = create_bouncer_app()
+app = create_generalist_app()

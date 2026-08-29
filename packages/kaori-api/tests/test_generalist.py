@@ -10,14 +10,14 @@ import pytest
 from fastapi.testclient import TestClient
 from kaori_api.app import create_app
 from kaori_api.auth import AuthError
-from kaori_api.bouncer import (
+from kaori_api.generalist import (
     ClipGeneralistValidator,
     ValidationVote,
     ValidatorRequest,
     verify_validation_vote,
 )
-from kaori_api.bouncer_app import create_bouncer_app
-from kaori_api.bouncer_client import BouncerClient
+from kaori_api.generalist_app import create_generalist_app
+from kaori_api.generalist_client import GeneralistClient
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.signal import SignalTypes
 from kaori_truth.primitives.evidence import EvidenceRef
@@ -128,7 +128,7 @@ def validator(scores) -> ClipGeneralistValidator:
     )
 
 
-class LocalBouncerClient:
+class LocalGeneralistClient:
     """Test transport that executes the separate generalist service contract."""
 
     def __init__(self, clip_validator: ClipGeneralistValidator):
@@ -162,7 +162,7 @@ def test_relevant_coral_evidence_ratifies_as_generalist():
         create_app(
             flow=flow,
             verify_token=verify_token,
-            bouncer_client=LocalBouncerClient(generalist),
+            generalist_client=LocalGeneralistClient(generalist),
         )
     )
 
@@ -193,7 +193,7 @@ def test_unrelated_image_rejects_and_status_stays_pending_human_review():
         create_app(
             flow=flow,
             verify_token=verify_token,
-            bouncer_client=LocalBouncerClient(validator([0.12, 0.18])),
+            generalist_client=LocalGeneralistClient(validator([0.12, 0.18])),
         )
     )
 
@@ -230,8 +230,8 @@ def test_generalist_signature_covers_flow_spec_payload():
 
 def test_api_client_rejects_wrong_signer_and_tampered_vote():
     vote = validator([0.9, 0.9]).validate(validator_request())
-    client = BouncerClient(
-        "https://kaori-bouncer.example",
+    client = GeneralistClient(
+        "https://kaori-generalist.example",
         token_provider=lambda _audience: "token",
         signing_key=SIGNING_KEY,
     )
@@ -253,7 +253,7 @@ def test_private_endpoint_accepts_no_submission_rule_payload():
         "claim_type_id",
         "evidence_refs",
     }
-    client = TestClient(create_bouncer_app(validator([0.9, 0.9])))
+    client = TestClient(create_generalist_app(validator([0.9, 0.9])))
 
     response = client.post("/", json=request.model_dump(mode="json"))
 
@@ -310,7 +310,7 @@ def test_non_coral_compile_gets_post_persist_generalist_vote():
         create_app(
             flow=flow,
             verify_token=verify_token,
-            bouncer_client=LocalBouncerClient(generalist),
+            generalist_client=LocalGeneralistClient(generalist),
         )
     )
     claim_type = "earth.coastal_erosion.v1"

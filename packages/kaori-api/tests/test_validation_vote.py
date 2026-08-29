@@ -205,5 +205,5 @@ def test_no_new_http_routes_for_validation_vote():
         "/v1/truth/{truthkey:path}",
     }
     assert not any("vote" in (path or "") for path in paths)
-    assert not any("bouncer" in (path or "") for path in paths)
+    assert not any("generalist" in (path or "") for path in paths)
     assert not any("validat" in (path or "") for path in paths)

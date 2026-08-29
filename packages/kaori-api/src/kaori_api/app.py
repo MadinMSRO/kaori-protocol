@@ -9,7 +9,7 @@ Thin FastAPI surface Liminal can call this week:
 Wraps TruthOrchestrator.compile_observations and FlowCore.get_standing.
 Compile 200 persists TruthState to kaori.truth_states then emits
 FlowCore.emit_truthstate. CLIP validation is queued after persistence for the
-separate private bouncer service. No other HTTP routes. Wire field names match
+separate private generalist service. No other HTTP routes. Wire field names match
 Open Core primitives. Compiler stays pure.
 """
 from __future__ import annotations
@@ -29,8 +29,8 @@ from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 from pydantic import ValidationError
 
 from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
-from kaori_api.bouncer_client import (
-    BouncerClient,
+from kaori_api.generalist_client import (
+    GeneralistClient,
     validate_persisted_truth_state,
 )
 from kaori_api.orchestrator import TruthOrchestrator, UnknownClaimTypeError
@@ -195,7 +195,7 @@ def create_app(
     publishable_key: Optional[str] = None,
     verify_token: Optional[Callable[[str], str]] = None,
     schema_path: Optional[str] = None,
-    bouncer_client: Optional[BouncerClient] = None,
+    generalist_client: Optional[GeneralistClient] = None,
 ) -> FastAPI:
     """
     Build the sidecar. Tests inject FlowCore + verify_token + truth_store.
@@ -220,8 +220,8 @@ def create_app(
         trust_provider=FlowTrustProvider(flow),
         schema_path=schema_path or default_schema_path(),
     )
-    if bouncer_client is None:
-        bouncer_client = BouncerClient.from_env()
+    if generalist_client is None:
+        generalist_client = GeneralistClient.from_env()
     ensure_generalist_registered(flow)
 
     app = FastAPI(
@@ -240,7 +240,7 @@ def create_app(
     app.state.truth_store = truth_store
     app.state.verify_token = verify_token
     app.state.orchestrator = orchestrator
-    app.state.bouncer_client = bouncer_client
+    app.state.generalist_client = generalist_client
 
     def require_agent(request: Request) -> str:
         try:
@@ -311,7 +311,7 @@ def create_app(
 
         artifact = persist_truth_state(request.app.state.truth_store, truth_state)
         emit_compile_truthstate(flow_core, truth_state, agent_id)
-        client = request.app.state.bouncer_client
+        client = request.app.state.generalist_client
         if client is not None:
             background_tasks.add_task(
                 validate_persisted_truth_state,

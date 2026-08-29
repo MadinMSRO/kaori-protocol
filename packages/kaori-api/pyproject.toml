@@ -24,7 +24,7 @@ dev = [
     "httpx>=0.24.0",
     "Pillow>=12.3.0",
 ]
-bouncer = [
+generalist = [
     "open-clip-torch>=3.3.0",
     "Pillow>=12.3.0",
     "torch>=2.13.0",

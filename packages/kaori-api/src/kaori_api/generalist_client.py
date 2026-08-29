@@ -1,4 +1,4 @@
-"""Private kaori-api to kaori-bouncer invocation and vote recording."""
+"""Private kaori-api to kaori-generalist invocation and vote recording."""
 from __future__ import annotations
 
 import json
@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 from kaori_flow import FlowCore
 from kaori_truth.primitives.observation import Observation
 
-from kaori_api.bouncer import (
+from kaori_api.generalist import (
     ValidationVote,
     ValidatorRequest,
     validator_signing_key,
@@ -20,15 +20,15 @@ from kaori_api.bouncer import (
 from kaori_api.validation import GENERALIST_AGENT_ID, record_validation_vote
 
 LOGGER = logging.getLogger(__name__)
-BOUNCER_URL_ENV = "KAORI_BOUNCER_URL"
+GENERALIST_URL_ENV = "KAORI_GENERALIST_URL"
 GCP_IDENTITY_URL = (
     "http://metadata.google.internal/computeMetadata/v1/instance/"
     "service-accounts/default/identity"
 )
 
 
-class BouncerClient:
-    """Invoke the IAM-protected bouncer service with a Cloud Run ID token."""
+class GeneralistClient:
+    """Invoke the IAM-protected generalist service with a Cloud Run ID token."""
 
     def __init__(
         self,
@@ -44,8 +44,8 @@ class BouncerClient:
         self.timeout = timeout
 
     @classmethod
-    def from_env(cls) -> Optional["BouncerClient"]:
-        url = os.environ.get(BOUNCER_URL_ENV)
+    def from_env(cls) -> Optional["GeneralistClient"]:
+        url = os.environ.get(GENERALIST_URL_ENV)
         return None if not url else cls(url)
 
     def validate(
@@ -80,13 +80,13 @@ class BouncerClient:
 
     def _validate_vote(self, vote: ValidationVote, truthkey_id: str) -> None:
         if vote.agent_id != GENERALIST_AGENT_ID:
-            raise ValueError("bouncer response has an unexpected agent_id")
+            raise ValueError("generalist response has an unexpected agent_id")
         if vote.truthkey_id != truthkey_id:
-            raise ValueError("bouncer response has an unexpected truthkey_id")
+            raise ValueError("generalist response has an unexpected truthkey_id")
         if vote.window_id != f"window:{truthkey_id}":
-            raise ValueError("bouncer response has an unexpected window_id")
+            raise ValueError("generalist response has an unexpected window_id")
         if not verify_validation_vote(vote, self.signing_key):
-            raise ValueError("bouncer response has an invalid signature")
+            raise ValueError("generalist response has an invalid signature")
 
 
 def cloud_run_id_token(audience: str) -> str:
@@ -99,7 +99,7 @@ def cloud_run_id_token(audience: str) -> str:
 
 def validate_persisted_truth_state(
     *,
-    client: BouncerClient,
+    client: GeneralistClient,
     flow: FlowCore,
     truthkey_id: str,
     claim_type_id: str,
@@ -127,4 +127,4 @@ def validate_persisted_truth_state(
             signature=vote.signature,
         )
     except Exception:
-        LOGGER.exception("kaori-bouncer failed for truthkey %s", truthkey_id)
+        LOGGER.exception("kaori-generalist failed for truthkey %s", truthkey_id)

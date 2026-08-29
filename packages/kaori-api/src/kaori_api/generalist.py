@@ -1,4 +1,4 @@
-"""CPU CLIP generalist for the private kaori-bouncer service."""
+"""CPU CLIP generalist for the private kaori-generalist service."""
 from __future__ import annotations
 
 import hashlib
