@@ -17,6 +17,8 @@ from kaori_api.validation import (
 )
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.signal import SignalTypes
+from kaori_truth.factory import load_claim_type
+from kaori_truth.primitives.claimtype import ValidationFlowConfig
 
 AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"
@@ -76,6 +78,17 @@ def test_coral_still_always_require_human():
     spec = yaml.safe_load(CORAL_YAML.read_text())
     assert spec["human_gating"]["always_require_human"] is True
     assert spec["risk_profile"] == "critical"
+
+
+def test_claim_type_hash_binds_status_policy():
+    claim_type = load_claim_type(CORAL_YAML)
+    assert claim_type.human_gating.always_require_human is True
+    assert claim_type.validation_flow.mode == "human_expert"
+
+    auto_lane = claim_type.model_copy(
+        update={"validation_flow": ValidationFlowConfig(mode="auto")}
+    )
+    assert auto_lane.hash() != claim_type.hash()
 
 
 def test_generalist_registered_on_startup_idempotent():

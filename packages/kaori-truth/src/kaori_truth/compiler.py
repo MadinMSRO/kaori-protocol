@@ -295,17 +295,14 @@ def _determine_status(
         return TruthStatus.UNDECIDED, None, transparency_flags
     
     # ClaimType YAML determines whether compilation enters a human-gated lane.
-    config = claim_type.get_config() or {}
-    human_gating = config.get("human_gating") or {}
-    validation_flow = config.get("validation_flow") or {}
     risk_profile = str(claim_type.risk_profile).lower()
     required_profiles = {
         str(profile).lower()
-        for profile in human_gating.get("required_for_risk_profiles", [])
+        for profile in claim_type.human_gating.required_for_risk_profiles
     }
-    validation_mode = str(validation_flow.get("mode", "auto")).lower()
+    validation_mode = claim_type.validation_flow.mode.lower()
     requires_human = (
-        human_gating.get("always_require_human") is True
+        claim_type.human_gating.always_require_human
         or risk_profile == "critical"
         or risk_profile in required_profiles
         or validation_mode in {"human_peer", "human_expert", "authority_gate"}

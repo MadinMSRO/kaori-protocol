@@ -46,6 +46,21 @@ class AutovalidationConfig(BaseModel):
     ai_verified_false_threshold: float = 0.20
 
 
+class HumanGatingConfig(BaseModel):
+    """Human review policy loaded from ClaimType YAML."""
+
+    always_require_human: bool = False
+    required_for_risk_profiles: List[str] = Field(default_factory=lambda: ["critical"])
+    min_trust_score: float = 0.0
+    min_ai_confidence: float = 0.0
+
+
+class ValidationFlowConfig(BaseModel):
+    """Validation lane selected by ClaimType YAML."""
+
+    mode: str = "auto"
+
+
 class TemporalDecayConfig(BaseModel):
     """Temporal decay configuration."""
     half_life: str = "PT6H"
@@ -69,6 +84,8 @@ class ClaimType(BaseModel):
     truthkey: TruthKeyConfig = Field(default_factory=TruthKeyConfig)
     consensus_model: ConsensusModel = Field(default_factory=ConsensusModel)
     autovalidation: AutovalidationConfig = Field(default_factory=AutovalidationConfig)
+    human_gating: HumanGatingConfig = Field(default_factory=HumanGatingConfig)
+    validation_flow: ValidationFlowConfig = Field(default_factory=ValidationFlowConfig)
     temporal_decay: TemporalDecayConfig = Field(default_factory=TemporalDecayConfig)
     
     # Output schema (NEW): validates TruthState.claim payload
@@ -115,6 +132,18 @@ class ClaimType(BaseModel):
             "autovalidation": {
                 "ai_verified_true_threshold": self.autovalidation.ai_verified_true_threshold,
                 "ai_verified_false_threshold": self.autovalidation.ai_verified_false_threshold,
+            },
+            "human_gating": {
+                "always_require_human": self.human_gating.always_require_human,
+                "required_for_risk_profiles": sorted(
+                    profile.lower()
+                    for profile in self.human_gating.required_for_risk_profiles
+                ),
+                "min_trust_score": self.human_gating.min_trust_score,
+                "min_ai_confidence": self.human_gating.min_ai_confidence,
+            },
+            "validation_flow": {
+                "mode": self.validation_flow.mode.lower(),
             },
             "temporal_decay": {
                 "half_life": self.temporal_decay.half_life.upper(),

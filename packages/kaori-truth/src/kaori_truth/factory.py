@@ -19,8 +19,13 @@ from typing import Optional
 
 from kaori_truth.io.loaders import load_yaml_file, resolve_schema_ref
 from kaori_truth.primitives.claimtype import (
-    ClaimType, TruthKeyConfig, ConsensusModel, 
-    AutovalidationConfig, TemporalDecayConfig
+    AutovalidationConfig,
+    ClaimType,
+    ConsensusModel,
+    HumanGatingConfig,
+    TemporalDecayConfig,
+    TruthKeyConfig,
+    ValidationFlowConfig,
 )
 
 def load_claim_type(path: str | Path, schema_base_path: str = "") -> ClaimType:
@@ -55,6 +60,8 @@ def load_claim_type(path: str | Path, schema_base_path: str = "") -> ClaimType:
         truthkey=TruthKeyConfig(**raw_config.get("truthkey", {})),
         consensus_model=ConsensusModel(**raw_config.get("consensus_model", {})),
         autovalidation=AutovalidationConfig(**raw_config.get("autovalidation", {})),
+        human_gating=HumanGatingConfig(**raw_config.get("human_gating", {})),
+        validation_flow=ValidationFlowConfig(**raw_config.get("validation_flow", {})),
         temporal_decay=TemporalDecayConfig(**raw_config.get("temporal_decay", {})),
         
         # Inject resolved schema
