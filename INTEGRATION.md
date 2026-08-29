@@ -67,10 +67,40 @@ standing = flow.get_standing("user:amira")
 
 ### Pattern B: Sidecar Service
 
-Kaori runs as a separate service with REST/gRPC API.
+Kaori runs as a separate service with a REST API. The Open Core sidecar this week is FastAPI in `kaori-api`:
 
 ```
-Your App ──HTTP──▶ Kaori Service ──▶ Storage
+Liminal ──HTTP──▶ kaori_api.app ──▶ FlowCore(store=PostgresSignalStore)
+                         │
+                         └── TruthOrchestrator.compile_observations
+```
+
+Routes (and only these):
+
+| Method | Path | Wraps |
+|--------|------|--------|
+| `POST` | `/v1/compile` | `TruthOrchestrator.compile_observations` (then persist + `FlowCore.emit_truthstate`) |
+| `GET` | `/v1/standing/{agent_id}` | `FlowCore.get_standing` |
+| `GET` | `/v1/truth/{truthkey}` | stored `kaori.truth_states` artifact (`{truthkey:path}`) |
+
+Auth: `Authorization: Bearer <token>` verified by `GET {SUPABASE_URL}/auth/v1/user` with `apikey: SUPABASE_PUBLISHABLE_KEY`. Agent id is `user:{user.id}`. Never `profiles.id`. Compile 200 upserts `TruthState.model_dump` into `kaori.truth_states` (not `public.truths`) then emits `FlowCore.emit_truthstate` so standing moves from that signal — not from `register_agent` for the Bearer. Startup idempotently registers the CPU CLIP voter `ai:generalist_v1` with role validator. After any ClaimType persists, the private model service loads that ClaimType's YAML, returns a signed relevance vote, and `kaori-api` records it through the internal `record_validation_vote` helper. The helper is not a route, and `compile_truth_state` remains pure. The sidecar stamps `Observation.reporter_id` from the Bearer agent and `reporter_context` from Flow.
+
+Compile body (Open Core names only): `{ "truth_key", "claim_type_id", "observations" }`. Observation field is `evidence_refs`. 200 TruthState field is `truthkey`. Sidecar loads ClaimType YAML for the given `claim_type_id` (404 if missing). Required payload fields come from that spec `ui_schema`.
+
+Identity:
+
+```python
+def get_agent_id(user) -> str:
+    return f"user:{user.id}"  # Supabase auth user.id
+```
+
+Local run (`DATABASE_URL` is Cloud SQL Postgres, schema `kaori`):
+
+```bash
+export SUPABASE_URL=https://your-project.supabase.co
+export SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+# DATABASE_URL is optional (in-memory when unset)
+uvicorn kaori_api.app:app --port 8000
 ```
 
 **Best for:** Polyglot environments, microservices.

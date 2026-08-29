@@ -20,17 +20,22 @@ from kaori_truth import (
     compile_truth_state,
     TruthState,
     Observation,
-    ClaimType,
-    load_claimtype_yaml,
 )
+from kaori_truth.factory import load_claim_type
 from kaori_truth.signing import sign_truth_state
 
 # Import from Flow
-from kaori_flow import TrustProvider, create_trust_snapshot
+from kaori_flow.trust_provider import TrustProvider, create_trust_snapshot
 from kaori_flow.primitives import Agent
 
-# Import from DB (this is the only place Truth/Flow touches DB)
-# from kaori_db import ...  # Would be imported in production
+
+class UnknownClaimTypeError(FileNotFoundError):
+    """ClaimType YAML is not on disk. Sidecar maps this to HTTP 404."""
+
+    def __init__(self, claim_type_id: str, path: str):
+        self.claim_type_id = claim_type_id
+        self.path = path
+        super().__init__(path)
 
 
 class TruthOrchestrator:
@@ -127,7 +132,11 @@ class TruthOrchestrator:
         
         return truth_state
     
-    def _get_claim_type(self, claim_type_id: str) -> ClaimType:
+    def get_claim_type(self, claim_type_id: str):
+        """Load ClaimType YAML for this id. Missing file → UnknownClaimTypeError."""
+        return self._get_claim_type(claim_type_id)
+
+    def _get_claim_type(self, claim_type_id: str):
         """Load ClaimType from cache or file."""
         if claim_type_id not in self._claimtype_cache:
             # Parse claim type ID to path
@@ -141,17 +150,10 @@ class TruthOrchestrator:
                 path = f"{self.schema_path}/{claim_type_id}.yaml"
             
             try:
-                self._claimtype_cache[claim_type_id] = load_claimtype_yaml(path)
-            except FileNotFoundError:
-                # Create default ClaimType
-                from kaori_truth.primitives.claimtype import ClaimType
-                self._claimtype_cache[claim_type_id] = ClaimType(
-                    id=claim_type_id,
-                    version=1,
-                    domain=parts[0] if parts else "earth",
-                    topic=parts[1] if len(parts) > 1 else "unknown",
-                )
-        
+                self._claimtype_cache[claim_type_id] = load_claim_type(path)
+            except FileNotFoundError as exc:
+                raise UnknownClaimTypeError(claim_type_id, path) from exc
+
         return self._claimtype_cache[claim_type_id]
 
 

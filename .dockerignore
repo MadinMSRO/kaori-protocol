@@ -1,0 +1,17 @@
+.git
+.github
+**/.pytest_cache
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+**/.venv
+**/venv
+frontend
+examples
+tests
+packages/*/tests
+terraform
+.env
+.env.*
+*.md
+!packages/kaori-api/README.md

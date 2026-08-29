@@ -58,7 +58,19 @@ members = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "packages/kaori-truth/tests", "packages/kaori-flow/tests"]
+testpaths = [
+    "tests",
+    "packages/kaori-truth/tests",
+    "packages/kaori-flow/tests",
+    "packages/kaori-db/tests",
+    "packages/kaori-api/tests",
+]
+pythonpath = [
+    "packages/kaori-truth/src",
+    "packages/kaori-flow/src",
+    "packages/kaori-db/src",
+    "packages/kaori-api/src",
+]
 python_files = ["test_*.py"]
 
 [tool.ruff]
