@@ -10,9 +10,12 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from kaori_flow import FlowCore
+from kaori_flow.primitives.agent import AgentType, create_agent_id
 from kaori_flow.primitives.signal import Signal, SignalTypes
 
 GENERALIST_AGENT_ID = "ai:generalist_v1"
+# FLOW_SPEC Rule 2: claimtype:{id} is a claimtype agent. AgentType already names this.
+CLAIMTYPE_ROLE = AgentType.CLAIMTYPE.value
 VALIDATION_VOTES = ("RATIFY", "REJECT", "ABSTAIN")
 
 
@@ -22,15 +25,51 @@ def agent_is_known(flow: FlowCore, agent_id: str) -> bool:
     return bool(flow.store.get_for_agent(agent_id))
 
 
+def ensure_agent_registered(
+    flow: FlowCore,
+    agent_id: str,
+    *,
+    role: str,
+    agent_type: str | None = None,
+) -> None:
+    """Register any Flow agent if unknown. Idempotent. Role must already exist in FLOW_SPEC."""
+    if not agent_is_known(flow, agent_id):
+        if agent_type is None:
+            flow.register_agent(agent_id, role=role)
+        else:
+            flow.register_agent(agent_id, role=role, agent_type=agent_type)
+
+
 def ensure_validator_registered(flow: FlowCore, agent_id: str) -> None:
     """Register the selected validator agent if unknown. Idempotent."""
-    if not agent_is_known(flow, agent_id):
-        flow.register_agent(agent_id, role="validator")
+    ensure_agent_registered(flow, agent_id, role="validator")
 
 
 def ensure_generalist_registered(flow: FlowCore) -> None:
     """Register the CLIP generalist voter. Idempotent."""
     ensure_validator_registered(flow, GENERALIST_AGENT_ID)
+
+
+def claimtype_agent_id(claim_type_id: str) -> str:
+    """FLOW_SPEC Rule 2 / AgentType.CLAIMTYPE: claimtype:{claim_type_id}."""
+    return create_agent_id(AgentType.CLAIMTYPE, claim_type_id)
+
+
+def ensure_claimtype_registered(flow: FlowCore, claim_type_id: str) -> str:
+    """
+    Register Flow agent claimtype:{claim_type_id} if unknown. Idempotent.
+
+    Generic over whatever claim_type_id compile already loaded from YAML.
+    Does not mint standing — GET /v1/standing reads reducer output from signals.
+    """
+    agent_id = claimtype_agent_id(claim_type_id)
+    ensure_agent_registered(
+        flow,
+        agent_id,
+        role=CLAIMTYPE_ROLE,
+        agent_type=AgentType.CLAIMTYPE.value,
+    )
+    return agent_id
 
 
 def record_validation_vote(

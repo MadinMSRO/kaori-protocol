@@ -355,7 +355,8 @@ def test_compile_persists_truthstate_and_standing_from_emit_not_register():
     assert len(emitted) == 1
     signal = emitted[0]
     assert signal.object_id == truthkey
-    assert signal.payload["contributors"] == [AGENT_ID]
+    claimtype_agent = f"claimtype:{CORAL_CLAIM_TYPE}"
+    assert signal.payload["contributors"] == [AGENT_ID, claimtype_agent]
     assert signal.payload["status"] == artifact["status"]
     assert signal.payload["confidence"] == artifact["confidence"]
     expected_outcome = "correct" if artifact["status"] == "VERIFIED_TRUE" else "unknown"
@@ -401,7 +402,15 @@ def test_compile_404_does_not_persist_or_emit():
     assert truth_store.get(body["truth_key"]) is None
     assert flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED) == []
     assert AGENT_ID not in {s.object_id for s in flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)}
+    assert "claimtype:ocean.made_up.v1" not in {
+        s.object_id for s in flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)
+    }
     assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
+    unknown_standing = client.get(
+        "/v1/standing/claimtype:ocean.made_up.v1",
+        headers=auth_header(),
+    )
+    assert unknown_standing.status_code == 404
 
 
 def test_get_truth_missing_bearer_401(client: TestClient):
@@ -463,3 +472,65 @@ def test_standing_200(client: TestClient, flow: FlowCore):
     body = response.json()
     assert body == {"standing": expected}
     assert 0.0 <= body["standing"] <= 1000.0
+
+
+def test_claimtype_standing_200_float_after_compile_unknown_still_404():
+    """GET /v1/standing/claimtype:{id} is Flow rank after compile; never compiled is 404."""
+    from kaori_api.validation import claimtype_agent_id
+
+    flow = FlowCore(store=InMemorySignalStore())
+    client = TestClient(create_app(flow=flow, verify_token=verify_token))
+    compiled_id = claimtype_agent_id(CORAL_CLAIM_TYPE)
+    never_compiled_id = claimtype_agent_id("ocean.vessel_anomaly.v1")
+    unknown_id = claimtype_agent_id("ocean.made_up.v1")
+
+    before = client.get(f"/v1/standing/{compiled_id}", headers=auth_header())
+    assert before.status_code == 404
+
+    compiled = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+    assert compiled.status_code == 200, compiled.text
+
+    standing = client.get(f"/v1/standing/{compiled_id}", headers=auth_header())
+    assert standing.status_code == 200
+    body = standing.json()
+    assert set(body) == {"standing"}
+    assert isinstance(body["standing"], (int, float))
+    assert not isinstance(body["standing"], bool)
+    rank = float(body["standing"])
+    assert 0.0 <= rank <= 1000.0
+    assert rank == flow.get_standing(compiled_id)
+
+    emitted = flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED)
+    assert compiled_id in emitted[0].payload["contributors"]
+    registered = [
+        s
+        for s in flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)
+        if s.object_id == compiled_id
+    ]
+    assert len(registered) == 1
+    assert registered[0].payload["role"] == "claimtype"
+
+    assert client.get(f"/v1/standing/{never_compiled_id}", headers=auth_header()).status_code == 404
+    assert client.get(f"/v1/standing/{unknown_id}", headers=auth_header()).status_code == 404
+
+
+def test_claimtype_register_is_idempotent_across_compiles():
+    from kaori_api.validation import claimtype_agent_id
+
+    flow = FlowCore(store=InMemorySignalStore())
+    client = TestClient(create_app(flow=flow, verify_token=verify_token))
+    agent = claimtype_agent_id(CORAL_CLAIM_TYPE)
+    first = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+    second = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    registered = [
+        s
+        for s in flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)
+        if s.object_id == agent
+    ]
+    assert len(registered) == 1
+    standing = client.get(f"/v1/standing/{agent}", headers=auth_header())
+    assert standing.status_code == 200
+    assert isinstance(standing.json()["standing"], (int, float))
+    assert 0.0 <= float(standing.json()["standing"]) <= 1000.0

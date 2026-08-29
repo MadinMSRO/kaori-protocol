@@ -136,6 +136,9 @@ def test_product_claim_type_compiles_200(client: TestClient, claim_type_id, trut
     assert fetched.status_code == 200
     assert fetched.json() == body
     assert fetched.json()["claim"] == body["claim"]
+    standing = client.get(f"/v1/standing/claimtype:{claim_type_id}", headers=auth_header())
+    assert standing.status_code == 200
+    assert 0.0 <= float(standing.json()["standing"]) <= 1000.0
 
 
 def test_product_claim_missing_ui_schema_field_400(client: TestClient):

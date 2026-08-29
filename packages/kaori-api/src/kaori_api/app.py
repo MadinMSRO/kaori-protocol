@@ -39,6 +39,7 @@ from kaori_api.orchestrator import TruthOrchestrator, UnknownClaimTypeError
 from kaori_api.trust_adapter import FlowTrustProvider
 from kaori_api.validation import (
     agent_is_known,
+    ensure_claimtype_registered,
     ensure_generalist_registered,
 )
 
@@ -176,15 +177,21 @@ def persist_truth_state(truth_store: Any, state: TruthState) -> dict:
     return artifact
 
 
-def emit_compile_truthstate(flow: FlowCore, state: TruthState, agent_id: str) -> None:
-    """Standing moves from TRUTHSTATE_EMITTED history, not register_agent."""
+def emit_compile_truthstate(
+    flow: FlowCore,
+    state: TruthState,
+    agent_id: str,
+    claim_type_id: str,
+) -> None:
+    """Standing moves from TRUTHSTATE_EMITTED history, not a minted number."""
+    claimtype_id = ensure_claimtype_registered(flow, claim_type_id)
     status = state.status.value
     outcome = "correct" if state.status == TruthStatus.VERIFIED_TRUE else "unknown"
     flow.emit_truthstate(
         truthkey=state.truthkey,
         status=status,
         confidence=state.confidence,
-        contributors=[agent_id],
+        contributors=[agent_id, claimtype_id],
         outcome=outcome,
     )
 
@@ -332,7 +339,7 @@ def create_app(
             raise HTTPException(status_code=400, detail="Invalid observation or EvidenceRef") from exc
 
         artifact = persist_truth_state(request.app.state.truth_store, truth_state)
-        emit_compile_truthstate(flow_core, truth_state, agent_id)
+        emit_compile_truthstate(flow_core, truth_state, agent_id, claim_type_id)
         return JSONResponse(status_code=200, content=artifact)
 
     @app.get("/v1/standing/{agent_id}")
