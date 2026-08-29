@@ -83,7 +83,7 @@ Routes (and only these):
 | `GET` | `/v1/standing/{agent_id}` | `FlowCore.get_standing` |
 | `GET` | `/v1/truth/{truthkey}` | stored `kaori.truth_states` artifact (`{truthkey:path}`) |
 
-Auth: `Authorization: Bearer <token>` verified by `GET {SUPABASE_URL}/auth/v1/user` with `apikey: SUPABASE_PUBLISHABLE_KEY`. Agent id is `user:{user.id}`. Never `profiles.id`. Compile 200 upserts `TruthState.model_dump` into `kaori.truth_states` (not `public.truths`) then emits `FlowCore.emit_truthstate` so standing moves from that signal — not from `register_agent`. The sidecar stamps `Observation.reporter_id` from that agent and `reporter_context` from Flow.
+Auth: `Authorization: Bearer <token>` verified by `GET {SUPABASE_URL}/auth/v1/user` with `apikey: SUPABASE_PUBLISHABLE_KEY`. Agent id is `user:{user.id}`. Never `profiles.id`. Compile 200 upserts `TruthState.model_dump` into `kaori.truth_states` (not `public.truths`) then emits `FlowCore.emit_truthstate` so standing moves from that signal — not from `register_agent` for the Bearer. Startup registers Flow agent `ai:bouncer_v1` (role validator) if unknown. `record_validation_vote` is an internal SignalStore helper (not a route, not called from compile). The sidecar stamps `Observation.reporter_id` from that agent and `reporter_context` from Flow.
 
 Compile body (Open Core names only): `{ "truth_key", "claim_type_id", "observations" }`. Observation field is `evidence_refs`. 200 TruthState field is `truthkey`. Sidecar loads ClaimType YAML for the given `claim_type_id` (404 if missing). Required payload fields come from that spec `ui_schema`.
 

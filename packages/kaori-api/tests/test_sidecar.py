@@ -303,7 +303,8 @@ def test_compile_persists_truthstate_and_standing_from_emit_not_register():
     assert "evidence_refs" in truth_store.get(truthkey)
 
     registered = flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)
-    assert registered == []
+    assert AGENT_ID not in {s.object_id for s in registered}
+    assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
     emitted = flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED)
     assert len(emitted) == 1
     signal = emitted[0]
@@ -353,7 +354,8 @@ def test_compile_404_does_not_persist_or_emit():
     assert response.status_code == 404
     assert truth_store.get(body["truth_key"]) is None
     assert flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED) == []
-    assert flow.store.get_by_type(SignalTypes.AGENT_REGISTERED) == []
+    assert AGENT_ID not in {s.object_id for s in flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)}
+    assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
 
 
 def test_get_truth_missing_bearer_401(client: TestClient):

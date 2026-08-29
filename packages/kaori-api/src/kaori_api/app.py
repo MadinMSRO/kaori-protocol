@@ -25,6 +25,10 @@ from pydantic import ValidationError
 from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
 from kaori_api.orchestrator import TruthOrchestrator, UnknownClaimTypeError
 from kaori_api.trust_adapter import FlowTrustProvider
+from kaori_api.validation import (
+    agent_is_known,
+    ensure_bouncer_registered,
+)
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.agent import Agent
 from kaori_flow.primitives.signal import SignalTypes
@@ -155,12 +159,6 @@ def validate_payload_fields(observations: List[Observation], claim_type) -> None
                 raise HTTPException(status_code=400, detail=f"Missing payload field: {field}")
 
 
-def agent_is_known(flow: FlowCore, agent_id: str) -> bool:
-    if agent_id in flow.get_all_standings():
-        return True
-    return bool(flow.store.get_for_agent(agent_id))
-
-
 def persist_truth_state(truth_store: Any, state: TruthState) -> dict:
     """Upsert full TruthState.model_dump (including evidence_refs) on truthkey."""
     artifact = state.model_dump(mode="json")
@@ -217,6 +215,7 @@ def create_app(
         trust_provider=FlowTrustProvider(flow),
         schema_path=schema_path or default_schema_path(),
     )
+    ensure_bouncer_registered(flow)
 
     app = FastAPI(
         title="Kaori Sidecar",
