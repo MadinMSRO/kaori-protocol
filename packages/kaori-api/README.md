@@ -125,8 +125,10 @@ docker run --rm -p 8080:8080 \
 ## Cloud Run / GCP
 
 Do not execute Cloud Run, Cloud SQL, GCS, IAM, or Secret Manager commands from
-this repository change. The ordered production plan is
-[`docs/deployment-runbook.md`](../../docs/deployment-runbook.md).
+a Cloud Agent that lacks GCP credentials. The ordered production plan is
+[`docs/deployment-runbook.md`](../../docs/deployment-runbook.md). Operator
+entrypoints: `scripts/production/cutover.sh` and
+`scripts/production/smoke_ledger.py`.
 
 When `KAORI_ENVIRONMENT=production`, the API refuses to boot without
 `DATABASE_URL`. Cloud SQL runtime never applies DDL. `KAORI_OBSERVATIONS_BUCKET`
