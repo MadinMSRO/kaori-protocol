@@ -33,7 +33,8 @@ the Gold `kaori.truth_states` projection in the same transaction. `GET
 /v1/truth/{truthkey}` returns that latest full artifact, including
 `compile_inputs.observations`, content-bound evidence refs, and consensus votes.
 
-CORS is restricted to the configured Liminal live and preview origins.
+CORS always allows the Liminal live and preview origins. Add more hosts with
+`KAORI_CORS_ORIGINS` (comma-separated). `*` is ignored.
 
 ## Run locally against DATABASE_URL
 

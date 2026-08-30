@@ -69,6 +69,26 @@ SOURCE_TYPE_BY_AGENT_TYPE = {
 }
 
 
+def extra_cors_origins() -> List[str]:
+    """Optional extra browser origins from KAORI_CORS_ORIGINS. Never '*'."""
+    origins: List[str] = []
+    for part in os.environ.get("KAORI_CORS_ORIGINS", "").split(","):
+        origin = part.strip().rstrip("/")
+        if not origin or origin == "*":
+            continue
+        origins.append(origin)
+    return origins
+
+
+def cors_origins() -> List[str]:
+    """Lovable live/preview plus any extra production or local origins."""
+    seen: List[str] = []
+    for origin in [*LIMINAL_ORIGINS, *extra_cors_origins()]:
+        if origin not in seen:
+            seen.append(origin)
+    return seen
+
+
 def default_schema_path() -> str:
     env = os.environ.get("KAORI_SCHEMA_PATH")
     if env:
@@ -341,7 +361,7 @@ def create_app(
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=list(LIMINAL_ORIGINS),
+        allow_origins=cors_origins(),
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
