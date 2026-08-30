@@ -11,11 +11,13 @@ import re
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Optional, Protocol, Sequence
+from typing import Callable, Dict, List, Literal, Optional, Protocol, Sequence, Tuple
 from urllib.parse import quote, urlparse
 
 import yaml
 from kaori_truth.primitives.evidence import EvidenceRef
+from kaori_truth.primitives.observation import Observation
+from kaori_truth.primitives.truthkey import parse_truthkey
 from pydantic import BaseModel, Field, field_validator
 
 from kaori_api.validation import GENERALIST_AGENT_ID
@@ -31,11 +33,24 @@ CLIP_V1_PRETRAINED = "openai"
 
 
 class ValidatorRequest(BaseModel):
-    """Private request: truthkey, claim type, and EvidenceRefs. No observation payload."""
+    """
+    Private request: the full observation package.
+
+    CLIP sees image URI(s) plus Observation.geo, ui_schema payload fields,
+    claim_type_id, and the compile TruthKey / H3 cell. evidence_refs may be
+    sent explicitly or derived from observations.
+    """
 
     truthkey_id: str
     claim_type_id: str
-    evidence_refs: List[EvidenceRef]
+    evidence_refs: List[EvidenceRef] = Field(default_factory=list)
+    observations: List[Observation] = Field(default_factory=list)
+
+    def package_evidence_refs(self) -> List[EvidenceRef]:
+        refs = list(self.evidence_refs)
+        if refs:
+            return refs
+        return [ref for observation in self.observations for ref in observation.evidence_refs]
 
 
 class ValidationVote(BaseModel):
@@ -202,11 +217,12 @@ class OpenClipGeneralist:
 
 class ClipGeneralistValidator:
     """
-    Run one CLIP generalist for claim-type relevance.
+    Run one CLIP generalist on the full observation package.
 
     Submission rules and specialist routing are deliberately absent. The model
-    sees only evidence already accepted by compile and decides whether that
-    evidence is relevant to the ClaimType context or unrelated imagery.
+    scores package images against text that describes claim context, coordinates,
+    ui_schema payload fields, and the TruthKey H3 cell. Dummy/unrelated imagery
+    or coordinates outside that cell produce one ai:generalist_v1 vote.
     """
 
     def __init__(
@@ -230,9 +246,11 @@ class ClipGeneralistValidator:
         timestamp: Optional[datetime] = None,
     ) -> ValidationVote:
         config = self._load_claim_type(request.claim_type_id)
-        context, embedding_engine, relevance_threshold = self._generalist_settings(config)
+        base_context, embedding_engine, relevance_threshold = self._generalist_settings(config)
+        context = self._package_context(base_context, request, config)
 
-        images = [self._load_image(self.evidence_loader(ref)) for ref in request.evidence_refs]
+        refs = request.package_evidence_refs()
+        images = [self._load_image(self.evidence_loader(ref)) for ref in refs]
         relevance = self.model.score(
             images,
             context=context,
@@ -242,6 +260,8 @@ class ClipGeneralistValidator:
         vote: Literal["RATIFY", "REJECT"] = (
             "RATIFY" if confidence >= relevance_threshold else "REJECT"
         )
+        if self._package_outside_truthkey_h3(request, config):
+            vote = "REJECT"
         unsigned = ValidationVote(
             agent_id=GENERALIST_AGENT_ID,
             truthkey_id=request.truthkey_id,
@@ -300,6 +320,86 @@ class ClipGeneralistValidator:
         engine = str(embedding.get("engine") or "")
         threshold = float(embedding.get("similarity_threshold"))
         return context, engine, threshold
+
+    @staticmethod
+    def _package_context(base: str, request: ValidatorRequest, config: dict) -> str:
+        """CLIP text describes the whole observation package, not only a photo prompt."""
+        parts = [base, f"claim_type_id {request.claim_type_id}"]
+        try:
+            parsed = parse_truthkey(request.truthkey_id)
+            parts.append(f"TruthKey {request.truthkey_id}")
+            if parsed.spatial_system == "h3":
+                parts.append(f"H3 cell {parsed.spatial_id}")
+        except ValueError:
+            parts.append(f"TruthKey {request.truthkey_id}")
+
+        ui_names: List[str] = []
+        for field in ((config.get("ui_schema") or {}).get("fields") or []):
+            if isinstance(field, dict) and field.get("name"):
+                ui_names.append(str(field["name"]))
+
+        for observation in request.observations:
+            geo = observation.geo or {}
+            lat, lon = geo.get("lat"), geo.get("lon")
+            if lat is not None and lon is not None:
+                parts.append(f"lat {lat} lon {lon}")
+            payload = observation.payload or {}
+            names = ui_names or sorted(str(key) for key in payload)
+            for name in names:
+                if name in payload and payload[name] is not None:
+                    parts.append(f"{name} {payload[name]}")
+        return "; ".join(parts)
+
+    @staticmethod
+    def _coords_from_package(request: ValidatorRequest) -> List[Tuple[float, float]]:
+        coords: List[Tuple[float, float]] = []
+        for observation in request.observations:
+            for source in (observation.geo, observation.payload):
+                if not isinstance(source, dict):
+                    continue
+                lat, lon = source.get("lat"), source.get("lon")
+                if lat is None or lon is None:
+                    continue
+                try:
+                    coords.append((float(lat), float(lon)))
+                except (TypeError, ValueError):
+                    continue
+        return coords
+
+    @staticmethod
+    def _package_outside_truthkey_h3(request: ValidatorRequest, config: dict) -> bool:
+        """True when package lat/lon is present and outside the TruthKey H3 cell."""
+        coords = ClipGeneralistValidator._coords_from_package(request)
+        if not coords:
+            return False
+        try:
+            parsed = parse_truthkey(request.truthkey_id)
+        except ValueError:
+            return False
+        if parsed.spatial_system != "h3":
+            return False
+        truthkey_cfg = config.get("truthkey") or {}
+        try:
+            resolution = int(truthkey_cfg.get("resolution", 8))
+        except (TypeError, ValueError):
+            resolution = 8
+        observed_cells = [
+            ClipGeneralistValidator._h3_cell(lat, lon, resolution) for lat, lon in coords
+        ]
+        if any(cell is None for cell in observed_cells):
+            return False
+        return any(cell != parsed.spatial_id for cell in observed_cells)
+
+    @staticmethod
+    def _h3_cell(lat: float, lon: float, resolution: int) -> Optional[str]:
+        try:
+            import h3
+
+            return h3.latlng_to_cell(lat, lon, resolution)
+        except ImportError:
+            return None
+        except Exception:
+            return None
 
     @staticmethod
     def _load_image(content: bytes) -> object:

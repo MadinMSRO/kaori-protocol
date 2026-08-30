@@ -224,6 +224,11 @@ def test_integration_describes_pre_compile_validation_vote():
     assert "No fourth path" in integration
     assert "No fourth path" in readme
     assert "Player standing stays `user:{id}`" in readme
+    assert "full observation package" in integration
+    assert "CLIP relevance" in integration
+    assert "TruthKey H3" in integration
+    assert "before `compile_truth_state`" in integration
+    assert "full observation package" in readme
 
 
 def test_no_claim_type_id_branches_in_production():

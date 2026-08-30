@@ -58,6 +58,7 @@ class GeneralistClient:
         payload = ValidatorRequest(
             truthkey_id=truthkey_id,
             claim_type_id=claim_type_id,
+            observations=observations,
             evidence_refs=[
                 ref
                 for observation in observations

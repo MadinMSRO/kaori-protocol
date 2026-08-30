@@ -8,8 +8,9 @@ Thin FastAPI surface Liminal can call this week:
 
 Wraps TruthOrchestrator.compile_observations and FlowCore.get_standing.
 POST /v1/compile order: observation checks → private generalist VALIDATION_VOTE
-into Flow → compile_observations → persist → emit. CLIP stays private. No other
-HTTP routes. Wire field names match Open Core primitives. Compiler stays pure.
+on the full observation package (images, geo, payload, TruthKey H3) into Flow →
+compile_observations → persist → emit. CLIP stays private. No other HTTP routes.
+Wire field names match Open Core primitives. Compiler stays pure.
 """
 from __future__ import annotations
 
