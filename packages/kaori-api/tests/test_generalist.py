@@ -18,6 +18,7 @@ from kaori_api.generalist import (
     EvidenceContentLoader,
     ValidationVote,
     ValidatorRequest,
+    validation_vote_log_body,
     verify_validation_vote,
 )
 from kaori_api.generalist_app import create_generalist_app
@@ -429,6 +430,36 @@ def test_private_endpoint_accepts_no_submission_rule_payload():
     assert response.json()["agent_id"] == "ai:generalist_v1"
     assert "observations" not in response.json()
     assert "checks" not in response.json()
+
+
+def test_generalist_and_api_log_validation_vote_json_not_evidence_or_secrets(caplog):
+    request = validator_request()
+    with caplog.at_level("INFO"):
+        vote = validator([0.12, 0.18]).validate(
+            request,
+            timestamp=datetime(2026, 1, 7, 12, 30, tzinfo=timezone.utc),
+        )
+        client = TestClient(create_generalist_app(validator([0.12, 0.18])))
+        response = client.post("/", json=request.model_dump(mode="json"))
+
+    assert response.status_code == 200, response.text
+    assert vote.vote == "REJECT"
+    body = validation_vote_log_body(vote)
+    assert set(body) == {"agent_id", "truthkey_id", "vote", "confidence", "timestamp"}
+    assert body["vote"] == "REJECT"
+    assert body["agent_id"] == "ai:generalist_v1"
+    assert body["truthkey_id"] == TRUTHKEY
+    assert "signature" not in body
+    assert "kaori-generalist ValidationVote" in caplog.text
+    assert '"vote": "REJECT"' in caplog.text
+    assert '"confidence"' in caplog.text
+    assert TRUTHKEY in caplog.text
+    assert SIGNING_KEY.decode() not in caplog.text
+    assert "kaori-dev-validator-key" not in caplog.text
+    assert vote.signature not in caplog.text
+    for ref in request.package_evidence_refs():
+        assert ref.uri not in caplog.text
+        assert ref.sha256 not in caplog.text
 
 
 def test_all_product_claim_types_load_their_generalist_config():

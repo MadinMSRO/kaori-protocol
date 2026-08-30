@@ -276,6 +276,9 @@ def test_integration_describes_pre_compile_validation_vote():
     assert "Never swallow `TimeoutError`" in integration
     assert "compile does not proceed on a swallowed timeout" in integration
     assert "compile does not proceed on a swallowed timeout" in readme
+    assert "ValidationVote JSON" in integration
+    assert "`vote`, `confidence`, `truthkey_id`, `agent_id`, `timestamp`" in integration
+    assert "evidence bytes" in integration
     assert "late generalist 200" in integration
     assert "only after a vote is recorded" in integration
     assert "never hardcode 30s" in integration
@@ -341,7 +344,7 @@ def test_timeout_is_read_from_claimtype_yaml_not_hardcoded_30():
     assert fake.calls[0]["timeout"] != 30.0
 
 
-def test_late_generalist_200_still_records_vote_then_compiles(monkeypatch):
+def test_late_generalist_200_still_records_vote_then_compiles(monkeypatch, caplog):
     gate = threading.Event()
     fake = FakeGeneralistClient(gate=gate)
     order = []
@@ -363,8 +366,9 @@ def test_late_generalist_200_still_records_vote_then_compiles(monkeypatch):
     assert order == []
     assert client.get(f"/v1/truth/{body['truth_key']}", headers=auth_header()).status_code == 404
 
-    gate.set()
-    join_validate_threads(client.app)
+    with caplog.at_level("INFO"):
+        gate.set()
+        join_validate_threads(client.app)
     compiled = wait_for_truth(client, body["truth_key"])
     votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
     assert len(votes) == 1
@@ -372,6 +376,11 @@ def test_late_generalist_200_still_records_vote_then_compiles(monkeypatch):
     assert order == ["compile_truth_state"]
     assert compiled.status_code == 200
     assert compiled.json()["status"] != "VALIDATION"
+    assert "kaori-api ValidationVote" in caplog.text
+    assert '"vote": "RATIFY"' in caplog.text
+    assert '"confidence": 0.91' in caplog.text
+    assert body["truth_key"] in caplog.text
+    assert "fake-generalist-sig" not in caplog.text
 
 
 def test_compile_without_vote_is_forbidden(monkeypatch):

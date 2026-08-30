@@ -7,7 +7,12 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 
-from kaori_api.generalist import ClipGeneralistValidator, ValidationVote, ValidatorRequest
+from kaori_api.generalist import (
+    ClipGeneralistValidator,
+    ValidationVote,
+    ValidatorRequest,
+    log_validation_vote,
+)
 
 
 def default_schema_root() -> str:
@@ -28,9 +33,11 @@ def create_generalist_app(validator: Optional[ClipGeneralistValidator] = None) -
     @application.post("/", response_model=ValidationVote, response_model_exclude_none=True)
     def validate(request: ValidatorRequest) -> ValidationVote:
         try:
-            return application.state.validator.validate(request)
+            vote = application.state.validator.validate(request)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        log_validation_vote(vote, source="kaori-generalist")
+        return vote
 
     return application
 

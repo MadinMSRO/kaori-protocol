@@ -17,6 +17,7 @@ from kaori_truth.primitives.observation import Observation
 from kaori_api.generalist import (
     ValidationVote,
     ValidatorRequest,
+    log_validation_vote,
     validator_signing_key,
     verify_validation_vote,
 )
@@ -208,6 +209,7 @@ def validate_and_record_vote(
         observations=observations,
         timeout=timeout,
     )
+    log_validation_vote(vote, source="kaori-api")
     record_validation_vote(
         flow,
         agent_id=vote.agent_id,

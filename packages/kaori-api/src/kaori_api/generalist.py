@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import io
 import json
+import logging
 import math
 import os
 import re
@@ -21,6 +22,8 @@ from kaori_truth.primitives.truthkey import parse_truthkey
 from pydantic import BaseModel, Field, field_validator
 
 from kaori_api.validation import GENERALIST_AGENT_ID
+
+LOGGER = logging.getLogger(__name__)
 
 VALIDATOR_SIGNING_KEY_ENV = "KAORI_VALIDATOR_SIGNING_KEY"
 DEV_VALIDATOR_SIGNING_KEY = "kaori-dev-validator-key-do-not-use-in-production"
@@ -92,6 +95,33 @@ def canonical_timestamp(value: datetime) -> str:
     if value.tzinfo is None:
         raise ValueError("timestamp must be timezone-aware")
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def validation_vote_log_body(vote: ValidationVote) -> dict:
+    """
+    Cloud Logging body for a ValidationVote.
+
+    Includes vote, confidence, truthkey_id, agent_id, timestamp.
+    Excludes signature, evidence bytes, and secrets.
+    """
+    body = {
+        "agent_id": vote.agent_id,
+        "truthkey_id": vote.truthkey_id,
+        "vote": vote.vote,
+        "timestamp": canonical_timestamp(vote.timestamp),
+    }
+    if vote.confidence is not None:
+        body["confidence"] = vote.confidence
+    return body
+
+
+def log_validation_vote(vote: ValidationVote, *, source: str, logger: Optional[logging.Logger] = None) -> None:
+    """Log the ValidationVote JSON on kaori-generalist or kaori-api."""
+    (logger or LOGGER).info(
+        "%s ValidationVote %s",
+        source,
+        json.dumps(validation_vote_log_body(vote), sort_keys=True),
+    )
 
 
 def validation_vote_signing_payload(vote: ValidationVote) -> bytes:
@@ -271,7 +301,9 @@ class ClipGeneralistValidator:
             timestamp=timestamp or datetime.now(timezone.utc),
             signature="",
         )
-        return sign_validation_vote(unsigned, self.signing_key)
+        signed = sign_validation_vote(unsigned, self.signing_key)
+        log_validation_vote(signed, source="kaori-generalist")
+        return signed
 
     def _load_claim_type(self, claim_type_id: str) -> dict:
         cached = self._config_cache.get(claim_type_id)
