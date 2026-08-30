@@ -12,6 +12,7 @@ from kaori_truth.primitives.evidence import EvidenceRef
 
 DEFAULT_MAX_EVIDENCE_BYTES = 25 * 1024 * 1024
 READ_CHUNK_BYTES = 1024 * 1024
+SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
 class EvidenceStorageError(Exception):
@@ -22,6 +23,17 @@ def _safe_filename(filename: str) -> str:
     name = PurePath(filename or "evidence").name
     normalized = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip(".-")
     return normalized[:128] or "evidence"
+
+
+def reporter_scope(reporter_id: str) -> str:
+    return hashlib.sha256(reporter_id.encode("utf-8")).hexdigest()[:16]
+
+
+def evidence_object_name(reporter_id: str, sha256: str, filename: str) -> str:
+    digest = sha256.lower()
+    if not SHA256_HEX.match(digest):
+        raise EvidenceStorageError("evidence sha256 must be a 64-character hex digest")
+    return f"observations/{reporter_scope(reporter_id)}/{digest}/{_safe_filename(filename)}"
 
 
 def _digest_and_size(stream: BinaryIO, max_bytes: int) -> tuple[str, int]:
@@ -37,6 +49,10 @@ def _digest_and_size(stream: BinaryIO, max_bytes: int) -> tuple[str, int]:
         digest.update(chunk)
     stream.seek(0)
     return digest.hexdigest(), size
+
+
+def _is_precondition_failed(exc: BaseException) -> bool:
+    return type(exc).__name__ == "PreconditionFailed"
 
 
 class InMemoryEvidenceStore:
@@ -59,8 +75,7 @@ class InMemoryEvidenceStore:
         sha256, size = _digest_and_size(stream, self.max_bytes)
         if expected_sha256 and expected_sha256.lower() != sha256:
             raise EvidenceStorageError("evidence sha256 does not match uploaded content")
-        reporter_scope = hashlib.sha256(reporter_id.encode("utf-8")).hexdigest()[:16]
-        object_name = f"observations/{reporter_scope}/{sha256}/{_safe_filename(filename)}"
+        object_name = evidence_object_name(reporter_id, sha256, filename)
         self.objects.setdefault(object_name, stream.read())
         stream.seek(0)
         return EvidenceRef(
@@ -117,11 +132,16 @@ class GcsEvidenceStore:
         if expected_sha256 and expected_sha256.lower() != sha256:
             raise EvidenceStorageError("evidence sha256 does not match uploaded content")
 
-        reporter_scope = hashlib.sha256(reporter_id.encode("utf-8")).hexdigest()[:16]
-        object_name = f"observations/{reporter_scope}/{sha256}/{_safe_filename(filename)}"
+        object_name = evidence_object_name(reporter_id, sha256, filename)
         blob = self.client.bucket(self.bucket_name).blob(object_name)
         blob.metadata = {"sha256": sha256}
         blob.cache_control = "private, no-store"
+        evidence = EvidenceRef(
+            uri=f"gs://{self.bucket_name}/{object_name}",
+            sha256=sha256,
+            mime_type=content_type,
+            bytes_size=size,
+        )
         try:
             blob.upload_from_file(
                 stream,
@@ -130,25 +150,20 @@ class GcsEvidenceStore:
                 if_generation_match=0,
             )
         except Exception as exc:
-            from google.api_core.exceptions import PreconditionFailed
-
-            if not isinstance(exc, PreconditionFailed):
+            if not _is_precondition_failed(exc):
                 raise EvidenceStorageError("failed to store evidence") from exc
+            # Object already exists at this content-addressed path. Re-verify
+            # bytes and metadata before treating the upload as idempotent.
+            self.verify(evidence, reporter_id=reporter_id)
         finally:
             stream.seek(0)
-
-        return EvidenceRef(
-            uri=f"gs://{self.bucket_name}/{object_name}",
-            sha256=sha256,
-            mime_type=content_type,
-            bytes_size=size,
-        )
+        return evidence
 
     def verify(self, evidence: EvidenceRef, *, reporter_id: str) -> None:
         parsed = urlparse(evidence.uri)
         object_name = parsed.path.lstrip("/")
-        reporter_scope = hashlib.sha256(reporter_id.encode("utf-8")).hexdigest()[:16]
-        required_prefix = f"observations/{reporter_scope}/"
+        required_prefix = f"observations/{reporter_scope(reporter_id)}/"
+        digest = (evidence.sha256 or "").lower()
         if (
             parsed.scheme != "gs"
             or parsed.netloc != self.bucket_name
@@ -157,9 +172,21 @@ class GcsEvidenceStore:
             raise EvidenceStorageError(
                 "evidence URI is outside the authenticated reporter's Kaori storage scope"
             )
+        if not SHA256_HEX.match(digest):
+            raise EvidenceStorageError("evidence sha256 must be a 64-character hex digest")
+        path_segments = object_name.split("/")
+        if len(path_segments) < 4 or path_segments[2] != digest:
+            raise EvidenceStorageError("evidence URI path does not match the declared content hash")
+
         blob = self.client.bucket(self.bucket_name).get_blob(object_name)
         if blob is None:
             raise EvidenceStorageError("evidence object does not exist")
         stored_sha256 = (blob.metadata or {}).get("sha256", "").lower()
-        if stored_sha256 != evidence.sha256.lower():
+        if stored_sha256 != digest:
             raise EvidenceStorageError("evidence hash does not match stored object metadata")
+        try:
+            stored_bytes = blob.download_as_bytes()
+        except Exception as exc:
+            raise EvidenceStorageError("failed to read stored evidence bytes") from exc
+        if hashlib.sha256(stored_bytes).hexdigest() != digest:
+            raise EvidenceStorageError("evidence hash does not match stored object bytes")

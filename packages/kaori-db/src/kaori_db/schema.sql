@@ -6,6 +6,8 @@
 --
 -- DATABASE_URL is Cloud SQL Postgres. Lives in schema kaori — never in public
 -- (missions, truths, profiles, …). Does not provision Cloud SQL.
+-- Apply with `python -m kaori_db.migrate` as kaori_migration_owner.
+-- API runtime connects as kaori_runtime and must not execute this file.
 
 CREATE SCHEMA IF NOT EXISTS kaori;
 

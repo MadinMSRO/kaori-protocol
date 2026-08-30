@@ -5,11 +5,11 @@ from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
-
 from kaori_api.app import (
     LIMINAL_ORIGIN,
     LIMINAL_ORIGINS,
     LIMINAL_PREVIEW_ORIGIN,
+    cors_origins,
     create_app,
     reporter_context_from_flow,
     stamp_observation,
@@ -18,7 +18,6 @@ from kaori_api.auth import AuthError
 from kaori_db import InMemoryTruthStateStore
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.signal import SignalTypes
-
 
 AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"
@@ -136,6 +135,35 @@ def test_cors_preflight_allows_live_and_preview_origins(client: TestClient):
         },
     )
     assert denied.headers.get("access-control-allow-origin") not in LIMINAL_ORIGINS
+    assert denied.headers.get("access-control-allow-origin") in (None, "null", "")
+
+
+def test_cors_includes_extra_env_origins_and_never_wildcard(monkeypatch):
+    extra = "https://liminal.msro.mv"
+    monkeypatch.setenv("KAORI_CORS_ORIGINS", f"{extra}, * , {LIMINAL_ORIGIN}")
+    assert extra in cors_origins()
+    assert "*" not in cors_origins()
+    assert cors_origins()[0] == LIMINAL_ORIGIN
+
+    client = TestClient(create_app(flow=FlowCore(store=InMemorySignalStore()), verify_token=verify_token))
+    allowed = client.options(
+        "/v1/compile",
+        headers={
+            "Origin": extra,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Authorization, Content-Type",
+        },
+    )
+    assert allowed.status_code == 200
+    assert allowed.headers.get("access-control-allow-origin") == extra
+
+    denied = client.options(
+        "/v1/compile",
+        headers={
+            "Origin": "https://evil.example",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
     assert denied.headers.get("access-control-allow-origin") in (None, "null", "")
 
 

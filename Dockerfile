@@ -33,7 +33,9 @@ ENV PYTHONPATH=/app
 ENV KAORI_SCHEMA_PATH=/app/packages/kaori-spec/schemas
 ENV PYTHONUNBUFFERED=1
 
-# Runtime: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, DATABASE_URL (Cloud SQL),
+# Runtime: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, DATABASE_URL (Cloud SQL
+# as kaori_runtime — schema must already be migrated), KAORI_SIGNING_KEY /
+# KAORI_SIGNING_KEY_ID (production TruthState HMAC, not the validator key),
 # and KAORI_OBSERVATIONS_BUCKET (private GCS).
 # Compiler reads ClaimType YAML from KAORI_SCHEMA_PATH (not a claim_types table).
 # Evidence bytes are content-addressed in GCS; Observation stores immutable refs.

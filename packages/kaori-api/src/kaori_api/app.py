@@ -69,6 +69,26 @@ SOURCE_TYPE_BY_AGENT_TYPE = {
 }
 
 
+def extra_cors_origins() -> List[str]:
+    """Optional extra browser origins from KAORI_CORS_ORIGINS. Never '*'."""
+    origins: List[str] = []
+    for part in os.environ.get("KAORI_CORS_ORIGINS", "").split(","):
+        origin = part.strip().rstrip("/")
+        if not origin or origin == "*":
+            continue
+        origins.append(origin)
+    return origins
+
+
+def cors_origins() -> List[str]:
+    """Lovable live/preview plus any extra production or local origins."""
+    seen: List[str] = []
+    for origin in [*LIMINAL_ORIGINS, *extra_cors_origins()]:
+        if origin not in seen:
+            seen.append(origin)
+    return seen
+
+
 def default_schema_path() -> str:
     env = os.environ.get("KAORI_SCHEMA_PATH")
     if env:
@@ -85,17 +105,30 @@ def default_schema_path() -> str:
 
 
 def create_stores() -> Tuple[Any, Any, Any]:
-    """Signal, Bronze observation, and signed artifact stores."""
+    """Signal, Bronze observation, and signed artifact stores.
+
+    Cloud SQL connections check that the schema already exists. They do not
+    apply DDL — run `python -m kaori_db.migrate` as the migration owner.
+    """
     database_url = os.environ.get("DATABASE_URL")
+    if os.environ.get("KAORI_ENVIRONMENT", "").strip().lower() == "production" and not database_url:
+        raise RuntimeError("DATABASE_URL is required when KAORI_ENVIRONMENT=production")
     if database_url:
         from kaori_db import (
             PostgresObservationStore,
             PostgresSignalStore,
             PostgresTruthArtifactStore,
         )
+        from kaori_db.store import require_kaori_schema
+        from kaori_truth.signing import require_production_signing_config
 
         signals = PostgresSignalStore(database_url)
-        signals.ensure_schema()
+        if signals.engine.dialect.name == "postgresql":
+            require_production_signing_config()
+            require_kaori_schema(signals.engine)
+        else:
+            # SQLite is a unit-test store only. Cloud SQL never reaches here.
+            signals.ensure_schema()
         return (
             signals,
             PostgresObservationStore(engine=signals.engine),
@@ -287,7 +320,9 @@ def create_app(
     """
     Build the sidecar. Tests inject FlowCore + verify_token + truth_store.
     Production: GET {SUPABASE_URL}/auth/v1/user with SUPABASE_PUBLISHABLE_KEY.
-    DATABASE_URL is optional (in-memory stores when unset); when set it is Cloud SQL.
+    DATABASE_URL is optional (in-memory stores when unset); when set it is Cloud SQL
+    and requires a dedicated production TruthState signing key plus a pre-applied
+    schema. The API runtime never applies migrations.
     """
     if flow is None:
         signal_store, default_observation_store, default_truth_store = create_stores()
@@ -326,7 +361,7 @@ def create_app(
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=list(LIMINAL_ORIGINS),
+        allow_origins=cors_origins(),
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
