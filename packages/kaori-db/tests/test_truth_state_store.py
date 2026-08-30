@@ -19,6 +19,8 @@ def test_schema_sql_creates_kaori_truth_states_not_public():
     assert "CREATE SCHEMA IF NOT EXISTS kaori" in sql
     assert "kaori.signals" in sql
     assert "kaori.truth_states" in sql
+    assert "kaori.observations" in sql
+    assert "kaori.artifact_ledger" in sql
     assert "artifact    JSONB" in sql or "artifact JSONB" in sql
     assert "public." not in sql
 

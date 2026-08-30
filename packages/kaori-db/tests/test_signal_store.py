@@ -115,8 +115,9 @@ def test_create_store_uses_database_url(monkeypatch, tmp_path):
 
     store = create_store()
     assert isinstance(store, PostgresSignalStore)
+    before = len(store.get_all())
     store.append(_signal())
-    assert len(store.get_all()) == 1
+    assert len(store.get_all()) == before + 1
 
 
 def test_signals_table_sqlalchemy_schema_is_kaori():
