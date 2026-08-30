@@ -274,6 +274,8 @@ def test_integration_describes_pre_compile_validation_vote():
     assert "ai_validation_routing.generalist.timeout" in integration
     assert "new field" in integration
     assert "Never swallow `TimeoutError`" in integration
+    assert "compile does not proceed on a swallowed timeout" in integration
+    assert "compile does not proceed on a swallowed timeout" in readme
     assert "late generalist 200" in integration
     assert "only after a vote is recorded" in integration
     assert "never hardcode 30s" in integration
