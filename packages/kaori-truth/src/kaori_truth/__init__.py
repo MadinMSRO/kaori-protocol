@@ -45,6 +45,7 @@ from kaori_truth.primitives import (
     TruthStatus,
     VerificationBasis,
     CompileInputs,
+    ContentBoundEvidenceRef,
     SecurityBlock,
     # ClaimType
     ClaimType,
@@ -105,6 +106,7 @@ __all__ = [
     "TruthStatus",
     "VerificationBasis",
     "CompileInputs",
+    "ContentBoundEvidenceRef",
     "SecurityBlock",
     "ClaimType",
     "canonical_claimtype",

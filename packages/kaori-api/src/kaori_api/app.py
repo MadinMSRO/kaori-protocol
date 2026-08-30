@@ -7,14 +7,19 @@ Thin FastAPI surface Liminal can call this week:
   GET  /v1/truth/{truthkey}
 
 Wraps TruthOrchestrator.compile_observations and FlowCore.get_standing.
-POST /v1/compile order: observation checks → private generalist VALIDATION_VOTE
-into Flow → compile_observations → persist → emit. CLIP stays private. No other
-HTTP routes. Wire field names match Open Core primitives. Compiler stays pure.
+Truth order: observe → validate → compile. Observe/record can stay async
+internally. POST /v1/compile 200 is returned only after VALIDATION_VOTE is
+recorded and the full TruthState is persisted (GET /v1/truth shape, not
+{truthkey}). A late generalist 200 still records VALIDATION_VOTE. YAML
+timeout with no vote does not compile and does not return 200. No 422.
+CLIP stays private. Same three routes. Compiler stays pure.
 """
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
+import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -32,8 +37,10 @@ from pydantic import ValidationError
 from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
 from kaori_api.generalist_client import (
     GeneralistClient,
-    validate_and_record_vote,
+    generalist_timeout_seconds,
+    start_validate_and_record,
     vote_as_compiler_record,
+    votes_for_truthkey,
 )
 from kaori_api.orchestrator import TruthOrchestrator, UnknownClaimTypeError
 from kaori_api.trust_adapter import FlowTrustProvider
@@ -43,6 +50,7 @@ from kaori_api.validation import (
     ensure_generalist_registered,
 )
 
+LOGGER = logging.getLogger(__name__)
 LIMINAL_ORIGIN = "https://kind-keepsake-kingdom.lovable.app"
 LIMINAL_PREVIEW_ORIGIN = (
     "https://id-preview--3edd781a-00a9-4e58-88be-c21405c611ee.lovable.app"
@@ -166,6 +174,33 @@ def validate_payload_fields(observations: List[Observation], claim_type) -> None
                 raise HTTPException(status_code=400, detail=f"Missing payload field: {field}")
 
 
+def compile_after_vote(
+    *,
+    orchestrator: TruthOrchestrator,
+    truth_store: Any,
+    flow: FlowCore,
+    observations: List[Observation],
+    truth_key: str,
+    claim_type_id: str,
+    agent_id: str,
+    votes: Optional[List[dict]] = None,
+    ai_scores: Optional[List[float]] = None,
+) -> dict:
+    """compile_truth_state only after a VALIDATION_VOTE exists for this TruthKey."""
+    if not votes_for_truthkey(flow, truth_key):
+        raise RuntimeError("compile_truth_state forbidden without a recorded vote")
+    truth_state: TruthState = orchestrator.compile_observations(
+        observations=observations,
+        truth_key=truth_key,
+        claim_type_id=claim_type_id,
+        ai_scores=ai_scores,
+        votes=votes,
+    )
+    artifact = persist_truth_state(truth_store, truth_state)
+    emit_compile_truthstate(flow, truth_state, agent_id, claim_type_id)
+    return artifact
+
+
 def persist_truth_state(truth_store: Any, state: TruthState) -> dict:
     """Upsert full TruthState.model_dump (including evidence_refs) on truthkey."""
     artifact = state.model_dump(mode="json")
@@ -250,6 +285,8 @@ def create_app(
     app.state.verify_token = verify_token
     app.state.orchestrator = orchestrator
     app.state.generalist_client = generalist_client
+    app.state.compile_lock = threading.Lock()
+    app.state.validate_threads = []
 
     def require_agent(request: Request) -> str:
         try:
@@ -304,30 +341,88 @@ def create_app(
         validate_evidence_refs(observations)
         validate_payload_fields(observations, claim_type)
 
-        votes = None
-        ai_scores = None
         client = request.app.state.generalist_client
         if client is not None:
-            vote = await asyncio.to_thread(
-                validate_and_record_vote,
+            timeout = generalist_timeout_seconds(claim_type)
+            lock = request.app.state.compile_lock
+            loop = asyncio.get_running_loop()
+            finished = asyncio.Event()
+            outcome: Dict[str, Any] = {}
+
+            def signal_done() -> None:
+                loop.call_soon_threadsafe(finished.set)
+
+            def on_vote(vote) -> None:
+                votes = [vote_as_compiler_record(vote)]
+                ai_scores = None
+                if vote.confidence is not None:
+                    ai_scores = [float(vote.confidence)] * len(observations)
+                with lock:
+                    try:
+                        outcome["artifact"] = compile_after_vote(
+                            orchestrator=request.app.state.orchestrator,
+                            truth_store=request.app.state.truth_store,
+                            flow=flow_core,
+                            observations=observations,
+                            truth_key=truth_key,
+                            claim_type_id=claim_type_id,
+                            agent_id=agent_id,
+                            votes=votes,
+                            ai_scores=ai_scores,
+                        )
+                    except CompilationError as exc:
+                        LOGGER.exception(
+                            "compile after generalist vote failed for truthkey %s",
+                            truth_key,
+                        )
+                        outcome["compile_error"] = exc
+                    except (UnknownClaimTypeError, FileNotFoundError, ValidationError) as exc:
+                        LOGGER.exception(
+                            "compile after generalist vote failed for truthkey %s",
+                            truth_key,
+                        )
+                        outcome["error"] = exc
+                signal_done()
+
+            def on_timeout() -> None:
+                outcome["timeout"] = True
+                signal_done()
+
+            def on_error(exc: BaseException) -> None:
+                outcome["error"] = exc
+                signal_done()
+
+            thread = start_validate_and_record(
                 client=client,
                 flow=flow_core,
                 truthkey_id=truth_key,
                 claim_type_id=claim_type_id,
                 observations=observations,
+                timeout=timeout,
+                on_vote=on_vote,
+                on_timeout=on_timeout,
+                on_error=on_error,
             )
-            if vote is not None:
-                votes = [vote_as_compiler_record(vote)]
-                if vote.confidence is not None:
-                    ai_scores = [float(vote.confidence)] * len(observations)
+            request.app.state.validate_threads.append(thread)
+            # Observe/record stays async internally. HTTP 200 waits for the
+            # recorded vote and the persisted TruthState artifact.
+            await finished.wait()
+            if "artifact" in outcome:
+                return JSONResponse(status_code=200, content=outcome["artifact"])
+            if outcome.get("timeout"):
+                raise HTTPException(
+                    status_code=504,
+                    detail="generalist exceeded ClaimType timeout",
+                )
+            if "compile_error" in outcome:
+                raise HTTPException(status_code=400, detail=str(outcome["compile_error"]))
+            raise HTTPException(status_code=500, detail="generalist failed")
 
         try:
             truth_state: TruthState = request.app.state.orchestrator.compile_observations(
                 observations=observations,
                 truth_key=truth_key,
                 claim_type_id=claim_type_id,
-                ai_scores=ai_scores,
-                votes=votes,
             )
         except UnknownClaimTypeError:
             raise HTTPException(status_code=404, detail="Unknown claim_type_id")

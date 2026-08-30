@@ -264,11 +264,17 @@
                     "type": "object",
                     "required": [
                         "engine",
-                        "routes"
+                        "routes",
+                        "timeout"
                     ],
                     "properties": {
                         "engine": {
                             "type": "string"
+                        },
+                        "timeout": {
+                            "type": "string",
+                            "pattern": "^PT[0-9]+(H|M|S)$",
+                            "description": "ISO-8601 CLIP/generalist HTTP wait. New field — live YAML had no CLIP wait (do not reuse dispute PT12H/PT24H/PT48H). Client must read this; never hardcode 30s."
                         },
                         "routes": {
                             "type": "object",

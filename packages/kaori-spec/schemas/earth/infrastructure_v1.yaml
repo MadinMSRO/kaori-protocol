@@ -110,6 +110,7 @@ ai_validation_routing:
       pass: generalist
   generalist:
     engine: generalist_v1
+    timeout: PT2M
     prompt_context: "Infrastructure and vegetation survey"
     routes:
       high_confidence: accept       # ai_confidence >= 0.82

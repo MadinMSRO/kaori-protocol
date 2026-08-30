@@ -6,7 +6,14 @@ Core protocol primitives for the Truth layer.
 
 from .truthkey import TruthKey, TruthKeyParts, canonical_truthkey, parse_truthkey, build_truthkey
 from .observation import Observation, ReporterContext, canonical_observation, observation_hash
-from .truthstate import TruthState, TruthStatus, VerificationBasis, CompileInputs, SecurityBlock
+from .truthstate import (
+    TruthState,
+    TruthStatus,
+    VerificationBasis,
+    CompileInputs,
+    ContentBoundEvidenceRef,
+    SecurityBlock,
+)
 from .claimtype import (
     ClaimType,
     canonical_claimtype,
@@ -32,6 +39,7 @@ __all__ = [
     "TruthStatus",
     "VerificationBasis",
     "CompileInputs",
+    "ContentBoundEvidenceRef",
     "SecurityBlock",
     # ClaimType
     "ClaimType",

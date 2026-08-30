@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import ast
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -9,9 +11,11 @@ from fastapi.testclient import TestClient
 from kaori_api.app import create_app
 from kaori_api.auth import AuthError
 from kaori_api.generalist import ValidationVote
+from kaori_api.generalist_client import generalist_timeout_seconds, iso8601_duration_seconds
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.signal import SignalTypes
 from kaori_truth.compiler import compile_truth_state as real_compile
+from kaori_truth.factory import load_claim_type
 from kaori_truth.primitives.truthstate import TruthStatus
 
 INTEGRATION_MD = Path("INTEGRATION.md")
@@ -80,24 +84,20 @@ def vessel_body() -> dict:
 
 
 class FakeGeneralistClient:
-    def __init__(self, *, error: Exception | None = None):
+    def __init__(
+        self,
+        *,
+        error: Exception | None = None,
+        gate: threading.Event | None = None,
+        late_gate: threading.Event | None = None,
+    ):
         self.error = error
+        self.gate = gate
+        self.late_gate = late_gate
         self.calls = []
+        self.started = threading.Event()
 
-    def validate(self, *, truthkey_id, claim_type_id, observations):
-        self.calls.append(
-            {
-                "truthkey_id": truthkey_id,
-                "claim_type_id": claim_type_id,
-                "evidence": [
-                    ref.uri
-                    for observation in observations
-                    for ref in observation.evidence_refs
-                ],
-            }
-        )
-        if self.error:
-            raise self.error
+    def _vote(self, truthkey_id: str) -> ValidationVote:
         return ValidationVote(
             agent_id="ai:generalist_v1",
             truthkey_id=truthkey_id,
@@ -107,6 +107,63 @@ class FakeGeneralistClient:
             timestamp=datetime(2026, 1, 7, 12, 30, tzinfo=timezone.utc),
             signature="fake-generalist-sig",
         )
+
+    def validate(
+        self,
+        *,
+        truthkey_id,
+        claim_type_id,
+        observations,
+        timeout=None,
+        on_late_vote=None,
+    ):
+        self.started.set()
+        self.calls.append(
+            {
+                "truthkey_id": truthkey_id,
+                "claim_type_id": claim_type_id,
+                "timeout": timeout,
+                "evidence": [
+                    ref.uri
+                    for observation in observations
+                    for ref in observation.evidence_refs
+                ],
+            }
+        )
+        if self.gate is not None:
+            self.gate.wait(5)
+        if self.error:
+            if self.late_gate is not None and on_late_vote is not None:
+                vote = self._vote(truthkey_id)
+
+                def deliver_late() -> None:
+                    self.late_gate.wait(5)
+                    on_late_vote(vote)
+
+                threading.Thread(
+                    target=deliver_late, name="fake-late-vote", daemon=False
+                ).start()
+            raise self.error
+        return self._vote(truthkey_id)
+
+
+def join_validate_threads(application, timeout: float = 2.0) -> None:
+    for thread in list(getattr(application.state, "validate_threads", [])):
+        thread.join(timeout)
+
+
+def wait_for_truth(client: TestClient, truthkey: str, *, timeout: float = 2.0):
+    deadline = time.time() + timeout
+    last = None
+    while time.time() < deadline:
+        last = client.get(f"/v1/truth/{truthkey}", headers=auth_header())
+        if last.status_code == 200:
+            return last
+        time.sleep(0.02)
+    raise AssertionError(
+        f"compile did not finish: {getattr(last, 'status_code', None)} "
+        f"{getattr(last, 'text', None)}"
+    )
 
 
 def test_only_three_http_routes():
@@ -121,6 +178,8 @@ def test_only_three_http_routes():
         "/v1/standing/{agent_id}",
         "/v1/truth/{truthkey:path}",
     }
+    assert "/v1/vote" not in paths
+    assert not any(path and "vote" in path for path in paths)
 
 
 def test_compile_invokes_validator_before_compile_truth_state(monkeypatch):
@@ -151,18 +210,31 @@ def test_compile_invokes_validator_before_compile_truth_state(monkeypatch):
     )
     response = client.post("/v1/compile", json=coral_body(), headers=auth_header())
     assert response.status_code == 200, response.text
+    assert set(response.json().keys()) != {"truthkey"}
+    assert "claim" in response.json()
+    assert "compile_inputs" in response.json()
+    join_validate_threads(client.app)
+    compiled = wait_for_truth(client, coral_body()["truth_key"])
+    assert compiled.json() == response.json()
     assert order == ["validate", "compile_truth_state"]
     assert fake.calls[0]["truthkey_id"] == coral_body()["truth_key"]
     assert fake.calls[0]["claim_type_id"] == "ocean.coral_bleaching.v1"
     votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
     assert len(votes) == 1
     assert votes[0].payload["vote"] == "RATIFY"
-    assert response.json()["status"] == "PENDING_HUMAN_REVIEW"
+    assert compiled.json()["status"] == "PENDING_HUMAN_REVIEW"
     assert "VALIDATION" not in {s.value for s in TruthStatus}
 
 
-def test_generalist_error_still_compiles_200(caplog):
-    fake = FakeGeneralistClient(error=RuntimeError("generalist down"))
+def test_timeout_error_does_not_compile_without_vote(monkeypatch, caplog):
+    fake = FakeGeneralistClient(error=TimeoutError("CLIP wait exceeded YAML timeout"))
+    order = []
+
+    def wrapped(*args, **kwargs):
+        order.append("compile_truth_state")
+        return real_compile(*args, **kwargs)
+
+    monkeypatch.setattr("kaori_api.orchestrator.compile_truth_state", wrapped)
     flow = FlowCore(store=InMemorySignalStore())
     client = TestClient(
         create_app(
@@ -172,10 +244,16 @@ def test_generalist_error_still_compiles_200(caplog):
         )
     )
     response = client.post("/v1/compile", json=coral_body(), headers=auth_header())
-    assert response.status_code == 200, response.text
+    assert response.status_code != 200
+    assert response.status_code != 422
+    join_validate_threads(client.app)
     assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
-    assert response.json()["status"] != "VALIDATION"
-    assert "kaori-generalist failed" in caplog.text
+    assert order == []
+    missing = client.get(f"/v1/truth/{coral_body()['truth_key']}", headers=auth_header())
+    assert missing.status_code == 404
+    assert "not compiling without a vote" in caplog.text
+    assert set(response.json().keys()) != {"truthkey"}
+    assert "claim" not in response.json()
 
 
 def test_vessel_not_pending_human_review_from_critical_alone():
@@ -220,10 +298,45 @@ def test_integration_describes_pre_compile_validation_vote():
     assert "/v1/standing/claimtype:" not in integration
     assert "Player standing stays" in integration
     assert "Artifact `claim` still comes from `GET /v1/truth/{truthkey}`" in integration
+    assert "compile_inputs.observations" in integration
+    assert "consensus.votes" in integration
+    assert "No `GET /v1/vote`" in integration
+    assert "No `GET /v1/vote`" in readme
+    assert "content-bound `{uri, sha256}`" in integration
+    assert "content-bound `{uri, sha256}`" in readme
     assert "same `{standing}` body" in integration
     assert "No fourth path" in integration
     assert "No fourth path" in readme
     assert "Player standing stays `user:{id}`" in readme
+    assert "full observation package" in integration
+    assert "CLIP relevance" in integration
+    assert "TruthKey H3" in integration
+    assert "before `compile_truth_state`" in integration
+    assert "full observation package" in readme
+    assert "Observe does not wait on CLIP" in integration
+    assert "Observe/record can stay async internally" in integration
+    assert "200 is returned only after a `VALIDATION_VOTE` is recorded" in integration
+    assert "not `{truthkey}`" in integration
+    assert "do not return 200 as if validated" in integration
+    assert "200 is returned only after a `VALIDATION_VOTE` is recorded" in readme
+    assert "not `{truthkey}`" in readme
+    assert "do not return 200 as if validated" in readme
+    assert "ai_validation_routing.generalist.timeout" in integration
+    assert "new field" in integration
+    assert "Never swallow `TimeoutError`" in integration
+    assert "compile does not proceed on a swallowed timeout" in integration
+    assert "compile does not proceed on a swallowed timeout" in readme
+    assert "ValidationVote JSON" in integration
+    assert "`vote`, `confidence`, `truthkey_id`, `agent_id`, `timestamp`" in integration
+    assert "evidence bytes" in integration
+    assert "late generalist 200" in integration
+    assert "only after a vote is recorded" in integration
+    assert "never hardcode 30s" in integration
+    assert "Warming is ops" in integration
+    assert "Observe does not wait on CLIP" in readme
+    assert "timeout: float = 30.0" not in Path(
+        "packages/kaori-api/src/kaori_api/generalist_client.py"
+    ).read_text()
 
 
 def test_no_claim_type_id_branches_in_production():
@@ -252,3 +365,142 @@ def test_no_claim_type_id_branches_in_production():
                     if literal in forbidden_ids:
                         violations.append(f"{path}:{node.lineno} compares to {literal}")
     assert violations == []
+
+
+def test_timeout_is_read_from_claimtype_yaml_not_hardcoded_30():
+    coastal = load_claim_type(
+        "packages/kaori-spec/schemas/earth/coastal_erosion_v1.yaml"
+    )
+    coral = load_claim_type(
+        "packages/kaori-spec/schemas/ocean/coral_bleaching_v1.yaml"
+    )
+    assert generalist_timeout_seconds(coastal) == 120.0
+    assert generalist_timeout_seconds(coral) == 120.0
+    assert iso8601_duration_seconds("PT90S") == 90.0
+    assert iso8601_duration_seconds("PT2M") == 120.0
+    dispute = {"peer_review": "PT12H", "expert_review": "PT24H", "authority_escalation": "PT48H"}
+    assert coastal.get_config()["dispute_resolution"]["timeout"] == dispute
+    assert coastal.get_config()["ai_validation_routing"]["generalist"]["timeout"] != "PT12H"
+
+    fake = FakeGeneralistClient()
+    flow = FlowCore(store=InMemorySignalStore())
+    client = TestClient(
+        create_app(flow=flow, verify_token=verify_token, generalist_client=fake)
+    )
+    response = client.post("/v1/compile", json=coral_body(), headers=auth_header())
+    assert response.status_code == 200, response.text
+    join_validate_threads(client.app)
+    assert fake.calls[0]["timeout"] == 120.0
+    assert fake.calls[0]["timeout"] != 30.0
+
+
+def test_clip_path_does_not_return_truthkey_only_200_before_vote():
+    """CLIP path must not return 200 {truthkey} before VALIDATION_VOTE."""
+    gate = threading.Event()
+    fake = FakeGeneralistClient(gate=gate)
+    flow = FlowCore(store=InMemorySignalStore())
+    application = create_app(
+        flow=flow, verify_token=verify_token, generalist_client=fake
+    )
+    client = TestClient(application)
+    body = coral_body()
+    box: dict = {}
+
+    def post() -> None:
+        box["response"] = client.post("/v1/compile", json=body, headers=auth_header())
+
+    thread = threading.Thread(target=post, name="compile-http")
+    thread.start()
+    assert fake.started.wait(1.0)
+    time.sleep(0.1)
+    assert "response" not in box
+    assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
+    assert application.state.truth_store.get(body["truth_key"]) is None
+    gate.set()
+    thread.join(2.0)
+    assert not thread.is_alive()
+    response = box["response"]
+    assert response.status_code == 200, response.text
+    artifact = response.json()
+    assert set(artifact.keys()) != {"truthkey"}
+    assert "claim" in artifact
+    assert artifact["compile_inputs"]["observations"][0]["geo"] == {
+        "lat": -8.3405,
+        "lon": 115.0920,
+    }
+    assert artifact["consensus"]["votes"][0]["agent_id"] == "ai:generalist_v1"
+    fetched = client.get(f"/v1/truth/{body['truth_key']}", headers=auth_header())
+    assert fetched.status_code == 200
+    assert fetched.json() == artifact
+
+
+def test_late_generalist_200_still_records_vote(monkeypatch, caplog):
+    late_gate = threading.Event()
+    fake = FakeGeneralistClient(
+        error=TimeoutError("CLIP wait exceeded YAML timeout"),
+        late_gate=late_gate,
+    )
+    order = []
+
+    def wrapped(*args, **kwargs):
+        order.append("compile_truth_state")
+        return real_compile(*args, **kwargs)
+
+    monkeypatch.setattr("kaori_api.orchestrator.compile_truth_state", wrapped)
+    flow = FlowCore(store=InMemorySignalStore())
+    client = TestClient(
+        create_app(flow=flow, verify_token=verify_token, generalist_client=fake)
+    )
+    body = coral_body()
+    response = client.post("/v1/compile", json=body, headers=auth_header())
+    assert response.status_code != 200
+    assert response.status_code != 422
+    assert fake.started.wait(1.0)
+    assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
+    assert order == []
+    assert client.get(f"/v1/truth/{body['truth_key']}", headers=auth_header()).status_code == 404
+
+    with caplog.at_level("INFO"):
+        late_gate.set()
+        join_validate_threads(client.app)
+        deadline = time.time() + 2.0
+        votes = []
+        while time.time() < deadline:
+            votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
+            if votes:
+                break
+            time.sleep(0.02)
+    assert len(votes) == 1
+    assert votes[0].payload["vote"] == "RATIFY"
+    assert order == []
+    assert client.get(f"/v1/truth/{body['truth_key']}", headers=auth_header()).status_code == 404
+    assert "kaori-api ValidationVote" in caplog.text
+    assert '"vote": "RATIFY"' in caplog.text
+    assert '"confidence": 0.91' in caplog.text
+    assert body["truth_key"] in caplog.text
+    assert "fake-generalist-sig" not in caplog.text
+
+
+def test_compile_without_vote_is_forbidden(monkeypatch):
+    fake = FakeGeneralistClient(error=TimeoutError())
+    order = []
+
+    def wrapped(*args, **kwargs):
+        order.append("compile_truth_state")
+        return real_compile(*args, **kwargs)
+
+    monkeypatch.setattr("kaori_api.orchestrator.compile_truth_state", wrapped)
+    flow = FlowCore(store=InMemorySignalStore())
+    application = create_app(
+        flow=flow, verify_token=verify_token, generalist_client=fake
+    )
+    client = TestClient(application)
+    response = client.post("/v1/compile", json=coral_body(), headers=auth_header())
+    assert response.status_code != 200
+    assert response.status_code != 422
+    join_validate_threads(application)
+    assert order == []
+    assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
+    assert client.get(
+        f"/v1/truth/{coral_body()['truth_key']}", headers=auth_header()
+    ).status_code == 404

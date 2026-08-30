@@ -593,9 +593,12 @@ class TruthState:
     # Audit fields
     compile_inputs: CompileInputs
     
-    # Evidence
-    evidence_refs: list[str]
+    # Evidence — content-bound {uri, sha256}, not a URI string list
+    evidence_refs: list[{uri, sha256}]
     observation_ids: list[str]
+    
+    # Consensus — recorded VALIDATION_VOTE records land on votes
+    consensus: ConsensusRecord | None
     
     # Security
     security: SecurityBlock
@@ -603,11 +606,15 @@ class TruthState:
 
 ### 10.3 CompileInputs (Normative)
 
-Every TruthState **MUST** store explicit compile inputs:
+Every TruthState **MUST** store explicit compile inputs. `observation_ids`
+(and hashes) alone are **not** enough to replay: the compiler also consumes
+`Observation.geo`, `payload`, and content-bound `evidence_refs`.
 
 ```python
 class CompileInputs:
     observation_ids: list[str]
+    observation_hashes: list[str]
+    observations: list[dict]  # canonical packages: geo, payload, {uri, sha256}
     claim_type_id: str
     claim_type_hash: str
     policy_version: str

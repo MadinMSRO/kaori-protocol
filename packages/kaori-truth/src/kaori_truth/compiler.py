@@ -28,6 +28,7 @@ from kaori_truth.primitives.truthstate import (
     TruthStatus,
     VerificationBasis,
     CompileInputs,
+    ContentBoundEvidenceRef,
     SecurityBlock,
     ConfidenceBreakdown,
     ConsensusRecord,
@@ -46,6 +47,47 @@ COMPILER_VERSION = "1.0.0"
 class CompilationError(Exception):
     """Error during truth compilation."""
     pass
+
+
+def _content_bound_ref(ref) -> ContentBoundEvidenceRef:
+    """Keep uri + sha256. Drop URI-only strings."""
+    if hasattr(ref, "uri") and hasattr(ref, "sha256") and ref.sha256:
+        return ContentBoundEvidenceRef(uri=ref.uri, sha256=ref.sha256)
+    if isinstance(ref, dict) and ref.get("uri") and ref.get("sha256"):
+        return ContentBoundEvidenceRef(uri=ref["uri"], sha256=ref["sha256"])
+    raise CompilationError("EvidenceRef must be content-bound (uri + sha256)")
+
+
+def _content_bound_evidence_refs(observations: List[Observation]) -> List[ContentBoundEvidenceRef]:
+    refs: List[ContentBoundEvidenceRef] = []
+    seen = set()
+    for obs in observations:
+        for ref in obs.evidence_refs:
+            bound = _content_bound_ref(ref)
+            key = (bound.uri, bound.sha256)
+            if key in seen:
+                continue
+            seen.add(key)
+            refs.append(bound)
+    refs.sort(key=lambda item: (item.sha256, item.uri))
+    return refs
+
+
+def _observation_compile_package(obs: Observation) -> dict:
+    """Canonical observation with content-bound evidence_refs — enough to replay."""
+    package = obs.canonical()
+    package["evidence_refs"] = [
+        {"uri": bound.uri, "sha256": bound.sha256}
+        for bound in (_content_bound_ref(ref) for ref in obs.evidence_refs)
+    ]
+    return package
+
+
+def _consensus_record(votes: Optional[List[dict]], claim_type: ClaimType) -> Optional[ConsensusRecord]:
+    """Record compiler vote inputs on ConsensusRecord.votes. No invented field."""
+    if not votes:
+        return None
+    return compute_consensus(votes, claim_type.get_config())
 
 
 def compile_truth_state(
@@ -109,17 +151,17 @@ def compile_truth_state(
     # =========================================================================
     
     observation_ids = sorted([str(obs.observation_id) for obs in observations])
-    evidence_refs = []
-    for obs in observations:
-        for ref in obs.evidence_refs:
-            if hasattr(ref, 'uri'):
-                evidence_refs.append(ref.uri)
-            else:
-                evidence_refs.append(str(ref))
-    evidence_refs = sorted(set(evidence_refs))
+    observation_hashes = sorted(obs.hash() for obs in observations)
+    observation_packages = sorted(
+        (_observation_compile_package(obs) for obs in observations),
+        key=lambda package: package["observation_id"],
+    )
+    evidence_refs = _content_bound_evidence_refs(observations)
     
     compile_inputs = CompileInputs(
         observation_ids=observation_ids,
+        observation_hashes=observation_hashes,
+        observations=observation_packages,
         claim_type_id=claim_type.id,
         claim_type_hash=claim_type.hash(),
         policy_version=policy_version,
@@ -208,7 +250,7 @@ def compile_truth_state(
         compile_inputs=compile_inputs,
         evidence_refs=evidence_refs,
         observation_ids=observation_ids,
-        consensus=None,  # Would be populated if votes present
+        consensus=_consensus_record(votes, claim_type),
         security=temp_security,
     )
     
