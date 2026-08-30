@@ -7,13 +7,16 @@ Thin FastAPI surface Liminal can call this week:
   GET  /v1/truth/{truthkey}
 
 Wraps TruthOrchestrator.compile_observations and FlowCore.get_standing.
-Truth order: observe → validate → compile. Observe does not wait on CLIP.
-A late generalist 200 still records VALIDATION_VOTE; compile_truth_state runs
-only after a vote exists for that TruthKey. CLIP stays private. No other HTTP
-routes. Wire field names match Open Core primitives. Compiler stays pure.
+Truth order: observe → validate → compile. Observe/record can stay async
+internally. POST /v1/compile 200 is returned only after VALIDATION_VOTE is
+recorded and the full TruthState is persisted (GET /v1/truth shape, not
+{truthkey}). A late generalist 200 still records VALIDATION_VOTE. YAML
+timeout with no vote does not compile and does not return 200. No 422.
+CLIP stays private. Same three routes. Compiler stays pure.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import threading
@@ -342,6 +345,12 @@ def create_app(
         if client is not None:
             timeout = generalist_timeout_seconds(claim_type)
             lock = request.app.state.compile_lock
+            loop = asyncio.get_running_loop()
+            finished = asyncio.Event()
+            outcome: Dict[str, Any] = {}
+
+            def signal_done() -> None:
+                loop.call_soon_threadsafe(finished.set)
 
             def on_vote(vote) -> None:
                 votes = [vote_as_compiler_record(vote)]
@@ -350,7 +359,7 @@ def create_app(
                     ai_scores = [float(vote.confidence)] * len(observations)
                 with lock:
                     try:
-                        compile_after_vote(
+                        outcome["artifact"] = compile_after_vote(
                             orchestrator=request.app.state.orchestrator,
                             truth_store=request.app.state.truth_store,
                             flow=flow_core,
@@ -361,11 +370,27 @@ def create_app(
                             votes=votes,
                             ai_scores=ai_scores,
                         )
-                    except (UnknownClaimTypeError, FileNotFoundError, CompilationError, ValidationError):
+                    except CompilationError as exc:
                         LOGGER.exception(
                             "compile after generalist vote failed for truthkey %s",
                             truth_key,
                         )
+                        outcome["compile_error"] = exc
+                    except (UnknownClaimTypeError, FileNotFoundError, ValidationError) as exc:
+                        LOGGER.exception(
+                            "compile after generalist vote failed for truthkey %s",
+                            truth_key,
+                        )
+                        outcome["error"] = exc
+                signal_done()
+
+            def on_timeout() -> None:
+                outcome["timeout"] = True
+                signal_done()
+
+            def on_error(exc: BaseException) -> None:
+                outcome["error"] = exc
+                signal_done()
 
             thread = start_validate_and_record(
                 client=client,
@@ -375,11 +400,23 @@ def create_app(
                 observations=observations,
                 timeout=timeout,
                 on_vote=on_vote,
+                on_timeout=on_timeout,
+                on_error=on_error,
             )
             request.app.state.validate_threads.append(thread)
-            # Observe does not wait on CLIP. Artifact appears on GET /v1/truth
-            # after the vote is recorded and compile_truth_state runs.
-            return JSONResponse(status_code=200, content={"truthkey": truth_key})
+            # Observe/record stays async internally. HTTP 200 waits for the
+            # recorded vote and the persisted TruthState artifact.
+            await finished.wait()
+            if "artifact" in outcome:
+                return JSONResponse(status_code=200, content=outcome["artifact"])
+            if outcome.get("timeout"):
+                raise HTTPException(
+                    status_code=504,
+                    detail="generalist exceeded ClaimType timeout",
+                )
+            if "compile_error" in outcome:
+                raise HTTPException(status_code=400, detail=str(outcome["compile_error"]))
+            raise HTTPException(status_code=500, detail="generalist failed")
 
         try:
             truth_state: TruthState = request.app.state.orchestrator.compile_observations(

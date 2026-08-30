@@ -104,6 +104,7 @@ class GeneralistClient:
         claim_type_id: str,
         observations: List[Observation],
         timeout: float,
+        on_late_vote: Optional[Callable[[ValidationVote], None]] = None,
     ) -> ValidationVote:
         if timeout is None:
             raise ValueError("generalist timeout must come from ClaimType YAML")
@@ -148,15 +149,35 @@ class GeneralistClient:
         reader = threading.Thread(target=read_body, name="kaori-generalist-http")
         reader.start()
         finished_in_budget = done.wait(wait)
-        if not finished_in_budget:
-            # Observe already returned. Do not compile yet; keep the socket.
+        if finished_in_budget:
+            if "vote" in box:
+                self._validate_vote(box["vote"], truthkey_id)
+                return box["vote"]
+            raise box.get("error") or TimeoutError(
+                "generalist exceeded ClaimType timeout"
+            )
+
+        def finish_late() -> None:
             done.wait()
-        if "vote" in box:
-            self._validate_vote(box["vote"], truthkey_id)
-            return box["vote"]
-        raise box.get("error") or TimeoutError(
-            "generalist exceeded ClaimType timeout"
-        )
+            if "vote" not in box:
+                return
+            try:
+                self._validate_vote(box["vote"], truthkey_id)
+            except Exception:
+                LOGGER.exception(
+                    "late generalist vote failed validation for truthkey %s",
+                    truthkey_id,
+                )
+                return
+            if on_late_vote:
+                on_late_vote(box["vote"])
+
+        threading.Thread(
+            target=finish_late,
+            name=f"kaori-generalist-late-{truthkey_id}",
+            daemon=False,
+        ).start()
+        raise TimeoutError("generalist exceeded ClaimType timeout")
 
     def _validate_vote(self, vote: ValidationVote, truthkey_id: str) -> None:
         if vote.agent_id != GENERALIST_AGENT_ID:
@@ -197,6 +218,21 @@ def vote_as_compiler_record(vote: ValidationVote) -> dict:
     return {key: value for key, value in record.items() if value is not None}
 
 
+def _record_vote(flow: FlowCore, vote: ValidationVote) -> ValidationVote:
+    log_validation_vote(vote, source="kaori-api")
+    record_validation_vote(
+        flow,
+        agent_id=vote.agent_id,
+        truthkey_id=vote.truthkey_id,
+        window_id=vote.window_id,
+        vote=vote.vote,
+        confidence=vote.confidence,
+        time=vote.timestamp,
+        signature=vote.signature,
+    )
+    return vote
+
+
 def validate_and_record_vote(
     *,
     client: GeneralistClient,
@@ -210,27 +246,20 @@ def validate_and_record_vote(
     Invoke the private generalist, then write its signed vote.
 
     Does not compile. TimeoutError is not swallowed — the caller must not
-    compile as if CLIP ran. A 200 that arrives is recorded even if observe
-    already returned.
+    compile as if CLIP ran. A late 200 is still recorded.
     """
+
+    def record_late(vote: ValidationVote) -> None:
+        _record_vote(flow, vote)
+
     vote = client.validate(
         truthkey_id=truthkey_id,
         claim_type_id=claim_type_id,
         observations=observations,
         timeout=timeout,
+        on_late_vote=record_late,
     )
-    log_validation_vote(vote, source="kaori-api")
-    record_validation_vote(
-        flow,
-        agent_id=vote.agent_id,
-        truthkey_id=vote.truthkey_id,
-        window_id=vote.window_id,
-        vote=vote.vote,
-        confidence=vote.confidence,
-        time=vote.timestamp,
-        signature=vote.signature,
-    )
-    return vote
+    return _record_vote(flow, vote)
 
 
 def start_validate_and_record(
@@ -246,8 +275,9 @@ def start_validate_and_record(
     on_error: Optional[Callable[[BaseException], None]] = None,
 ) -> threading.Thread:
     """
-    Observe does not wait. The HTTP call keeps running so a late generalist
-    200 still records VALIDATION_VOTE, then on_vote compiles.
+    Observe/record stays async internally. HTTP compile waits for on_vote
+    or on_timeout. A late generalist 200 still records VALIDATION_VOTE
+    without compiling after a YAML timeout.
     """
 
     def run() -> None:

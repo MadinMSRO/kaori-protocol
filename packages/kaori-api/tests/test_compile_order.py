@@ -84,13 +84,39 @@ def vessel_body() -> dict:
 
 
 class FakeGeneralistClient:
-    def __init__(self, *, error: Exception | None = None, gate: threading.Event | None = None):
+    def __init__(
+        self,
+        *,
+        error: Exception | None = None,
+        gate: threading.Event | None = None,
+        late_gate: threading.Event | None = None,
+    ):
         self.error = error
         self.gate = gate
+        self.late_gate = late_gate
         self.calls = []
         self.started = threading.Event()
 
-    def validate(self, *, truthkey_id, claim_type_id, observations, timeout=None):
+    def _vote(self, truthkey_id: str) -> ValidationVote:
+        return ValidationVote(
+            agent_id="ai:generalist_v1",
+            truthkey_id=truthkey_id,
+            window_id=f"window:{truthkey_id}",
+            vote="RATIFY",
+            confidence=0.91,
+            timestamp=datetime(2026, 1, 7, 12, 30, tzinfo=timezone.utc),
+            signature="fake-generalist-sig",
+        )
+
+    def validate(
+        self,
+        *,
+        truthkey_id,
+        claim_type_id,
+        observations,
+        timeout=None,
+        on_late_vote=None,
+    ):
         self.started.set()
         self.calls.append(
             {
@@ -107,16 +133,18 @@ class FakeGeneralistClient:
         if self.gate is not None:
             self.gate.wait(5)
         if self.error:
+            if self.late_gate is not None and on_late_vote is not None:
+                vote = self._vote(truthkey_id)
+
+                def deliver_late() -> None:
+                    self.late_gate.wait(5)
+                    on_late_vote(vote)
+
+                threading.Thread(
+                    target=deliver_late, name="fake-late-vote", daemon=False
+                ).start()
             raise self.error
-        return ValidationVote(
-            agent_id="ai:generalist_v1",
-            truthkey_id=truthkey_id,
-            window_id=f"window:{truthkey_id}",
-            vote="RATIFY",
-            confidence=0.91,
-            timestamp=datetime(2026, 1, 7, 12, 30, tzinfo=timezone.utc),
-            signature="fake-generalist-sig",
-        )
+        return self._vote(truthkey_id)
 
 
 def join_validate_threads(application, timeout: float = 2.0) -> None:
@@ -182,8 +210,12 @@ def test_compile_invokes_validator_before_compile_truth_state(monkeypatch):
     )
     response = client.post("/v1/compile", json=coral_body(), headers=auth_header())
     assert response.status_code == 200, response.text
+    assert set(response.json().keys()) != {"truthkey"}
+    assert "claim" in response.json()
+    assert "compile_inputs" in response.json()
     join_validate_threads(client.app)
     compiled = wait_for_truth(client, coral_body()["truth_key"])
+    assert compiled.json() == response.json()
     assert order == ["validate", "compile_truth_state"]
     assert fake.calls[0]["truthkey_id"] == coral_body()["truth_key"]
     assert fake.calls[0]["claim_type_id"] == "ocean.coral_bleaching.v1"
@@ -212,13 +244,16 @@ def test_timeout_error_does_not_compile_without_vote(monkeypatch, caplog):
         )
     )
     response = client.post("/v1/compile", json=coral_body(), headers=auth_header())
-    assert response.status_code == 200, response.text
+    assert response.status_code != 200
+    assert response.status_code != 422
     join_validate_threads(client.app)
     assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
     assert order == []
     missing = client.get(f"/v1/truth/{coral_body()['truth_key']}", headers=auth_header())
     assert missing.status_code == 404
     assert "not compiling without a vote" in caplog.text
+    assert set(response.json().keys()) != {"truthkey"}
+    assert "claim" not in response.json()
 
 
 def test_vessel_not_pending_human_review_from_critical_alone():
@@ -279,6 +314,13 @@ def test_integration_describes_pre_compile_validation_vote():
     assert "before `compile_truth_state`" in integration
     assert "full observation package" in readme
     assert "Observe does not wait on CLIP" in integration
+    assert "Observe/record can stay async internally" in integration
+    assert "200 is returned only after a `VALIDATION_VOTE` is recorded" in integration
+    assert "not `{truthkey}`" in integration
+    assert "do not return 200 as if validated" in integration
+    assert "200 is returned only after a `VALIDATION_VOTE` is recorded" in readme
+    assert "not `{truthkey}`" in readme
+    assert "do not return 200 as if validated" in readme
     assert "ai_validation_routing.generalist.timeout" in integration
     assert "new field" in integration
     assert "Never swallow `TimeoutError`" in integration
@@ -352,9 +394,52 @@ def test_timeout_is_read_from_claimtype_yaml_not_hardcoded_30():
     assert fake.calls[0]["timeout"] != 30.0
 
 
-def test_late_generalist_200_still_records_vote_then_compiles(monkeypatch, caplog):
+def test_clip_path_does_not_return_truthkey_only_200_before_vote():
+    """CLIP path must not return 200 {truthkey} before VALIDATION_VOTE."""
     gate = threading.Event()
     fake = FakeGeneralistClient(gate=gate)
+    flow = FlowCore(store=InMemorySignalStore())
+    application = create_app(
+        flow=flow, verify_token=verify_token, generalist_client=fake
+    )
+    client = TestClient(application)
+    body = coral_body()
+    box: dict = {}
+
+    def post() -> None:
+        box["response"] = client.post("/v1/compile", json=body, headers=auth_header())
+
+    thread = threading.Thread(target=post, name="compile-http")
+    thread.start()
+    assert fake.started.wait(1.0)
+    time.sleep(0.1)
+    assert "response" not in box
+    assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
+    assert application.state.truth_store.get(body["truth_key"]) is None
+    gate.set()
+    thread.join(2.0)
+    assert not thread.is_alive()
+    response = box["response"]
+    assert response.status_code == 200, response.text
+    artifact = response.json()
+    assert set(artifact.keys()) != {"truthkey"}
+    assert "claim" in artifact
+    assert artifact["compile_inputs"]["observations"][0]["geo"] == {
+        "lat": -8.3405,
+        "lon": 115.0920,
+    }
+    assert artifact["consensus"]["votes"][0]["agent_id"] == "ai:generalist_v1"
+    fetched = client.get(f"/v1/truth/{body['truth_key']}", headers=auth_header())
+    assert fetched.status_code == 200
+    assert fetched.json() == artifact
+
+
+def test_late_generalist_200_still_records_vote(monkeypatch, caplog):
+    late_gate = threading.Event()
+    fake = FakeGeneralistClient(
+        error=TimeoutError("CLIP wait exceeded YAML timeout"),
+        late_gate=late_gate,
+    )
     order = []
 
     def wrapped(*args, **kwargs):
@@ -368,37 +453,27 @@ def test_late_generalist_200_still_records_vote_then_compiles(monkeypatch, caplo
     )
     body = coral_body()
     response = client.post("/v1/compile", json=body, headers=auth_header())
-    assert response.status_code == 200, response.text
+    assert response.status_code != 200
+    assert response.status_code != 422
     assert fake.started.wait(1.0)
     assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
     assert order == []
     assert client.get(f"/v1/truth/{body['truth_key']}", headers=auth_header()).status_code == 404
 
     with caplog.at_level("INFO"):
-        gate.set()
+        late_gate.set()
         join_validate_threads(client.app)
-    compiled = wait_for_truth(client, body["truth_key"])
-    votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
+        deadline = time.time() + 2.0
+        votes = []
+        while time.time() < deadline:
+            votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
+            if votes:
+                break
+            time.sleep(0.02)
     assert len(votes) == 1
     assert votes[0].payload["vote"] == "RATIFY"
-    assert order == ["compile_truth_state"]
-    assert compiled.status_code == 200
-    assert compiled.json()["status"] != "VALIDATION"
-    artifact = compiled.json()
-    package = artifact["compile_inputs"]["observations"][0]
-    assert package["geo"] == {"lat": -8.3405, "lon": 115.0920}
-    assert package["payload"]["bleaching_percentage"] == 40
-    assert package["evidence_refs"][0] == {
-        "uri": "gs://kaori-evidence/coral1.jpg",
-        "sha256": "a" * 64,
-    }
-    assert all(set(item.keys()) == {"uri", "sha256"} for item in artifact["evidence_refs"])
-    votes_on_artifact = artifact["consensus"]["votes"]
-    assert votes_on_artifact[0]["agent_id"] == "ai:generalist_v1"
-    assert votes_on_artifact[0]["vote"] == "RATIFY"
-    assert votes_on_artifact[0]["signal_type"] == "VALIDATION_VOTE"
-    assert votes_on_artifact[0]["truthkey_id"] == body["truth_key"]
-    assert "signature" not in votes_on_artifact[0]
+    assert order == []
+    assert client.get(f"/v1/truth/{body['truth_key']}", headers=auth_header()).status_code == 404
     assert "kaori-api ValidationVote" in caplog.text
     assert '"vote": "RATIFY"' in caplog.text
     assert '"confidence": 0.91' in caplog.text
@@ -421,7 +496,8 @@ def test_compile_without_vote_is_forbidden(monkeypatch):
     )
     client = TestClient(application)
     response = client.post("/v1/compile", json=coral_body(), headers=auth_header())
-    assert response.status_code == 200, response.text
+    assert response.status_code != 200
+    assert response.status_code != 422
     join_validate_threads(application)
     assert order == []
     assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []

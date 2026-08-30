@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import threading
 import time
 import urllib.request
 from copy import deepcopy
@@ -246,7 +247,15 @@ class LocalGeneralistClient:
     def __init__(self, clip_validator: ClipGeneralistValidator):
         self.validator = clip_validator
 
-    def validate(self, *, truthkey_id, claim_type_id, observations, timeout=None) -> ValidationVote:
+    def validate(
+        self,
+        *,
+        truthkey_id,
+        claim_type_id,
+        observations,
+        timeout=None,
+        on_late_vote=None,
+    ) -> ValidationVote:
         self.last_timeout = timeout
         return self.validator.validate(
             ValidatorRequest(
@@ -523,8 +532,11 @@ def test_non_coral_compile_records_generalist_vote():
     )
 
     assert response.status_code == 200, response.text
+    assert set(response.json().keys()) != {"truthkey"}
+    assert "claim" in response.json()
     join_validate_threads(client.app)
     compiled = wait_for_truth(client, COASTAL_TRUTHKEY)
+    assert compiled.json() == response.json()
     assert clip.calls == [
         {
             "count": 1,
@@ -710,3 +722,42 @@ def test_generalist_client_sends_full_observation_package(monkeypatch):
     assert body["observations"][0]["payload"]["depth_meters"] == 8.0
     assert body["observations"][0]["payload"]["bleaching_percentage"] == 40
     assert body["evidence_refs"][0]["uri"].endswith("coral1.png")
+
+
+def test_generalist_client_yaml_timeout_still_records_late_vote(monkeypatch):
+    signed = validator([0.9, 0.9]).validate(validator_request())
+    release = threading.Event()
+    late: list = []
+
+    class SlowHttp:
+        def __enter__(self):
+            release.wait(2.0)
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return signed.model_dump_json().encode("utf-8")
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout: SlowHttp())
+    client = GeneralistClient(
+        "https://kaori-generalist.example",
+        token_provider=lambda _audience: "token",
+        signing_key=SIGNING_KEY,
+    )
+    with pytest.raises(TimeoutError):
+        client.validate(
+            truthkey_id=TRUTHKEY,
+            claim_type_id=CORAL_CLAIM_TYPE,
+            observations=[Observation.model_validate(raw_observation())],
+            timeout=0.05,
+            on_late_vote=late.append,
+        )
+    assert late == []
+    release.set()
+    deadline = time.time() + 2.0
+    while time.time() < deadline and not late:
+        time.sleep(0.02)
+    assert late[0].vote == "RATIFY"
+    assert late[0].truthkey_id == TRUTHKEY
