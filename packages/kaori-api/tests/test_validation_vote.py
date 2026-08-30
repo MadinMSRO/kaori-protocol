@@ -10,7 +10,10 @@ from fastapi.testclient import TestClient
 from kaori_api.app import create_app
 from kaori_api.auth import AuthError
 from kaori_api.validation import (
+    CLAIMTYPE_ROLE,
     GENERALIST_AGENT_ID,
+    claimtype_agent_id,
+    ensure_claimtype_registered,
     ensure_generalist_registered,
     record_validation_vote,
 )
@@ -78,6 +81,24 @@ def test_generalist_registered_on_startup_idempotent():
     assert registered[0].payload["role"] == "validator"
     assert flow.get_standing(GENERALIST_AGENT_ID) == 250.0
     assert set(flow.get_all_standings()) == {GENERALIST_AGENT_ID}
+
+
+def test_ensure_claimtype_registered_is_generic_and_idempotent():
+    flow = FlowCore(store=InMemorySignalStore())
+    first = ensure_claimtype_registered(flow, CORAL_CLAIM_TYPE)
+    second = ensure_claimtype_registered(flow, CORAL_CLAIM_TYPE)
+    other = ensure_claimtype_registered(flow, "earth.coastal_erosion.v1")
+    assert first == second == f"claimtype:{CORAL_CLAIM_TYPE}"
+    assert first == claimtype_agent_id(CORAL_CLAIM_TYPE)
+    assert other == "claimtype:earth.coastal_erosion.v1"
+    registered = [
+        s.object_id
+        for s in flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)
+        if s.payload.get("role") == CLAIMTYPE_ROLE
+    ]
+    assert registered.count(first) == 1
+    assert other in registered
+    assert flow.get_standing(first) == flow.get_standing(other)
 
 
 def test_ensure_generalist_skips_when_already_known():

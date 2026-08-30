@@ -14,6 +14,9 @@ from kaori_flow.primitives.signal import SignalTypes
 from kaori_truth.compiler import compile_truth_state as real_compile
 from kaori_truth.primitives.truthstate import TruthStatus
 
+INTEGRATION_MD = Path("INTEGRATION.md")
+SIDECAR_README = Path("packages/kaori-api/README.md")
+
 AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"
 TOKEN = "valid-supabase-token"
@@ -186,6 +189,41 @@ def test_vessel_not_pending_human_review_from_critical_alone():
     assert coral.json()["status"] == "PENDING_HUMAN_REVIEW"
     assert vessel.json()["status"] != "VALIDATION"
     assert coral.json()["status"] != "VALIDATION"
+
+
+def test_integration_describes_pre_compile_validation_vote():
+    """INTEGRATION.md (and sidecar README) must match vote-before-compile, not post-persist CLIP."""
+    integration = INTEGRATION_MD.read_text()
+    readme = SIDECAR_README.read_text()
+    stale = (
+        "After any ClaimType persists",
+        "post-persist",
+        "post-response",
+        "After any ClaimType compiles",
+    )
+    for phrase in stale:
+        assert phrase not in integration
+        assert phrase not in readme
+    assert (
+        "observation checks → `VALIDATION_VOTE` → `TruthOrchestrator.compile_observations` "
+        "→ persist → `FlowCore.emit_truthstate`"
+    ) in integration
+    order = integration[integration.index("`POST /v1/compile` order:"):]
+    vote_at = order.index("VALIDATION_VOTE")
+    compile_at = order.index("compile_observations")
+    persist_at = order.index("persist `TruthState.model_dump`")
+    emit_at = order.index("FlowCore.emit_truthstate")
+    assert vote_at < compile_at < persist_at < emit_at
+    assert "before `compile_observations`" in readme
+    assert "VALIDATION" not in {s.value for s in TruthStatus}
+    assert "`GET` | `/v1/standing/{agent_id}`" in integration
+    assert "/v1/standing/claimtype:" not in integration
+    assert "Player standing stays" in integration
+    assert "Artifact `claim` still comes from `GET /v1/truth/{truthkey}`" in integration
+    assert "same `{standing}` body" in integration
+    assert "No fourth path" in integration
+    assert "No fourth path" in readme
+    assert "Player standing stays `user:{id}`" in readme
 
 
 def test_no_claim_type_id_branches_in_production():
