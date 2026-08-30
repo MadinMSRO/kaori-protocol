@@ -14,8 +14,9 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    RAISE EXCEPTION 'kaori.% is append-only', TG_TABLE_NAME
-        USING ERRCODE = '55000';
+    RAISE EXCEPTION USING
+        MESSAGE = 'kaori.' || TG_TABLE_NAME || ' is append-only',
+        ERRCODE = '55000';
 END;
 $$;
 

@@ -30,6 +30,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
 
 from kaori_flow.primitives.signal import Signal, SignalContext
 from kaori_truth.primitives.observation import Observation
@@ -208,7 +209,9 @@ def _ensure_kaori_schema(engine: Engine) -> None:
     if engine.dialect.name == "postgresql":
         schema_sql = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
         with engine.begin() as conn:
-            conn.exec_driver_sql(schema_sql)
+            dbapi_conn = conn.connection.dbapi_connection
+            with dbapi_conn.cursor() as cursor:
+                cursor.execute(schema_sql)
         return
     _sqlite_metadata.create_all(engine)
 
@@ -404,7 +407,18 @@ class PostgresObservationStore:
                 if existing.observation_hash != observation_hash:
                     raise ValueError("observation_id already exists with different content")
                 return False
-            conn.execute(table.insert().values(**values))
+            try:
+                with conn.begin_nested():
+                    conn.execute(table.insert().values(**values))
+            except IntegrityError as exc:
+                raced = conn.execute(
+                    select(table.c.observation_hash).where(
+                        table.c.observation_id == observation_id
+                    )
+                ).first()
+                if raced and raced.observation_hash == observation_hash:
+                    return False
+                raise ValueError("observation_id already exists with different content") from exc
         return True
 
     def get_for_truthkey(self, truthkey: str) -> List[Observation]:
@@ -649,6 +663,12 @@ class PostgresTruthArtifactStore:
         snapshot_artifact = snapshot.model_dump(mode="json")
 
         with self._engine.begin() as conn:
+            if self._engine.dialect.name == "postgresql":
+                conn.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:truthkey))"),
+                    {"truthkey": state.truthkey},
+                )
+
             existing = conn.execute(
                 select(artifacts.c.artifact).where(
                     artifacts.c.state_hash == state.security.state_hash
@@ -673,12 +693,6 @@ class PostgresTruthArtifactStore:
                 )
             elif stored_snapshot.artifact != snapshot_artifact:
                 raise ValueError("snapshot_id already exists with different content")
-
-            if self._engine.dialect.name == "postgresql":
-                conn.execute(
-                    text("SELECT pg_advisory_xact_lock(hashtext(:truthkey))"),
-                    {"truthkey": state.truthkey},
-                )
 
             revision = conn.execute(
                 select(func.coalesce(func.max(artifacts.c.revision), 0) + 1).where(
