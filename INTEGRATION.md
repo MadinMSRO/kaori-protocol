@@ -115,7 +115,11 @@ Local run (`DATABASE_URL` is Cloud SQL Postgres, schema `kaori`):
 ```bash
 export SUPABASE_URL=https://your-project.supabase.co
 export SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
-# DATABASE_URL is optional (in-memory when unset)
+# DATABASE_URL is optional (in-memory when unset). When set, apply
+# `python -m kaori_db.migrate` as the migration owner first, connect the
+# API as kaori_runtime, and set KAORI_SIGNING_KEY / KAORI_SIGNING_KEY_ID
+# (never the repository development key; never reuse KAORI_VALIDATOR_SIGNING_KEY).
+# KAORI_OBSERVATIONS_BUCKET is required whenever DATABASE_URL is set.
 uvicorn kaori_api.app:app --port 8000
 ```
 

@@ -16,4 +16,10 @@ Production `SignalStore` and TruthState persist for Kaori Flow / the Pattern B s
 
 Connect with `DATABASE_URL` only — Cloud SQL Postgres. Do not provision a Cloud SQL instance from this package.
 
-Tables live in schema `kaori` (`CREATE SCHEMA IF NOT EXISTS kaori`). Do not put `signals` or `truth_states` in `public`. Do not write TruthState to `public.truths`. `ensure_schema()` creates the schema and both tables; it does not provision a database.
+Tables live in schema `kaori` (`CREATE SCHEMA IF NOT EXISTS kaori`). Do not put `signals` or `truth_states` in `public`. Do not write TruthState to `public.truths`.
+
+`python -m kaori_db.migrate` is the production DDL entrypoint (schema +
+`kaori_migration_owner` / `kaori_runtime` grants). `ensure_schema()` remains
+a test helper and must not run inside the API process. The runtime role has
+`SELECT`/`INSERT` on immutable tables and `SELECT`/`INSERT`/`UPDATE` on Gold
+`kaori.truth_states` only.

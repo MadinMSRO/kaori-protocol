@@ -201,19 +201,60 @@ def _engine_from_url(database_url: Optional[str] = None, engine: Optional[Engine
     return create_engine(url)
 
 
+REQUIRED_KAORI_TABLES = (
+    "signals",
+    "observations",
+    "trust_snapshots",
+    "truth_artifacts",
+    "truth_states",
+)
+
+
+def apply_sql_file(engine: Engine, filename: str) -> None:
+    """Execute a schema/roles SQL file. Migration-owner only — not API runtime."""
+    sql = Path(__file__).with_name(filename).read_text(encoding="utf-8")
+    with engine.begin() as conn:
+        dbapi_conn = conn.connection.dbapi_connection
+        with dbapi_conn.cursor() as cursor:
+            cursor.execute(sql)
+
+
 def _ensure_kaori_schema(engine: Engine) -> None:
     """
     Create schema kaori and kaori tables if missing.
+    Explicit migration / test helper. The API runtime must not call this.
     Does not provision a database or Cloud SQL instance.
     """
     if engine.dialect.name == "postgresql":
-        schema_sql = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
-        with engine.begin() as conn:
-            dbapi_conn = conn.connection.dbapi_connection
-            with dbapi_conn.cursor() as cursor:
-                cursor.execute(schema_sql)
+        apply_sql_file(engine, "schema.sql")
         return
     _sqlite_metadata.create_all(engine)
+
+
+def require_kaori_schema(engine: Engine) -> None:
+    """
+    Confirm the Kaori schema already exists. Performs no DDL.
+
+    The API runtime uses this so Cloud SQL connections do not need
+    schema-owner privileges.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'kaori'"
+            )
+        ).all()
+    present = {row[0] for row in rows}
+    missing = [name for name in REQUIRED_KAORI_TABLES if name not in present]
+    if missing:
+        raise RuntimeError(
+            "Kaori schema is incomplete (missing "
+            + ", ".join(missing)
+            + "). Run `python -m kaori_db.migrate` as the migration owner "
+            "before starting the API. Runtime connections must not apply DDL."
+        )
 
 
 def _upsert_stmt(table: Table, engine: Engine, values: dict, conflict_col: str, update_cols: List[str]):

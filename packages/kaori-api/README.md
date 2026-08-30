@@ -39,15 +39,22 @@ CORS is restricted to the configured Liminal live and preview origins.
 
 `DATABASE_URL` is Cloud SQL Postgres. Do not provision a Cloud SQL instance from this repo. Do not deploy.
 
-1. Point `DATABASE_URL` at Cloud SQL (you provide the URL; this repo does not store it).
-2. Apply schema (or let the sidecar call `ensure_schema()` on boot). This
-creates immutable `kaori.signals`, `kaori.observations`,
-`kaori.trust_snapshots`, and `kaori.truth_artifacts`, plus the mutable Gold
-projection `kaori.truth_states`—never `public.signals` or `public.truths`:
+1. Point `DATABASE_URL` at Cloud SQL as the **runtime** role (you provide the URL; this repo does not store it).
+2. Apply schema and grants as the **migration owner** before starting the API.
+   The sidecar does not call `ensure_schema()` on boot and must not be given
+   schema-owner privileges.
 
 ```bash
-psql "$DATABASE_URL" -f packages/kaori-db/src/kaori_db/schema.sql
+# migration owner — DDL only, not the API process
+python -m kaori_db.migrate
+# equivalent:
+# psql "$MIGRATION_DATABASE_URL" -f packages/kaori-db/src/kaori_db/schema.sql
+# psql "$MIGRATION_DATABASE_URL" -f packages/kaori-db/src/kaori_db/roles.sql
 ```
+
+This creates immutable `kaori.signals`, `kaori.observations`,
+`kaori.trust_snapshots`, and `kaori.truth_artifacts`, plus the mutable Gold
+projection `kaori.truth_states`—never `public.signals` or `public.truths`.
 
 3. Install packages and start the sidecar:
 
@@ -58,7 +65,10 @@ export SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
 # optional — in-memory stores when unset
 # export DATABASE_URL="postgresql://…cloud-sql…"
 # required whenever DATABASE_URL is set
-# export KAORI_OBSERVATIONS_BUCKET="your-private-kaori-observations-bucket"
+# export KAORI_OBSERVATIONS_BUCKET="msro-kaori-observations"
+# export KAORI_SIGNING_KEY="dedicated-truthstate-hmac"
+# export KAORI_SIGNING_KEY_ID="msro-kaori-prod-1"
+# KAORI_VALIDATOR_SIGNING_KEY must be a different secret
 export KAORI_SCHEMA_PATH=packages/kaori-spec/schemas
 uvicorn kaori_api.app:app --host 0.0.0.0 --port 8000
 ```

@@ -305,3 +305,142 @@ def test_postgres_observation_idempotency_and_conflict(engine):
             received_at=COMPILE_TIME,
         )
     assert store.count_distinct_reporters(TRUTHKEY) == 1
+
+
+def test_postgres_replay_returns_stored_observation_packages(engine):
+    store = PostgresObservationStore(engine=engine)
+    store.ensure_schema()
+    first = _observation("11111111-1111-1111-1111-111111111111", "reporter-a")
+    second = _observation("22222222-2222-2222-2222-222222222222", "reporter-b")
+    store.append(first, truthkey=TRUTHKEY, claim_type_hash="a" * 64, received_at=COMPILE_TIME)
+    store.append(
+        second,
+        truthkey=TRUTHKEY,
+        claim_type_hash="a" * 64,
+        received_at=COMPILE_TIME + timedelta(minutes=1),
+    )
+    loaded = store.get_for_truthkey(TRUTHKEY)
+    assert [item.reporter_id for item in loaded] == ["reporter-a", "reporter-b"]
+    assert loaded[0].canonical() == first.canonical()
+    assert loaded[1].canonical() == second.canonical()
+    assert store.count_distinct_reporters(TRUTHKEY) == 2
+
+
+def test_postgres_concurrent_reporters_remain_distinct(engine):
+    store = PostgresObservationStore(engine=engine)
+    store.ensure_schema()
+    first = _observation("11111111-1111-1111-1111-111111111111", "reporter-a")
+    second = _observation("22222222-2222-2222-2222-222222222222", "reporter-b")
+    errors: list[BaseException] = []
+
+    def write(observation) -> None:
+        try:
+            store.append(
+                observation,
+                truthkey=TRUTHKEY,
+                claim_type_hash="a" * 64,
+                received_at=COMPILE_TIME,
+            )
+        except BaseException as exc:  # noqa: BLE001 — collect worker failures
+            errors.append(exc)
+
+    workers = [
+        threading.Thread(target=write, args=(first,)),
+        threading.Thread(target=write, args=(second,)),
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(5)
+        assert not worker.is_alive()
+    assert errors == []
+    assert store.count_distinct_reporters(TRUTHKEY) == 2
+    assert {item.reporter_id for item in store.get_for_truthkey(TRUTHKEY)} == {
+        "reporter-a",
+        "reporter-b",
+    }
+
+
+def test_require_kaori_schema_is_not_ddl(engine):
+    from kaori_db.store import require_kaori_schema
+
+    with pytest.raises(RuntimeError, match="python -m kaori_db.migrate"):
+        require_kaori_schema(engine)
+    PostgresObservationStore(engine=engine).ensure_schema()
+    require_kaori_schema(engine)
+    with engine.begin() as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname = 'kaori'")
+            )
+        }
+    assert "observations" in tables
+
+
+def test_migrate_owner_and_runtime_grants(engine, postgres_url):
+    from kaori_db.migrate import migrate
+    from kaori_db.store import require_kaori_schema
+
+    migrate(postgres_url, with_roles=True)
+    require_kaori_schema(engine)
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("GRANT kaori_runtime TO CURRENT_USER"))
+    except Exception as exc:
+        pytest.skip(f"cannot assume kaori_runtime: {exc}")
+
+    observations = PostgresObservationStore(engine=engine)
+    observations.append(
+        _observation("11111111-1111-1111-1111-111111111111", "reporter-a"),
+        truthkey=TRUTHKEY,
+        claim_type_hash="a" * 64,
+        received_at=COMPILE_TIME,
+    )
+
+    with engine.connect() as conn:
+        conn.execute(text("SET ROLE kaori_runtime"))
+        conn.execute(
+            text(
+                "INSERT INTO kaori.observations ("
+                "observation_id, observation_hash, truthkey, claim_type_id, "
+                "claim_type_hash, reporter_id, reported_at, received_at, "
+                "canonical, evidence_refs"
+                ") VALUES ("
+                "'22222222-2222-2222-2222-222222222222', :hash, :truthkey, "
+                "'earth.flood.v1', :claim_hash, 'reporter-b', now(), now(), "
+                " '{}'::jsonb, '[]'::jsonb)"
+            ),
+            {
+                "hash": "b" * 64,
+                "truthkey": TRUTHKEY,
+                "claim_hash": "a" * 64,
+            },
+        )
+        conn.execute(
+            text(
+                "INSERT INTO kaori.truth_states (truthkey, artifact, compiled_at) "
+                "VALUES (:truthkey, '{}'::jsonb, now())"
+            ),
+            {"truthkey": TRUTHKEY},
+        )
+        conn.execute(
+            text("UPDATE kaori.truth_states SET revision = 1 WHERE truthkey = :truthkey"),
+            {"truthkey": TRUTHKEY},
+        )
+        conn.commit()
+
+    with engine.connect() as conn:
+        conn.execute(text("SET ROLE kaori_runtime"))
+        with pytest.raises(Exception):
+            conn.execute(text("CREATE TABLE kaori.runtime_hack (id int)"))
+        conn.rollback()
+
+    with engine.connect() as conn:
+        conn.execute(text("SET ROLE kaori_runtime"))
+        with pytest.raises(Exception, match="append-only|permission denied"):
+            conn.execute(text("UPDATE kaori.observations SET truthkey = 'mutated'"))
+        conn.rollback()
+
+    assert observations.count_distinct_reporters(TRUTHKEY) == 2

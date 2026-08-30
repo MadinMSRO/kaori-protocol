@@ -85,7 +85,11 @@ def default_schema_path() -> str:
 
 
 def create_stores() -> Tuple[Any, Any, Any]:
-    """Signal, Bronze observation, and signed artifact stores."""
+    """Signal, Bronze observation, and signed artifact stores.
+
+    Cloud SQL connections check that the schema already exists. They do not
+    apply DDL — run `python -m kaori_db.migrate` as the migration owner.
+    """
     database_url = os.environ.get("DATABASE_URL")
     if database_url:
         from kaori_db import (
@@ -93,9 +97,12 @@ def create_stores() -> Tuple[Any, Any, Any]:
             PostgresSignalStore,
             PostgresTruthArtifactStore,
         )
+        from kaori_db.store import require_kaori_schema
+        from kaori_truth.signing import require_production_signing_config
 
+        require_production_signing_config()
         signals = PostgresSignalStore(database_url)
-        signals.ensure_schema()
+        require_kaori_schema(signals.engine)
         return (
             signals,
             PostgresObservationStore(engine=signals.engine),
@@ -287,7 +294,9 @@ def create_app(
     """
     Build the sidecar. Tests inject FlowCore + verify_token + truth_store.
     Production: GET {SUPABASE_URL}/auth/v1/user with SUPABASE_PUBLISHABLE_KEY.
-    DATABASE_URL is optional (in-memory stores when unset); when set it is Cloud SQL.
+    DATABASE_URL is optional (in-memory stores when unset); when set it is Cloud SQL
+    and requires a dedicated production TruthState signing key plus a pre-applied
+    schema. The API runtime never applies migrations.
     """
     if flow is None:
         signal_store, default_observation_store, default_truth_store = create_stores()
