@@ -49,6 +49,7 @@ from kaori_api.validation import (
     ensure_claimtype_registered,
     ensure_generalist_registered,
 )
+from kaori_db import InMemoryArtifactLedger, ObservationConflict
 
 LOGGER = logging.getLogger(__name__)
 LIMINAL_ORIGIN = "https://kind-keepsake-kingdom.lovable.app"
@@ -78,23 +79,31 @@ def default_schema_path() -> str:
     return "packages/kaori-spec/schemas"
 
 
-def create_stores() -> Tuple[Any, Any]:
+def create_stores() -> Tuple[Any, Any, Any]:
     """Postgres stores when DATABASE_URL is set; in-memory otherwise."""
     database_url = os.environ.get("DATABASE_URL")
     if database_url:
-        from kaori_db import PostgresSignalStore, PostgresTruthStateStore
+        from kaori_db import (
+            PostgresArtifactLedger,
+            PostgresSignalStore,
+            PostgresTruthStateStore,
+        )
 
         signals = PostgresSignalStore(database_url)
         signals.ensure_schema()
-        return signals, PostgresTruthStateStore(engine=signals.engine)
+        return (
+            signals,
+            PostgresTruthStateStore(engine=signals.engine),
+            PostgresArtifactLedger(engine=signals.engine),
+        )
     from kaori_db import InMemoryTruthStateStore
 
-    return InMemorySignalStore(), InMemoryTruthStateStore()
+    return InMemorySignalStore(), InMemoryTruthStateStore(), InMemoryArtifactLedger()
 
 
 def create_store():
     """PostgresSignalStore when DATABASE_URL is set; in-memory otherwise."""
-    signals, _ = create_stores()
+    signals, *_ = create_stores()
     return signals
 
 
@@ -174,6 +183,18 @@ def validate_payload_fields(observations: List[Observation], claim_type) -> None
                 raise HTTPException(status_code=400, detail=f"Missing payload field: {field}")
 
 
+def record_ledger_observations(
+    ledger: Any,
+    truth_key: str,
+    claim_type_id: str,
+    observations: List[Observation],
+) -> List[Observation]:
+    """Append Bearer-stamped Observations, then load every reporter on this TruthKey."""
+    for observation in observations:
+        ledger.record_observation(truth_key, claim_type_id, observation)
+    return [Observation.model_validate(row) for row in ledger.observations_for(truth_key)]
+
+
 def compile_after_vote(
     *,
     orchestrator: TruthOrchestrator,
@@ -185,6 +206,7 @@ def compile_after_vote(
     agent_id: str,
     votes: Optional[List[dict]] = None,
     ai_scores: Optional[List[float]] = None,
+    artifact_ledger: Any = None,
 ) -> dict:
     """compile_truth_state only after a VALIDATION_VOTE exists for this TruthKey."""
     if not votes_for_truthkey(flow, truth_key):
@@ -196,19 +218,26 @@ def compile_after_vote(
         ai_scores=ai_scores,
         votes=votes,
     )
-    artifact = persist_truth_state(truth_store, truth_state)
+    artifact = persist_truth_state(truth_store, truth_state, artifact_ledger)
     emit_compile_truthstate(flow, truth_state, agent_id, claim_type_id)
     return artifact
 
 
-def persist_truth_state(truth_store: Any, state: TruthState) -> dict:
+def persist_truth_state(
+    truth_store: Any,
+    state: TruthState,
+    artifact_ledger: Any = None,
+) -> dict:
     """Upsert full TruthState.model_dump (including evidence_refs) on truthkey."""
     artifact = state.model_dump(mode="json")
+    compiled_at = state.compile_inputs.compile_time
     truth_store.upsert(
         truthkey=state.truthkey,
         artifact=artifact,
-        compiled_at=state.compile_inputs.compile_time,
+        compiled_at=compiled_at,
     )
+    if artifact_ledger is not None:
+        artifact_ledger.append_artifact(state.truthkey, artifact, compiled_at)
     return artifact
 
 
@@ -235,6 +264,7 @@ def create_app(
     *,
     flow: Optional[FlowCore] = None,
     truth_store: Optional[Any] = None,
+    artifact_ledger: Optional[Any] = None,
     supabase_url: Optional[str] = None,
     publishable_key: Optional[str] = None,
     verify_token: Optional[Callable[[str], str]] = None,
@@ -247,14 +277,18 @@ def create_app(
     DATABASE_URL is optional (in-memory stores when unset); when set it is Cloud SQL.
     """
     if flow is None:
-        signal_store, default_truth_store = create_stores()
+        signal_store, default_truth_store, default_ledger = create_stores()
         flow = FlowCore(store=signal_store)
         if truth_store is None:
             truth_store = default_truth_store
+        if artifact_ledger is None:
+            artifact_ledger = default_ledger
     elif truth_store is None:
         from kaori_db import InMemoryTruthStateStore
 
         truth_store = InMemoryTruthStateStore()
+    if artifact_ledger is None:
+        artifact_ledger = InMemoryArtifactLedger()
     url = supabase_url if supabase_url is not None else os.environ.get("SUPABASE_URL") or ""
     key = publishable_key if publishable_key is not None else os.environ.get("SUPABASE_PUBLISHABLE_KEY") or ""
     if verify_token is None:
@@ -282,6 +316,7 @@ def create_app(
     )
     app.state.flow = flow
     app.state.truth_store = truth_store
+    app.state.artifact_ledger = artifact_ledger
     app.state.verify_token = verify_token
     app.state.orchestrator = orchestrator
     app.state.generalist_client = generalist_client
@@ -341,6 +376,16 @@ def create_app(
         validate_evidence_refs(observations)
         validate_payload_fields(observations, claim_type)
 
+        try:
+            observations = record_ledger_observations(
+                request.app.state.artifact_ledger,
+                truth_key,
+                claim_type_id,
+                observations,
+            )
+        except ObservationConflict as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
         client = request.app.state.generalist_client
         if client is not None:
             timeout = generalist_timeout_seconds(claim_type)
@@ -369,6 +414,7 @@ def create_app(
                             agent_id=agent_id,
                             votes=votes,
                             ai_scores=ai_scores,
+                            artifact_ledger=request.app.state.artifact_ledger,
                         )
                     except CompilationError as exc:
                         LOGGER.exception(
@@ -433,7 +479,11 @@ def create_app(
         except ValidationError as exc:
             raise HTTPException(status_code=400, detail="Invalid observation or EvidenceRef") from exc
 
-        artifact = persist_truth_state(request.app.state.truth_store, truth_state)
+        artifact = persist_truth_state(
+            request.app.state.truth_store,
+            truth_state,
+            request.app.state.artifact_ledger,
+        )
         emit_compile_truthstate(flow_core, truth_state, agent_id, claim_type_id)
         return JSONResponse(status_code=200, content=artifact)
 

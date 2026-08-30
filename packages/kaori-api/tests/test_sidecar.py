@@ -15,7 +15,7 @@ from kaori_api.app import (
     stamp_observation,
 )
 from kaori_api.auth import AuthError
-from kaori_db import InMemoryTruthStateStore
+from kaori_db import InMemoryArtifactLedger, InMemoryTruthStateStore
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.signal import SignalTypes
 
@@ -576,3 +576,93 @@ def test_claimtype_register_is_idempotent_across_compiles():
     assert standing.status_code == 200
     assert isinstance(standing.json()["standing"], (int, float))
     assert 0.0 <= float(standing.json()["standing"]) <= 1000.0
+
+
+def test_compile_aggregates_independent_reporters_from_ledger():
+    alice = "user:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    bob = "user:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+    def verify(token: str) -> str:
+        mapping = {"tok-a": alice, "tok-b": bob}
+        if token not in mapping:
+            raise AuthError("Invalid Bearer token")
+        return mapping[token]
+
+    flow = FlowCore(store=InMemorySignalStore())
+    ledger = InMemoryArtifactLedger()
+    client = TestClient(
+        create_app(flow=flow, verify_token=verify, artifact_ledger=ledger)
+    )
+    alice_body = compile_body()
+    bob_body = compile_body(
+        observations=[
+            valid_observation(
+                observation_id="22222222-2222-2222-2222-222222222222",
+                payload={
+                    "depth_meters": 11.0,
+                    "bleaching_present": True,
+                    "bleaching_percentage": 55,
+                },
+                evidence_refs=[
+                    {"uri": "gs://kaori-evidence/coral3.jpg", "sha256": "c" * 64},
+                    {"uri": "gs://kaori-evidence/coral4.jpg", "sha256": "d" * 64},
+                ],
+            )
+        ]
+    )
+
+    first = client.post(
+        "/v1/compile",
+        json=alice_body,
+        headers={"Authorization": "Bearer tok-a"},
+    )
+    second = client.post(
+        "/v1/compile",
+        json=bob_body,
+        headers={"Authorization": "Bearer tok-b"},
+    )
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert len(first.json()["compile_inputs"]["observations"]) == 1
+    packages = second.json()["compile_inputs"]["observations"]
+    assert len(packages) == 2
+    assert {package["reporter_id"] for package in packages} == {alice, bob}
+    assert len(ledger.observations_for(alice_body["truth_key"])) == 2
+    assert len(ledger.artifacts_for(first.json()["truthkey"])) == 2
+
+
+def test_compile_rejects_mutated_resubmit_from_same_reporter():
+    flow = FlowCore(store=InMemorySignalStore())
+    client = TestClient(create_app(flow=flow, verify_token=verify_token))
+    first = client.post("/v1/compile", json=compile_body(), headers=auth_header())
+    assert first.status_code == 200, first.text
+    mutated = compile_body(
+        observations=[
+            valid_observation(
+                observation_id="22222222-2222-2222-2222-222222222222",
+                payload={
+                    "depth_meters": 12.0,
+                    "bleaching_present": True,
+                    "bleaching_percentage": 90,
+                },
+            )
+        ]
+    )
+    second = client.post("/v1/compile", json=mutated, headers=auth_header())
+    assert second.status_code == 400
+    stored = client.get(f"/v1/truth/{first.json()['truthkey']}", headers=auth_header())
+    assert stored.status_code == 200
+    assert stored.json()["compile_inputs"]["observations"][0]["payload"]["depth_meters"] == 8.0
+
+
+def test_compile_404_does_not_record_ledger_observation():
+    flow = FlowCore(store=InMemorySignalStore())
+    ledger = InMemoryArtifactLedger()
+    client = TestClient(
+        create_app(flow=flow, verify_token=verify_token, artifact_ledger=ledger)
+    )
+    body = compile_body(claim_type_id="ocean.made_up.v1")
+    response = client.post("/v1/compile", json=body, headers=auth_header())
+    assert response.status_code == 404
+    assert ledger.observations_for(body["truth_key"]) == []
+    assert ledger.artifacts_for(body["truth_key"]) == []

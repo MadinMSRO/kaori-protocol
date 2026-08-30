@@ -315,6 +315,8 @@ def test_integration_describes_pre_compile_validation_vote():
     assert "full observation package" in readme
     assert "Observe does not wait on CLIP" in integration
     assert "Observe/record can stay async internally" in integration
+    assert "kaori.observations" in integration
+    assert "kaori.artifact_ledger" in integration
     assert "200 is returned only after a `VALIDATION_VOTE` is recorded" in integration
     assert "not `{truthkey}`" in integration
     assert "do not return 200 as if validated" in integration
