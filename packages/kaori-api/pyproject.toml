@@ -17,6 +17,8 @@ dependencies = [
     "kaori-truth>=2.0.0",
     "kaori-flow>=2.0.0",
     "kaori-db>=2.0.0",
+    "google-cloud-storage",
+    "python-multipart",
 ]
 
 [project.optional-dependencies]

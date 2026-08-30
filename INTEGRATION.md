@@ -75,17 +75,33 @@ Liminal ──HTTP──▶ kaori_api.app ──▶ FlowCore(store=PostgresSigna
                          └── TruthOrchestrator.compile_observations
 ```
 
-Routes (and only these):
+Protocol routes:
 
 | Method | Path | Wraps |
 |--------|------|--------|
-| `POST` | `/v1/compile` | observation checks → `VALIDATION_VOTE` → `TruthOrchestrator.compile_observations` → persist → `FlowCore.emit_truthstate` |
+| `POST` | `/v1/evidence` | authenticated, content-addressed upload to the private Kaori observations bucket |
+| `POST` | `/v1/compile` | immutable observation admission → distinct-reporter gate → `VALIDATION_VOTE` → compile → append Silver / refresh Gold |
 | `GET` | `/v1/standing/{agent_id}` | `FlowCore.get_standing` |
 | `GET` | `/v1/truth/{truthkey}` | stored `kaori.truth_states` artifact (`{truthkey:path}`) |
 
-Auth: `Authorization: Bearer <token>` verified by `GET {SUPABASE_URL}/auth/v1/user` with `apikey: SUPABASE_PUBLISHABLE_KEY`. Agent id is `user:{user.id}`. Never `profiles.id`. Player standing stays `GET /v1/standing/{agent_id}` with that `user:{user.id}` encoded in the path. `POST /v1/compile` order: observation checks → private generalist `VALIDATION_VOTE` (internal `record_validation_vote` helper, not a route) → `compile_observations` → persist `TruthState.model_dump` into `kaori.truth_states` (not `public.truths`) → `FlowCore.emit_truthstate` so standing moves from that signal — not from `register_agent` for the Bearer. Truth order is observe → validate → compile. Observe does not wait on CLIP. Observe/record can stay async internally. `POST /v1/compile` 200 is returned only after a `VALIDATION_VOTE` is recorded and the full TruthState is persisted — that 200 is the same artifact as `GET /v1/truth`, not `{truthkey}`. If YAML `generalist.timeout` elapses with no vote, do not compile and do not return 200 as if validated (no 422). The generalist HTTP wait is `ai_validation_routing.generalist.timeout` (ISO-8601) on the ClaimType YAML — a new field, because live YAML had no CLIP wait (coastal dispute timeouts PT12H/PT24H/PT48H must not be reused; never hardcode 30s). The client reads that field. A late generalist 200 still records the `VALIDATION_VOTE`. Never swallow `TimeoutError` and compile as if CLIP ran: compile does not proceed on a swallowed timeout. On every generalist response (RATIFY, REJECT, and timeout-then-late-200) both `kaori-generalist` and `kaori-api` log the ValidationVote JSON (`vote`, `confidence`, `truthkey_id`, `agent_id`, `timestamp`). Do not log evidence bytes or secrets. `compile_truth_state` runs only after a vote is recorded for that TruthKey. The generalist input is the full observation package: `evidence_refs` image URIs, `Observation.geo` coordinates, `ui_schema` payload fields, `claim_type_id`, and the compile TruthKey H3 cell. CLIP relevance and that package (including GPS vs TruthKey H3 at ClaimType `truthkey.resolution`) run before `compile_truth_state`. Dummy/unrelated imagery and coordinates outside the TruthKey cell can each `REJECT` the same `ai:generalist_v1` vote. A `REJECT` still compiles 200 with a TruthState once the vote exists. Startup idempotently registers the CPU CLIP voter `ai:generalist_v1` with role validator. On compile the sidecar generically ensures Flow agent `claimtype:{claim_type_id}` exists (FLOW_SPEC Rule 2; same idempotent register as the generalist; role `claimtype`) and includes that agent in `emit_truthstate` contributors. The existing `GET /v1/standing/{agent_id}` then covers claim-type rank when that `claimtype:{claim_type_id}` is encoded in the path — same Bearer, same `{standing}` body. No fourth path. Never compiled → 404. Artifact `claim` still comes from `GET /v1/truth/{truthkey}`. That GET is the TruthState: `compile_inputs.observations` is the canonical observation package (`geo`, `payload`, `evidence_refs` as `{uri, sha256}`), `TruthState.evidence_refs` stays content-bound `{uri, sha256}` (not a URI string list), and the recorded `ai:generalist_v1` `VALIDATION_VOTE` lands on `consensus.votes`. No `GET /v1/vote`. The helper is not a route, and `compile_truth_state` remains pure. The sidecar stamps `Observation.reporter_id` from the Bearer agent and `reporter_context` from Flow. Warming is ops, not a protocol skip.
+Auth: `Authorization: Bearer <token>` is verified by `GET {SUPABASE_URL}/auth/v1/user` with `apikey: SUPABASE_PUBLISHABLE_KEY`. Agent id is `user:{user.id}`—never `profiles.id`. `POST /v1/evidence` computes SHA-256 server-side, writes once to `gs://$KAORI_OBSERVATIONS_BUCKET/observations/...`, and returns a content-bound EvidenceRef. The bucket is private; signed URLs are transport credentials and MUST NOT replace the stored `gs://` URI.
+
+`POST /v1/compile` first stamps only the incoming observations with the authenticated reporter identity, verifies their evidence objects, and inserts the canonical Bronze records into `kaori.observations`. It then counts `COUNT(DISTINCT reporter_id)` for the TruthKey. Before `implicit_consensus.min_observations` is met it returns `202 PENDING` with observation progress and MUST NOT call validation or compilation. `evidence.min_count` remains the number of evidence refs inside each single Observation; validator vote quorum is a later, separate gate.
+
+After the distinct-reporter threshold, Kaori loads all immutable observations for that TruthKey, records the private generalist `VALIDATION_VOTE`, creates and persists the complete frozen TrustSnapshot, calls the pure compiler, appends the signed revision to `kaori.truth_artifacts`, and atomically refreshes the Gold `kaori.truth_states` projection. No TruthState is written to `public.truths`. A `200` is returned only after the vote and signed artifact persist; it is the same artifact returned by `GET /v1/truth`, not `{truthkey}`.
+
+If the YAML generalist timeout elapses with no vote, do not compile or return 200 as if validated. A late generalist 200 still records the vote but does not retroactively turn the timed-out request into a successful compile. Do not log evidence bytes, bearer tokens, signatures, or secret values. There is no public vote route: recorded votes remain in Flow signals and `TruthState.consensus.votes`. The sidecar stamps reporter context from Flow, and the compiler remains pure.
 
 Compile body (Open Core names only): `{ "truth_key", "claim_type_id", "observations" }`. Observation field is `evidence_refs`. 200 TruthState field is `truthkey`. Sidecar loads ClaimType YAML for the given `claim_type_id` (404 if missing). Required payload fields come from that spec `ui_schema`.
+
+Evidence upload is multipart form data:
+
+```text
+POST /v1/evidence
+Authorization: Bearer <supabase access token>
+file=<bytes>
+expected_sha256=<optional lowercase SHA-256>
+```
 
 Identity:
 

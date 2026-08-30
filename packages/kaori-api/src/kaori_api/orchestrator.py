@@ -23,6 +23,7 @@ from kaori_truth import (
 )
 from kaori_truth.factory import load_claim_type
 from kaori_truth.signing import sign_truth_state
+from kaori_truth.trust_snapshot import TrustSnapshot
 
 # Import from Flow
 from kaori_flow.trust_provider import TrustProvider, create_trust_snapshot
@@ -65,7 +66,7 @@ class TruthOrchestrator:
         self.schema_path = schema_path
         self._claimtype_cache: dict[str, ClaimType] = {}
     
-    def compile_observations(
+    def compile_observations_with_snapshot(
         self,
         observations: List[Observation],
         truth_key: str,
@@ -75,7 +76,7 @@ class TruthOrchestrator:
         ai_scores: Optional[List[float]] = None,
         votes: Optional[List[dict]] = None,
         sign: bool = True,
-    ) -> TruthState:
+    ) -> tuple[TruthState, TrustSnapshot]:
         """
         Compile observations into a signed TruthState.
         
@@ -130,7 +131,30 @@ class TruthOrchestrator:
         if sign:
             truth_state = sign_truth_state(truth_state, compile_time)
         
-        return truth_state
+        return truth_state, trust_snapshot
+
+    def compile_observations(
+        self,
+        observations: List[Observation],
+        truth_key: str,
+        claim_type_id: str,
+        compile_time: Optional[datetime] = None,
+        *,
+        ai_scores: Optional[List[float]] = None,
+        votes: Optional[List[dict]] = None,
+        sign: bool = True,
+    ) -> TruthState:
+        """Compile while preserving the legacy state-only return contract."""
+        state, _snapshot = self.compile_observations_with_snapshot(
+            observations=observations,
+            truth_key=truth_key,
+            claim_type_id=claim_type_id,
+            compile_time=compile_time,
+            ai_scores=ai_scores,
+            votes=votes,
+            sign=sign,
+        )
+        return state
     
     def get_claim_type(self, claim_type_id: str):
         """Load ClaimType YAML for this id. Missing file → UnknownClaimTypeError."""

@@ -1,4 +1,4 @@
-"""Sidecar HTTP contract: /v1/compile, /v1/standing/{agent_id}, /v1/truth/{truthkey}."""
+"""Sidecar HTTP contract: private evidence intake, compile, standing, and truth."""
 from __future__ import annotations
 
 from urllib.parse import quote
@@ -39,9 +39,11 @@ TRUTHSTATE_FIELDS = {
 
 
 def verify_token(token: str) -> str:
-    if token != TOKEN:
-        raise AuthError("Invalid Bearer token")
-    return AGENT_ID
+    if token == TOKEN:
+        return AGENT_ID
+    if token.startswith("reporter-"):
+        return f"user:{token}"
+    raise AuthError("Invalid Bearer token")
 
 
 def auth_header(token: str | None = None) -> dict:
@@ -90,7 +92,7 @@ def client(flow: FlowCore) -> TestClient:
     return TestClient(create_app(flow=flow, verify_token=verify_token))
 
 
-def test_only_three_http_routes():
+def test_only_protocol_http_routes():
     application = create_app(
         flow=FlowCore(store=InMemorySignalStore()),
         verify_token=verify_token,
@@ -98,6 +100,7 @@ def test_only_three_http_routes():
     paths = {getattr(route, "path", None) for route in application.router.routes}
     paths.discard(None)
     assert paths == {
+        "/v1/evidence",
         "/v1/compile",
         "/v1/standing/{agent_id}",
         "/v1/truth/{truthkey:path}",
@@ -215,27 +218,39 @@ def test_compile_ui_schema_payload_derives_output_boolean(client: TestClient):
 
 def test_compile_open_core_flood_missing_output_schema_400(client: TestClient):
     """Flood stays Open Core and has no output_schema — compile must not guess claim keys."""
-    obs = {
-        "observation_id": "11111111-1111-1111-1111-111111111111",
-        "claim_type": "earth.flood.v1",
-        "reported_at": "2026-01-07T12:00:00Z",
-        "geo": {"lat": 4.175, "lon": 73.509},
-        "payload": {"water_level_cm": 12},
-        "evidence_refs": [
-            {"uri": "gs://kaori-evidence/flood1.jpg", "sha256": "a" * 64},
-        ],
-    }
-    response = client.post(
-        "/v1/compile",
-        json={
-            "truth_key": "earth:flood:h3:886142a8e7fffff:surface:2026-01-07T12:00Z",
-            "claim_type_id": "earth.flood.v1",
-            "observations": [obs],
-        },
-        headers=auth_header(),
+    truth_key = "earth:flood:h3:886142a8e7fffff:surface:2026-01-07T12:00Z"
+    observation_ids = (
+        "11111111-1111-1111-1111-111111111111",
+        "22222222-2222-2222-2222-222222222222",
+        "33333333-3333-3333-3333-333333333333",
     )
-    assert response.status_code == 400
-    assert "output_schema" in response.json()["detail"]
+    responses = []
+    for index, observation_id in enumerate(observation_ids):
+        obs = {
+            "observation_id": observation_id,
+            "claim_type": "earth.flood.v1",
+            "reported_at": "2026-01-07T12:00:00Z",
+            "geo": {"lat": 4.175, "lon": 73.509},
+            "payload": {"water_level_cm": 12},
+            "evidence_refs": [
+                {"uri": "gs://kaori-evidence/flood1.jpg", "sha256": "a" * 64},
+            ],
+        }
+        token = TOKEN if index == 2 else f"reporter-{index}"
+        responses.append(
+            client.post(
+                "/v1/compile",
+                json={
+                    "truth_key": truth_key,
+                    "claim_type_id": "earth.flood.v1",
+                    "observations": [obs],
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        )
+    assert [item.status_code for item in responses[:2]] == [202, 202]
+    assert responses[2].status_code == 400
+    assert "output_schema" in responses[2].json()["detail"]
 
 
 def test_compile_unknown_claim_type_404(client: TestClient):

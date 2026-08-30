@@ -24,6 +24,8 @@ RUN pip install --no-cache-dir \
         "sqlalchemy>=2.0.0" \
         "pyyaml>=6.0" \
         "psycopg2-binary>=2.9.0" \
+        "google-cloud-storage" \
+        "python-multipart" \
     && useradd --create-home --uid 10001 kaori \
     && chown -R kaori:kaori /app
 
@@ -31,9 +33,10 @@ ENV PYTHONPATH=/app
 ENV KAORI_SCHEMA_PATH=/app/packages/kaori-spec/schemas
 ENV PYTHONUNBUFFERED=1
 
-# Runtime: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY. DATABASE_URL optional (Cloud SQL).
+# Runtime: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, DATABASE_URL (Cloud SQL),
+# and KAORI_OBSERVATIONS_BUCKET (private GCS).
 # Compiler reads ClaimType YAML from KAORI_SCHEMA_PATH (not a claim_types table).
-# Evidence uri remains a string pointer. Three routes: compile, standing, truth.
+# Evidence bytes are content-addressed in GCS; Observation stores immutable refs.
 EXPOSE 8080
 
 USER kaori

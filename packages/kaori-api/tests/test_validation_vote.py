@@ -225,6 +225,7 @@ def test_no_new_http_routes_for_validation_vote():
     paths = {getattr(route, "path", None) for route in application.router.routes}
     paths.discard(None)
     assert paths == {
+        "/v1/evidence",
         "/v1/compile",
         "/v1/standing/{agent_id}",
         "/v1/truth/{truthkey:path}",

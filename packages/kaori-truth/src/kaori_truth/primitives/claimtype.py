@@ -5,8 +5,7 @@ YAML contract definition with canonicalization and version pinning.
 """
 from __future__ import annotations
 
-import hashlib
-from pathlib import Path
+from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
 import yaml
@@ -84,11 +83,16 @@ class ClaimType(BaseModel):
         """
         Get canonical representation for hashing.
         
-        Canonicalization includes:
-        - Stable ordering of contract fields
-        - Normalized numeric thresholds
-        - Explicit policy version binding
+        A loaded ClaimType hash binds the complete released YAML contract,
+        including evidence and implicit-consensus policy. A reduced fallback is
+        retained for programmatically constructed ClaimTypes used by embedders.
         """
+        if self._raw_config:
+            contract = deepcopy(self._raw_config)
+            if self.output_schema is not None:
+                contract["output_schema"] = deepcopy(self.output_schema)
+            return canonical_dict(contract)
+
         truthkey_config = {
             "spatial_system": self.truthkey.spatial_system.lower(),
             "resolution": self.truthkey.resolution,
@@ -184,6 +188,17 @@ class ClaimType(BaseModel):
     def get_config(self) -> Dict[str, Any]:
         """Get full raw configuration."""
         return self._raw_config or self.model_dump()
+
+    def minimum_observations(self) -> int:
+        """Distinct reporter observations required before validation may start."""
+        implicit = self.get_config().get("implicit_consensus") or {}
+        if implicit.get("enabled") is not True:
+            return 1
+        value = implicit.get("min_observations", 1)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError("implicit_consensus.min_observations must be a positive integer")
+        return value
+
     def get_vote_weight(self, standing: str) -> int:
         """Get vote weight for a standing class."""
         return self.consensus_model.weighted_roles.get(standing.lower(), 1)

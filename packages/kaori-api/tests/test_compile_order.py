@@ -1,4 +1,4 @@
-"""Compile order: observation → validation vote → compilation. No new routes."""
+"""Compile order: evidence → observation threshold → validation vote → compilation."""
 from __future__ import annotations
 
 import ast
@@ -46,7 +46,7 @@ def coral_body() -> dict:
         "claim_type_id": "ocean.coral_bleaching.v1",
         "observations": [
             {
-                "observation_id": "11111111-1111-1111-1111-111111111111",
+                "observation_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 "claim_type": "ocean.coral_bleaching.v1",
                 "reported_at": "2026-01-07T12:00:00Z",
                 "geo": {"lat": -8.3405, "lon": 115.0920},
@@ -166,7 +166,7 @@ def wait_for_truth(client: TestClient, truthkey: str, *, timeout: float = 2.0):
     )
 
 
-def test_only_three_http_routes():
+def test_only_protocol_http_routes():
     application = create_app(
         flow=FlowCore(store=InMemorySignalStore()),
         verify_token=verify_token,
@@ -174,6 +174,7 @@ def test_only_three_http_routes():
     paths = {getattr(route, "path", None) for route in application.router.routes}
     paths.discard(None)
     assert paths == {
+        "/v1/evidence",
         "/v1/compile",
         "/v1/standing/{agent_id}",
         "/v1/truth/{truthkey:path}",
@@ -261,11 +262,10 @@ def test_vessel_not_pending_human_review_from_critical_alone():
     client = TestClient(create_app(flow=flow, verify_token=verify_token))
     vessel = client.post("/v1/compile", json=vessel_body(), headers=auth_header())
     coral = client.post("/v1/compile", json=coral_body(), headers=auth_header())
-    assert vessel.status_code == 200, vessel.text
+    assert vessel.status_code == 202, vessel.text
+    assert vessel.json()["observation_progress"] == {"received": 1, "required": 3}
     assert coral.status_code == 200, coral.text
-    assert vessel.json()["status"] != "PENDING_HUMAN_REVIEW"
     assert coral.json()["status"] == "PENDING_HUMAN_REVIEW"
-    assert vessel.json()["status"] != "VALIDATION"
     assert coral.json()["status"] != "VALIDATION"
 
 
@@ -282,58 +282,28 @@ def test_integration_describes_pre_compile_validation_vote():
     for phrase in stale:
         assert phrase not in integration
         assert phrase not in readme
-    assert (
-        "observation checks → `VALIDATION_VOTE` → `TruthOrchestrator.compile_observations` "
-        "→ persist → `FlowCore.emit_truthstate`"
-    ) in integration
-    order = integration[integration.index("`POST /v1/compile` order:"):]
-    vote_at = order.index("VALIDATION_VOTE")
-    compile_at = order.index("compile_observations")
-    persist_at = order.index("persist `TruthState.model_dump`")
-    emit_at = order.index("FlowCore.emit_truthstate")
-    assert vote_at < compile_at < persist_at < emit_at
+    order = integration[integration.index("`POST /v1/compile` first"):]
+    admission_at = order.index("inserts the canonical Bronze records")
+    threshold_at = order.index("distinct-reporter threshold")
+    vote_at = order.index("`VALIDATION_VOTE`")
+    compile_at = order.index("pure compiler")
+    persist_at = order.index("`kaori.truth_artifacts`")
+    assert admission_at < threshold_at < vote_at < compile_at < persist_at
     assert "before `compile_observations`" in readme
     assert "VALIDATION" not in {s.value for s in TruthStatus}
     assert "`GET` | `/v1/standing/{agent_id}`" in integration
     assert "/v1/standing/claimtype:" not in integration
-    assert "Player standing stays" in integration
-    assert "Artifact `claim` still comes from `GET /v1/truth/{truthkey}`" in integration
-    assert "compile_inputs.observations" in integration
-    assert "consensus.votes" in integration
-    assert "No `GET /v1/vote`" in integration
-    assert "No `GET /v1/vote`" in readme
-    assert "content-bound `{uri, sha256}`" in integration
-    assert "content-bound `{uri, sha256}`" in readme
-    assert "same `{standing}` body" in integration
-    assert "No fourth path" in integration
-    assert "No fourth path" in readme
-    assert "Player standing stays `user:{id}`" in readme
-    assert "full observation package" in integration
-    assert "CLIP relevance" in integration
-    assert "TruthKey H3" in integration
-    assert "before `compile_truth_state`" in integration
-    assert "full observation package" in readme
-    assert "Observe does not wait on CLIP" in integration
-    assert "Observe/record can stay async internally" in integration
-    assert "200 is returned only after a `VALIDATION_VOTE` is recorded" in integration
-    assert "not `{truthkey}`" in integration
-    assert "do not return 200 as if validated" in integration
-    assert "200 is returned only after a `VALIDATION_VOTE` is recorded" in readme
-    assert "not `{truthkey}`" in readme
-    assert "do not return 200 as if validated" in readme
-    assert "ai_validation_routing.generalist.timeout" in integration
-    assert "new field" in integration
-    assert "Never swallow `TimeoutError`" in integration
-    assert "compile does not proceed on a swallowed timeout" in integration
-    assert "compile does not proceed on a swallowed timeout" in readme
-    assert "ValidationVote JSON" in integration
-    assert "`vote`, `confidence`, `truthkey_id`, `agent_id`, `timestamp`" in integration
+    assert "`POST` | `/v1/evidence`" in integration
+    assert "`POST /v1/evidence`" in readme
+    assert "`COUNT(DISTINCT reporter_id)`" in integration
+    assert "`implicit_consensus.min_observations`" in integration
+    assert "`evidence.min_count`" in integration
+    assert "`kaori.observations`" in integration
+    assert "`kaori.truth_artifacts`" in integration
+    assert "`kaori.truth_artifacts`" in readme
+    assert "There is no public vote route" in integration
+    assert "There is no `/v1/vote` route" in readme
     assert "evidence bytes" in integration
-    assert "late generalist 200" in integration
-    assert "only after a vote is recorded" in integration
-    assert "never hardcode 30s" in integration
-    assert "Warming is ops" in integration
-    assert "Observe does not wait on CLIP" in readme
     assert "timeout: float = 30.0" not in Path(
         "packages/kaori-api/src/kaori_api/generalist_client.py"
     ).read_text()
