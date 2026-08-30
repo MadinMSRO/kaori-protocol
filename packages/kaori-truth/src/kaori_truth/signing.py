@@ -16,10 +16,8 @@ import hashlib
 import hmac
 import os
 from datetime import datetime
-from typing import Optional
 
-from kaori_truth.primitives.truthstate import TruthState, SecurityBlock
-
+from kaori_truth.primitives.truthstate import SecurityBlock, TruthState
 
 SIGNING_METHOD = os.environ.get("KAORI_SIGNING_METHOD", "local_hmac")
 DEV_SIGNING_KEY = "kaori-dev-signing-key-do-not-use-in-production"
@@ -30,7 +28,7 @@ class SigningConfigError(RuntimeError):
     """Production TruthState signing is missing or unsafe."""
 
 
-def database_url_is_cloud_sql(url: Optional[str] = None) -> bool:
+def database_url_is_cloud_sql(url: str | None = None) -> bool:
     """True when DATABASE_URL points at Postgres / Cloud SQL (not sqlite, not unset)."""
     raw = os.environ.get("DATABASE_URL", "") if url is None else url
     if not raw:
@@ -41,13 +39,13 @@ def database_url_is_cloud_sql(url: Optional[str] = None) -> bool:
     return lowered.startswith("postgres") or "cloudsql" in lowered
 
 
-def production_signing_required(url: Optional[str] = None) -> bool:
+def production_signing_required(url: str | None = None) -> bool:
     """Cloud SQL or an explicit production environment requires a dedicated signing key."""
     environment = os.environ.get("KAORI_ENVIRONMENT", "").strip().lower()
     return database_url_is_cloud_sql(url) or environment == "production"
 
 
-def _configured_signing_key() -> Optional[str]:
+def _configured_signing_key() -> str | None:
     value = os.environ.get("KAORI_SIGNING_KEY")
     if value is None:
         return None
@@ -55,7 +53,7 @@ def _configured_signing_key() -> Optional[str]:
     return stripped or None
 
 
-def _configured_signing_key_id() -> Optional[str]:
+def _configured_signing_key_id() -> str | None:
     value = os.environ.get("KAORI_SIGNING_KEY_ID")
     if value is None:
         return None
@@ -63,7 +61,7 @@ def _configured_signing_key_id() -> Optional[str]:
     return stripped or None
 
 
-def _validator_signing_key() -> Optional[str]:
+def _validator_signing_key() -> str | None:
     for name in ("KAORI_VALIDATOR_SIGNING_KEY", "DEV_VALIDATOR_SIGNING_KEY"):
         value = os.environ.get(name)
         if value and value.strip():
@@ -115,7 +113,7 @@ def require_production_signing_config() -> tuple[bytes, str]:
     return signing_config()
 
 
-def sign_with_hmac(data: str, key: Optional[bytes] = None) -> str:
+def sign_with_hmac(data: str, key: bytes | None = None) -> str:
     """Sign data using HMAC-SHA256."""
     resolved = key if key is not None else signing_config()[0]
     signature = hmac.new(resolved, data.encode("utf-8"), hashlib.sha256)
@@ -125,7 +123,7 @@ def sign_with_hmac(data: str, key: Optional[bytes] = None) -> str:
 def sign_truth_state(
     truth_state: TruthState,
     sign_time: datetime,
-    key_id: Optional[str] = None,
+    key_id: str | None = None,
 ) -> TruthState:
     """
     Sign a TruthState and return with populated SecurityBlock.

@@ -15,6 +15,7 @@ from kaori_truth.primitives.observation import Observation, ReporterContext, Sta
 from kaori_truth.signing import sign_truth_state
 from kaori_truth.trust_snapshot import AgentTrust, TrustSnapshot
 from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool
 
 COMPILE_TIME = datetime(2026, 1, 7, 12, 0, tzinfo=timezone.utc)
 TRUTHKEY = "earth:flood:h3:886142a8e7fffff:surface:2026-01-07T12:00Z"
@@ -42,11 +43,13 @@ def postgres_url():
 
 @pytest.fixture
 def engine(postgres_url):
-    engine = create_engine(postgres_url)
+    engine = create_engine(postgres_url, poolclass=NullPool)
     with engine.begin() as conn:
+        conn.execute(text("RESET ROLE"))
         conn.execute(text("DROP SCHEMA IF EXISTS kaori CASCADE"))
     yield engine
     with engine.begin() as conn:
+        conn.execute(text("RESET ROLE"))
         conn.execute(text("DROP SCHEMA IF EXISTS kaori CASCADE"))
     engine.dispose()
 
@@ -444,3 +447,5 @@ def test_migrate_owner_and_runtime_grants(engine, postgres_url):
         conn.rollback()
 
     assert observations.count_distinct_reporters(TRUTHKEY) == 2
+    with engine.begin() as conn:
+        conn.execute(text("RESET ROLE"))

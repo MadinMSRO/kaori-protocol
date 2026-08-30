@@ -5,7 +5,6 @@ import hashlib
 from io import BytesIO
 
 import pytest
-
 from kaori_api.evidence_store import (
     DEFAULT_MAX_EVIDENCE_BYTES,
     EvidenceStorageError,
@@ -97,7 +96,6 @@ def test_upload_uses_reporter_scoped_content_addressed_path_and_metadata():
 def test_idempotent_precondition_re_verifies_existing_object():
     client = FakeGcsClient()
     content = b"same-bytes"
-    digest = hashlib.sha256(content).hexdigest()
     store = _store(client)
     first = store.upload(
         BytesIO(content),

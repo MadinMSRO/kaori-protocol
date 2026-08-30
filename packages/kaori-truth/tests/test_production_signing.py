@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 import pytest
 
+from kaori_truth import compile_truth_state
 from kaori_truth.primitives.claimtype import ClaimType
 from kaori_truth.primitives.evidence import EvidenceRef
 from kaori_truth.primitives.observation import Observation, ReporterContext, Standing
@@ -16,9 +18,7 @@ from kaori_truth.signing import (
     signing_config,
     verify_signature,
 )
-from kaori_truth import compile_truth_state
 from kaori_truth.trust_snapshot import AgentTrust, TrustSnapshot
-from uuid import UUID
 
 COMPILE_TIME = datetime(2026, 1, 7, 12, 0, tzinfo=timezone.utc)
 CLOUD_SQL = "postgresql://kaori_runtime@/cloudsql/msro-kaori-sandbox:asia-southeast1:kaori/kaori"

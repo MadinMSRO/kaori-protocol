@@ -100,9 +100,13 @@ def create_stores() -> Tuple[Any, Any, Any]:
         from kaori_db.store import require_kaori_schema
         from kaori_truth.signing import require_production_signing_config
 
-        require_production_signing_config()
         signals = PostgresSignalStore(database_url)
-        require_kaori_schema(signals.engine)
+        if signals.engine.dialect.name == "postgresql":
+            require_production_signing_config()
+            require_kaori_schema(signals.engine)
+        else:
+            # SQLite is a unit-test store only. Cloud SQL never reaches here.
+            signals.ensure_schema()
         return (
             signals,
             PostgresObservationStore(engine=signals.engine),

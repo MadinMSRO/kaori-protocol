@@ -2,17 +2,20 @@
 from __future__ import annotations
 
 import pytest
-
 from kaori_api.app import create_stores
 from kaori_truth.signing import SigningConfigError
-
 
 CLOUD_SQL = "postgresql://kaori_runtime@/cloudsql/msro-kaori-sandbox:asia-southeast1:kaori/kaori"
 
 
+class _FakeEngine:
+    class dialect:
+        name = "postgresql"
+
+
 class _FakeStore:
     def __init__(self, *args, **kwargs):
-        self.engine = object()
+        self.engine = _FakeEngine()
 
     def ensure_schema(self):
         raise AssertionError("API runtime must not call ensure_schema()")
