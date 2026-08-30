@@ -121,81 +121,14 @@ docker run --rm -p 8080:8080 \
   kaori-api:local
 ```
 
-## Cloud Run deployment
+## Cloud Run / GCP
 
-These commands deploy both revisions in `msro-kaori-sandbox` / `asia-southeast1`, preserve the API's existing Cloud SQL configuration, and grant invocation only to the service account already used by `kaori-api`.
+Do not execute Cloud Run, Cloud SQL, GCS, IAM, or Secret Manager commands from
+this repository change. The ordered production plan is
+[`docs/deployment-runbook.md`](../../docs/deployment-runbook.md).
 
-```bash
-export PROJECT=msro-kaori-sandbox
-export REGION=asia-southeast1
-export REPOSITORY=kaori
-export GENERALIST_SERVICE=kaori-generalist
-export GENERALIST_SA="kaori-generalist@${PROJECT}.iam.gserviceaccount.com"
-export PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
-export API_SA="$(gcloud run services describe kaori-api --region="$REGION" --project="$PROJECT" --format='value(spec.template.spec.serviceAccountName)')"
-test -n "$API_SA" || export API_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-
-gcloud iam service-accounts create kaori-generalist \
-  --display-name="Kaori V4 CLIP generalist" \
-  --project="$PROJECT"
-
-openssl rand -hex 32 | gcloud secrets create kaori-generalist-signing-key \
-  --data-file=- \
-  --replication-policy=automatic \
-  --project="$PROJECT"
-
-gcloud secrets add-iam-policy-binding kaori-generalist-signing-key \
-  --member="serviceAccount:${GENERALIST_SA}" \
-  --role=roles/secretmanager.secretAccessor \
-  --project="$PROJECT"
-gcloud secrets add-iam-policy-binding kaori-generalist-signing-key \
-  --member="serviceAccount:${API_SA}" \
-  --role=roles/secretmanager.secretAccessor \
-  --project="$PROJECT"
-export TAG="$(git rev-parse --short HEAD)"
-export GENERALIST_IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/kaori-generalist:${TAG}"
-export API_IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/kaori-api:${TAG}"
-
-gcloud builds submit . \
-  --config=cloudbuild.generalist.yaml \
-  --substitutions="_IMAGE=${GENERALIST_IMAGE}" \
-  --project="$PROJECT"
-gcloud builds submit . \
-  --tag="$API_IMAGE" \
-  --project="$PROJECT"
-
-gcloud run deploy "$GENERALIST_SERVICE" \
-  --image="$GENERALIST_IMAGE" \
-  --region="$REGION" \
-  --service-account="$GENERALIST_SA" \
-  --cpu=2 \
-  --memory=4Gi \
-  --concurrency=1 \
-  --set-secrets=KAORI_VALIDATOR_SIGNING_KEY=kaori-generalist-signing-key:latest \
-  --no-allow-unauthenticated \
-  --project="$PROJECT"
-
-export GENERALIST_URL="$(gcloud run services describe "$GENERALIST_SERVICE" --region="$REGION" --project="$PROJECT" --format='value(status.url)')"
-gcloud run services add-iam-policy-binding "$GENERALIST_SERVICE" \
-  --region="$REGION" \
-  --member="serviceAccount:${API_SA}" \
-  --role=roles/run.invoker \
-  --project="$PROJECT"
-
-gcloud run services update kaori-api \
-  --image="$API_IMAGE" \
-  --region="$REGION" \
-  --update-env-vars="KAORI_GENERALIST_URL=${GENERALIST_URL}" \
-  --update-secrets=KAORI_VALIDATOR_SIGNING_KEY=kaori-generalist-signing-key:latest \
-  --project="$PROJECT"
-```
-
-For any existing private GCS bucket referenced by a `gs://` EvidenceRef, separately grant `roles/storage.objectViewer` on that bucket to `$GENERALIST_SA`. Supabase public object URLs need no storage IAM or GCS bucket.
-
-If the service account or secret already exists, skip its create command; add a rotated key with:
-
-```bash
-openssl rand -hex 32 | gcloud secrets versions add kaori-generalist-signing-key \
-  --data-file=- \
-  --project=msro-kaori-sandbox
-```
+When `KAORI_ENVIRONMENT=production`, the API refuses to boot without
+`DATABASE_URL`. Cloud SQL runtime never applies DDL. `KAORI_OBSERVATIONS_BUCKET`
+is required whenever `DATABASE_URL` is set. TruthState signing must use a
+dedicated production secret, not `kaori-dev-signing-key-do-not-use-in-production`
+and not `KAORI_VALIDATOR_SIGNING_KEY`.

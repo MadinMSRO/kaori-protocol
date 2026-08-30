@@ -91,6 +91,8 @@ def create_stores() -> Tuple[Any, Any, Any]:
     apply DDL — run `python -m kaori_db.migrate` as the migration owner.
     """
     database_url = os.environ.get("DATABASE_URL")
+    if os.environ.get("KAORI_ENVIRONMENT", "").strip().lower() == "production" and not database_url:
+        raise RuntimeError("DATABASE_URL is required when KAORI_ENVIRONMENT=production")
     if database_url:
         from kaori_db import (
             PostgresObservationStore,

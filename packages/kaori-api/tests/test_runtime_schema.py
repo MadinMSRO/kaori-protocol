@@ -21,6 +21,13 @@ class _FakeStore:
         raise AssertionError("API runtime must not call ensure_schema()")
 
 
+def test_create_stores_requires_database_url_in_production(monkeypatch):
+    monkeypatch.setenv("KAORI_ENVIRONMENT", "production")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with pytest.raises(RuntimeError, match="DATABASE_URL is required"):
+        create_stores()
+
+
 def test_create_stores_requires_production_signing_for_cloud_sql(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", CLOUD_SQL)
     monkeypatch.delenv("KAORI_SIGNING_KEY", raising=False)
