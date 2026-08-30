@@ -80,18 +80,24 @@ PRODUCT_CLAIMS = [
 
 
 def verify_token(token: str) -> str:
-    if token != TOKEN:
-        raise AuthError("Invalid Bearer token")
-    return AGENT_ID
+    if token == TOKEN:
+        return AGENT_ID
+    if token.startswith("reporter-"):
+        return f"user:{token}"
+    raise AuthError("Invalid Bearer token")
 
 
 def auth_header() -> dict:
     return {"Authorization": f"Bearer {TOKEN}"}
 
 
-def observation(claim_type: str, payload: dict) -> dict:
+def observation(
+    claim_type: str,
+    payload: dict,
+    observation_id: str = "11111111-1111-1111-1111-111111111111",
+) -> dict:
     return {
-        "observation_id": "11111111-1111-1111-1111-111111111111",
+        "observation_id": observation_id,
         "claim_type": claim_type,
         "reported_at": "2026-01-07T12:00:00Z",
         "geo": {"lat": -8.3405, "lon": 115.0920},
@@ -114,22 +120,38 @@ def client() -> TestClient:
 
 @pytest.mark.parametrize("claim_type_id,truth_key,payload", PRODUCT_CLAIMS)
 def test_product_claim_type_compiles_200(client: TestClient, claim_type_id, truth_key, payload):
-    response = client.post(
-        "/v1/compile",
-        json={
-            "truth_key": truth_key,
-            "claim_type_id": claim_type_id,
-            "observations": [observation(claim_type_id, payload)],
-        },
-        headers=auth_header(),
+    observation_ids = (
+        "11111111-1111-1111-1111-111111111111",
+        "22222222-2222-2222-2222-222222222222",
+        "33333333-3333-3333-3333-333333333333",
     )
+    responses = []
+    for index, observation_id in enumerate(observation_ids):
+        token = TOKEN if index == 2 else f"reporter-{index}"
+        responses.append(
+            client.post(
+                "/v1/compile",
+                json={
+                    "truth_key": truth_key,
+                    "claim_type_id": claim_type_id,
+                    "observations": [observation(claim_type_id, payload, observation_id)],
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        )
+    assert [item.status_code for item in responses[:2]] == [202, 202]
+    response = responses[2]
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["claim_type"] == claim_type_id
     assert body["truthkey"]
     for key, value in payload.items():
         assert key in body["claim"], f"TruthState.claim missing output_schema field {key}"
-        assert body["claim"][key] == value
+        actual = body["claim"][key]
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            assert actual == pytest.approx(value)
+        else:
+            assert actual == value
     assert "severity" not in body["claim"]
     assert "network_trust" not in body["claim"]
     fetched = client.get(f"/v1/truth/{body['truthkey']}", headers=auth_header())

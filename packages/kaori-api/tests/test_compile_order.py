@@ -46,7 +46,7 @@ def coral_body() -> dict:
         "claim_type_id": "ocean.coral_bleaching.v1",
         "observations": [
             {
-                "observation_id": "11111111-1111-1111-1111-111111111111",
+                "observation_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 "claim_type": "ocean.coral_bleaching.v1",
                 "reported_at": "2026-01-07T12:00:00Z",
                 "geo": {"lat": -8.3405, "lon": 115.0920},

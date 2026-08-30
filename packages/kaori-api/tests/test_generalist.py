@@ -81,9 +81,11 @@ class FakeResponse:
 
 
 def verify_token(token: str) -> str:
-    if token != TOKEN:
-        raise AuthError("Invalid Bearer token")
-    return AGENT_ID
+    if token == TOKEN:
+        return AGENT_ID
+    if token.startswith("reporter-"):
+        return f"user:{token}"
+    raise AuthError("Invalid Bearer token")
 
 
 def auth_header() -> dict:
@@ -134,11 +136,11 @@ def raw_observation() -> dict:
         },
         "evidence_refs": [
             {
-                "uri": "https://project.supabase.co/storage/v1/object/public/lm-012/coral1.png",
+                "uri": "gs://kaori-evidence/coral1.png",
                 "sha256": "a" * 64,
             },
             {
-                "uri": "https://project.supabase.co/storage/v1/object/public/lm-012/coral2.png",
+                "uri": "gs://kaori-evidence/coral2.png",
                 "sha256": "b" * 64,
             },
         ],
@@ -283,24 +285,38 @@ def coral_package_context() -> str:
     )
 
 
-def coastal_package_context(truthkey: str, lat: float, lon: float) -> str:
-    return (
-        "Coastal erosion monitoring; "
-        f"claim_type_id {COASTAL_CLAIM_TYPE}; "
-        f"TruthKey {truthkey}; "
-        f"H3 cell {truthkey.split(':')[3]}; "
-        f"lat {lat} lon {lon}; "
-        "recession_m 1.5; scarp_present True; stake_readings [0.1, 0.2]"
-    )
+def coastal_package_context(truthkey: str, lat: float, lon: float, reporters: int = 3) -> str:
+    parts = [
+        "Coastal erosion monitoring",
+        f"claim_type_id {COASTAL_CLAIM_TYPE}",
+        f"TruthKey {truthkey}",
+        f"H3 cell {truthkey.split(':')[3]}",
+    ]
+    for _ in range(reporters):
+        parts.extend(
+            [
+                f"lat {lat} lon {lon}",
+                "recession_m 1.5",
+                "scarp_present True",
+                "stake_readings [0.1, 0.2]",
+            ]
+        )
+    return "; ".join(parts)
 
 
-def coastal_compile_body(*, truth_key: str, lat: float, lon: float) -> dict:
+def coastal_compile_body(
+    *,
+    truth_key: str,
+    lat: float,
+    lon: float,
+    observation_id: str = "22222222-2222-2222-2222-222222222222",
+) -> dict:
     return {
         "truth_key": truth_key,
         "claim_type_id": COASTAL_CLAIM_TYPE,
         "observations": [
             {
-                "observation_id": "22222222-2222-2222-2222-222222222222",
+                "observation_id": observation_id,
                 "claim_type": COASTAL_CLAIM_TYPE,
                 "reported_at": "2026-01-07T12:00:00Z",
                 "geo": {"lat": lat, "lon": lon},
@@ -310,11 +326,38 @@ def coastal_compile_body(*, truth_key: str, lat: float, lon: float) -> dict:
                     "stake_readings": [0.1, 0.2],
                 },
                 "evidence_refs": [
-                    {"uri": "gs://kaori-evidence/a.jpg", "sha256": "a" * 64}
+                    {"uri": "gs://kaori-evidence/a.jpg", "sha256": "a" * 64},
+                    {"uri": "gs://kaori-evidence/b.jpg", "sha256": "b" * 64},
                 ],
             }
         ],
     }
+
+
+COASTAL_OBSERVATION_IDS = (
+    "11111111-1111-1111-1111-111111111111",
+    "22222222-2222-2222-2222-222222222222",
+    "33333333-3333-3333-3333-333333333333",
+)
+
+
+def compile_after_coastal_threshold(client: TestClient, *, truth_key: str, lat: float, lon: float):
+    responses = []
+    for index, observation_id in enumerate(COASTAL_OBSERVATION_IDS):
+        token = TOKEN if index == 2 else f"reporter-{index}"
+        responses.append(
+            client.post(
+                "/v1/compile",
+                json=coastal_compile_body(
+                    truth_key=truth_key,
+                    lat=lat,
+                    lon=lon,
+                    observation_id=observation_id,
+                ),
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        )
+    return responses
 
 
 def test_relevant_coral_evidence_ratifies_as_generalist():
@@ -507,7 +550,7 @@ def test_prompt_context_falls_back_to_claim_topic_display():
 
 
 def test_non_coral_compile_records_generalist_vote():
-    clip = FakeClipGeneralist([0.91])
+    clip = FakeClipGeneralist([0.91] * 6)
     generalist = ClipGeneralistValidator(
         schema_root=str(SCHEMA_ROOT),
         evidence_loader=lambda _ref: png_bytes(),
@@ -523,13 +566,11 @@ def test_non_coral_compile_records_generalist_vote():
             generalist_client=LocalGeneralistClient(generalist),
         )
     )
-    response = client.post(
-        "/v1/compile",
-        json=coastal_compile_body(
-            truth_key=COASTAL_TRUTHKEY, lat=IN_CELL_LAT, lon=IN_CELL_LON
-        ),
-        headers=auth_header(),
+    responses = compile_after_coastal_threshold(
+        client, truth_key=COASTAL_TRUTHKEY, lat=IN_CELL_LAT, lon=IN_CELL_LON
     )
+    assert [item.status_code for item in responses[:2]] == [202, 202]
+    response = responses[2]
 
     assert response.status_code == 200, response.text
     assert set(response.json().keys()) != {"truthkey"}
@@ -539,7 +580,7 @@ def test_non_coral_compile_records_generalist_vote():
     assert compiled.json() == response.json()
     assert clip.calls == [
         {
-            "count": 1,
+            "count": 6,
             "context": coastal_package_context(COASTAL_TRUTHKEY, IN_CELL_LAT, IN_CELL_LON),
             "engine": "clip_v1",
         }
@@ -554,11 +595,13 @@ def test_non_coral_compile_records_generalist_vote():
     assert package["geo"] == {"lat": IN_CELL_LAT, "lon": IN_CELL_LON}
     assert package["payload"]["recession_m"] == 1.5
     assert package["evidence_refs"] == [
-        {"uri": "gs://kaori-evidence/a.jpg", "sha256": "a" * 64}
+        {"uri": "gs://kaori-evidence/a.jpg", "sha256": "a" * 64},
+        {"uri": "gs://kaori-evidence/b.jpg", "sha256": "b" * 64},
     ]
-    assert artifact["evidence_refs"] == [
-        {"uri": "gs://kaori-evidence/a.jpg", "sha256": "a" * 64}
-    ]
+    assert {ref["uri"] for ref in artifact["evidence_refs"]} == {
+        "gs://kaori-evidence/a.jpg",
+        "gs://kaori-evidence/b.jpg",
+    }
     recorded = artifact["consensus"]["votes"][0]
     assert recorded["agent_id"] == "ai:generalist_v1"
     assert recorded["vote"] == "RATIFY"
@@ -568,7 +611,7 @@ def test_non_coral_compile_records_generalist_vote():
 
 
 def test_in_cell_coords_ratify_when_clip_relevant():
-    clip = FakeClipGeneralist([0.93])
+    clip = FakeClipGeneralist([0.93] * 6)
     flow = FlowCore(store=InMemorySignalStore())
     client = TestClient(
         create_app(
@@ -585,13 +628,11 @@ def test_in_cell_coords_ratify_when_clip_relevant():
         )
     )
 
-    response = client.post(
-        "/v1/compile",
-        json=coastal_compile_body(
-            truth_key=COASTAL_TRUTHKEY, lat=IN_CELL_LAT, lon=IN_CELL_LON
-        ),
-        headers=auth_header(),
+    responses = compile_after_coastal_threshold(
+        client, truth_key=COASTAL_TRUTHKEY, lat=IN_CELL_LAT, lon=IN_CELL_LON
     )
+    assert [item.status_code for item in responses[:2]] == [202, 202]
+    response = responses[2]
 
     assert response.status_code == 200, response.text
     join_validate_threads(client.app)
@@ -605,7 +646,7 @@ def test_in_cell_coords_ratify_when_clip_relevant():
 
 
 def test_out_of_cell_coords_reject_same_generalist_vote():
-    clip = FakeClipGeneralist([0.93])
+    clip = FakeClipGeneralist([0.93] * 6)
     flow = FlowCore(store=InMemorySignalStore())
     client = TestClient(
         create_app(
@@ -622,13 +663,11 @@ def test_out_of_cell_coords_reject_same_generalist_vote():
         )
     )
 
-    response = client.post(
-        "/v1/compile",
-        json=coastal_compile_body(
-            truth_key=OUT_CELL_TRUTHKEY, lat=IN_CELL_LAT, lon=IN_CELL_LON
-        ),
-        headers=auth_header(),
+    responses = compile_after_coastal_threshold(
+        client, truth_key=OUT_CELL_TRUTHKEY, lat=IN_CELL_LAT, lon=IN_CELL_LON
     )
+    assert [item.status_code for item in responses[:2]] == [202, 202]
+    response = responses[2]
 
     assert response.status_code == 200, response.text
     join_validate_threads(client.app)
@@ -652,17 +691,15 @@ def test_dummy_image_rejects_even_when_coords_are_in_cell():
         create_app(
             flow=flow,
             verify_token=verify_token,
-            generalist_client=LocalGeneralistClient(validator([0.11])),
+            generalist_client=LocalGeneralistClient(validator([0.11] * 6)),
         )
     )
 
-    response = client.post(
-        "/v1/compile",
-        json=coastal_compile_body(
-            truth_key=COASTAL_TRUTHKEY, lat=IN_CELL_LAT, lon=IN_CELL_LON
-        ),
-        headers=auth_header(),
+    responses = compile_after_coastal_threshold(
+        client, truth_key=COASTAL_TRUTHKEY, lat=IN_CELL_LAT, lon=IN_CELL_LON
     )
+    assert [item.status_code for item in responses[:2]] == [202, 202]
+    response = responses[2]
 
     assert response.status_code == 200, response.text
     join_validate_threads(client.app)

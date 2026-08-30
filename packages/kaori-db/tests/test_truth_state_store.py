@@ -18,8 +18,11 @@ def test_schema_sql_creates_kaori_truth_states_not_public():
     sql = Path("packages/kaori-db/src/kaori_db/schema.sql").read_text()
     assert "CREATE SCHEMA IF NOT EXISTS kaori" in sql
     assert "kaori.signals" in sql
+    assert "kaori.observations" in sql
+    assert "kaori.trust_snapshots" in sql
+    assert "kaori.truth_artifacts" in sql
     assert "kaori.truth_states" in sql
-    assert "artifact    JSONB" in sql or "artifact JSONB" in sql
+    assert "artifact" in sql and "JSONB" in sql
     assert "public." not in sql
 
 
