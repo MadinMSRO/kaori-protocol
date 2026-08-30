@@ -1,4 +1,4 @@
-"""Sidecar HTTP contract: /v1/compile, /v1/standing/{agent_id}, /v1/truth/{truthkey}."""
+"""Sidecar HTTP contract: private evidence intake, compile, standing, and truth."""
 from __future__ import annotations
 
 from urllib.parse import quote
@@ -90,7 +90,7 @@ def client(flow: FlowCore) -> TestClient:
     return TestClient(create_app(flow=flow, verify_token=verify_token))
 
 
-def test_only_three_http_routes():
+def test_only_protocol_http_routes():
     application = create_app(
         flow=FlowCore(store=InMemorySignalStore()),
         verify_token=verify_token,
@@ -98,6 +98,7 @@ def test_only_three_http_routes():
     paths = {getattr(route, "path", None) for route in application.router.routes}
     paths.discard(None)
     assert paths == {
+        "/v1/evidence",
         "/v1/compile",
         "/v1/standing/{agent_id}",
         "/v1/truth/{truthkey:path}",

@@ -20,10 +20,11 @@ import asyncio
 import logging
 import os
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from kaori_flow import FlowCore, InMemorySignalStore
@@ -35,6 +36,11 @@ from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 from pydantic import ValidationError
 
 from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
+from kaori_api.evidence_store import (
+    EvidenceStorageError,
+    GcsEvidenceStore,
+    InMemoryEvidenceStore,
+)
 from kaori_api.generalist_client import (
     GeneralistClient,
     generalist_timeout_seconds,
@@ -78,28 +84,47 @@ def default_schema_path() -> str:
     return "packages/kaori-spec/schemas"
 
 
-def create_stores() -> Tuple[Any, Any]:
-    """Postgres stores when DATABASE_URL is set; in-memory otherwise."""
+def create_stores() -> Tuple[Any, Any, Any]:
+    """Signal, Bronze observation, and signed artifact stores."""
     database_url = os.environ.get("DATABASE_URL")
     if database_url:
-        from kaori_db import PostgresSignalStore, PostgresTruthStateStore
+        from kaori_db import (
+            PostgresObservationStore,
+            PostgresSignalStore,
+            PostgresTruthArtifactStore,
+        )
 
         signals = PostgresSignalStore(database_url)
         signals.ensure_schema()
-        return signals, PostgresTruthStateStore(engine=signals.engine)
-    from kaori_db import InMemoryTruthStateStore
+        return (
+            signals,
+            PostgresObservationStore(engine=signals.engine),
+            PostgresTruthArtifactStore(engine=signals.engine),
+        )
+    from kaori_db import InMemoryObservationStore, InMemoryTruthArtifactStore
 
-    return InMemorySignalStore(), InMemoryTruthStateStore()
+    return InMemorySignalStore(), InMemoryObservationStore(), InMemoryTruthArtifactStore()
 
 
 def create_store():
     """PostgresSignalStore when DATABASE_URL is set; in-memory otherwise."""
-    signals, _ = create_stores()
+    signals, _, _ = create_stores()
     return signals
 
 
 def create_flow(store=None) -> FlowCore:
     return FlowCore(store=store or create_store())
+
+
+def create_evidence_store():
+    """Use private GCS in production and memory only for local/test runs."""
+    if os.environ.get("KAORI_OBSERVATIONS_BUCKET"):
+        return GcsEvidenceStore.from_env()
+    if os.environ.get("DATABASE_URL"):
+        raise RuntimeError(
+            "KAORI_OBSERVATIONS_BUCKET is required when DATABASE_URL is configured"
+        )
+    return InMemoryEvidenceStore()
 
 
 def _source_type_from_flow(flow: FlowCore, agent_id: str) -> str:
@@ -138,14 +163,27 @@ def _require_field(value: Any, field: str) -> None:
         raise HTTPException(status_code=400, detail=f"Missing EvidenceRef field: {field}")
 
 
-def validate_evidence_refs(observations: List[Observation]) -> None:
-    """Law 4. EvidenceRef required fields as they sit: uri, sha256."""
+def validate_evidence_refs(observations: List[Observation], claim_type=None) -> None:
+    """Law 4 plus per-Observation evidence counts from the ClaimType contract."""
     if not observations:
         raise HTTPException(status_code=400, detail="At least one observation is required")
+    evidence_policy = {}
+    if claim_type is not None:
+        evidence_policy = (claim_type.get_config() or {}).get("evidence") or {}
+    minimum = int(evidence_policy.get("min_count", 1))
+    maximum = evidence_policy.get("max_count")
     for obs in observations:
         refs = obs.evidence_refs
-        if not refs:
-            raise HTTPException(status_code=400, detail="Missing evidence_refs")
+        if len(refs) < minimum:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Observation requires at least {minimum} evidence_refs",
+            )
+        if maximum is not None and len(refs) > int(maximum):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Observation allows at most {int(maximum)} evidence_refs",
+            )
         for ref in refs:
             _require_field(getattr(ref, "uri", None), "uri")
             _require_field(getattr(ref, "sha256", None), "sha256")
@@ -189,21 +227,24 @@ def compile_after_vote(
     """compile_truth_state only after a VALIDATION_VOTE exists for this TruthKey."""
     if not votes_for_truthkey(flow, truth_key):
         raise RuntimeError("compile_truth_state forbidden without a recorded vote")
-    truth_state: TruthState = orchestrator.compile_observations(
+    truth_state, trust_snapshot = orchestrator.compile_observations_with_snapshot(
         observations=observations,
         truth_key=truth_key,
         claim_type_id=claim_type_id,
         ai_scores=ai_scores,
         votes=votes,
     )
-    artifact = persist_truth_state(truth_store, truth_state)
+    artifact = persist_truth_state(truth_store, truth_state, trust_snapshot)
     emit_compile_truthstate(flow, truth_state, agent_id, claim_type_id)
     return artifact
 
 
-def persist_truth_state(truth_store: Any, state: TruthState) -> dict:
-    """Upsert full TruthState.model_dump (including evidence_refs) on truthkey."""
+def persist_truth_state(truth_store: Any, state: TruthState, trust_snapshot: Any) -> dict:
+    """Append signed Silver revision and atomically refresh the Gold projection."""
     artifact = state.model_dump(mode="json")
+    if hasattr(truth_store, "append"):
+        return truth_store.append(state, trust_snapshot)
+    # Compatibility for injected legacy stores while integrations migrate.
     truth_store.upsert(
         truthkey=state.truthkey,
         artifact=artifact,
@@ -234,6 +275,8 @@ def emit_compile_truthstate(
 def create_app(
     *,
     flow: Optional[FlowCore] = None,
+    evidence_store: Optional[Any] = None,
+    observation_store: Optional[Any] = None,
     truth_store: Optional[Any] = None,
     supabase_url: Optional[str] = None,
     publishable_key: Optional[str] = None,
@@ -247,14 +290,21 @@ def create_app(
     DATABASE_URL is optional (in-memory stores when unset); when set it is Cloud SQL.
     """
     if flow is None:
-        signal_store, default_truth_store = create_stores()
+        signal_store, default_observation_store, default_truth_store = create_stores()
         flow = FlowCore(store=signal_store)
+        if observation_store is None:
+            observation_store = default_observation_store
         if truth_store is None:
             truth_store = default_truth_store
-    elif truth_store is None:
-        from kaori_db import InMemoryTruthStateStore
+    else:
+        if observation_store is None:
+            from kaori_db import InMemoryObservationStore
 
-        truth_store = InMemoryTruthStateStore()
+            observation_store = InMemoryObservationStore()
+        if truth_store is None:
+            from kaori_db import InMemoryTruthArtifactStore
+
+            truth_store = InMemoryTruthArtifactStore()
     url = supabase_url if supabase_url is not None else os.environ.get("SUPABASE_URL") or ""
     key = publishable_key if publishable_key is not None else os.environ.get("SUPABASE_PUBLISHABLE_KEY") or ""
     if verify_token is None:
@@ -281,6 +331,8 @@ def create_app(
         allow_headers=["Authorization", "Content-Type"],
     )
     app.state.flow = flow
+    app.state.evidence_store = evidence_store or create_evidence_store()
+    app.state.observation_store = observation_store
     app.state.truth_store = truth_store
     app.state.verify_token = verify_token
     app.state.orchestrator = orchestrator
@@ -294,6 +346,24 @@ def create_app(
             return request.app.state.verify_token(token)
         except AuthError:
             raise HTTPException(status_code=401, detail="Missing or invalid Bearer token")
+
+    @app.post("/v1/evidence")
+    async def evidence_route(
+        file: UploadFile = File(...),
+        expected_sha256: Optional[str] = Form(default=None),
+        agent_id: str = Depends(require_agent),
+    ):
+        try:
+            evidence_ref = app.state.evidence_store.upload(
+                file.file,
+                filename=file.filename or "evidence",
+                content_type=file.content_type,
+                reporter_id=agent_id,
+                expected_sha256=expected_sha256,
+            )
+        except EvidenceStorageError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return evidence_ref.model_dump(mode="json", exclude_none=True)
 
     @app.post("/v1/compile")
     async def compile_route(
@@ -338,8 +408,57 @@ def create_app(
         except (ValidationError, TypeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail="Invalid observation or EvidenceRef") from exc
 
-        validate_evidence_refs(observations)
+        if any(obs.claim_type != claim_type_id for obs in observations):
+            raise HTTPException(
+                status_code=400,
+                detail="Observation claim_type must match claim_type_id",
+            )
+        validate_evidence_refs(observations, claim_type)
         validate_payload_fields(observations, claim_type)
+        try:
+            for observation in observations:
+                for evidence_ref in observation.evidence_refs:
+                    app.state.evidence_store.verify(
+                        evidence_ref,
+                        reporter_id=agent_id,
+                    )
+        except EvidenceStorageError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        received_at = datetime.now(timezone.utc)
+        try:
+            for observation in observations:
+                request.app.state.observation_store.append(
+                    observation,
+                    truthkey=truth_key,
+                    claim_type_hash=claim_type.hash(),
+                    received_at=received_at,
+                )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        observations = request.app.state.observation_store.get_for_truthkey(truth_key)
+        validate_evidence_refs(observations, claim_type)
+        validate_payload_fields(observations, claim_type)
+        distinct_reporters = request.app.state.observation_store.count_distinct_reporters(
+            truth_key
+        )
+        try:
+            required_observations = claim_type.minimum_observations()
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        if distinct_reporters < required_observations:
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "truthkey": truth_key,
+                    "status": "PENDING",
+                    "observation_progress": {
+                        "received": distinct_reporters,
+                        "required": required_observations,
+                    },
+                },
+            )
 
         client = request.app.state.generalist_client
         if client is not None:
@@ -419,10 +538,12 @@ def create_app(
             raise HTTPException(status_code=500, detail="generalist failed")
 
         try:
-            truth_state: TruthState = request.app.state.orchestrator.compile_observations(
+            truth_state, trust_snapshot = (
+                request.app.state.orchestrator.compile_observations_with_snapshot(
                 observations=observations,
                 truth_key=truth_key,
                 claim_type_id=claim_type_id,
+                )
             )
         except UnknownClaimTypeError:
             raise HTTPException(status_code=404, detail="Unknown claim_type_id")
@@ -433,7 +554,11 @@ def create_app(
         except ValidationError as exc:
             raise HTTPException(status_code=400, detail="Invalid observation or EvidenceRef") from exc
 
-        artifact = persist_truth_state(request.app.state.truth_store, truth_state)
+        artifact = persist_truth_state(
+            request.app.state.truth_store,
+            truth_state,
+            trust_snapshot,
+        )
         emit_compile_truthstate(flow_core, truth_state, agent_id, claim_type_id)
         return JSONResponse(status_code=200, content=artifact)
 
