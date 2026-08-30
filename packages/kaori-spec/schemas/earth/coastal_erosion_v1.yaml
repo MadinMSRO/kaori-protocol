@@ -110,6 +110,8 @@ ai_validation_routing:
       pass: generalist
   generalist:
     engine: generalist_v1
+    # New field: CLIP/generalist HTTP wait. Was missing (do not use 30s or dispute PT12H).
+    timeout: PT2M
     prompt_context: "Coastal erosion monitoring"
     routes:
       high_confidence: accept       # ai_confidence >= 0.82

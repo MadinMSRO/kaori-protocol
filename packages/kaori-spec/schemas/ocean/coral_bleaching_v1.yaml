@@ -135,6 +135,7 @@ ai_validation_routing:
       pass: generalist
   generalist:
     engine: generalist_v1
+    timeout: PT2M
     prompt_context: "Coral reef health assessment in tropical waters"
     routes:
       high_confidence: specialist    # Always route to specialist for coral

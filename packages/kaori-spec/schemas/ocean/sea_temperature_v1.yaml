@@ -104,6 +104,7 @@ ai_validation_routing:
       pass: generalist
   generalist:
     engine: generalist_v1
+    timeout: PT2M
     prompt_context: "Sea temperature profile"
     routes:
       high_confidence: accept       # ai_confidence >= 0.82

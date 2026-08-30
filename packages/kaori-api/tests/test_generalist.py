@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import time
 import urllib.request
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -85,6 +86,25 @@ def verify_token(token: str) -> str:
 
 def auth_header() -> dict:
     return {"Authorization": f"Bearer {TOKEN}"}
+
+
+def join_validate_threads(application, timeout: float = 2.0) -> None:
+    for thread in list(getattr(application.state, "validate_threads", [])):
+        thread.join(timeout)
+
+
+def wait_for_truth(client: TestClient, truthkey: str, *, timeout: float = 2.0):
+    deadline = time.time() + timeout
+    last = None
+    while time.time() < deadline:
+        last = client.get(f"/v1/truth/{truthkey}", headers=auth_header())
+        if last.status_code == 200:
+            return last
+        time.sleep(0.02)
+    raise AssertionError(
+        f"compile did not finish: {getattr(last, 'status_code', None)} "
+        f"{getattr(last, 'text', None)}"
+    )
 
 
 def png_bytes() -> bytes:
@@ -225,7 +245,8 @@ class LocalGeneralistClient:
     def __init__(self, clip_validator: ClipGeneralistValidator):
         self.validator = clip_validator
 
-    def validate(self, *, truthkey_id, claim_type_id, observations) -> ValidationVote:
+    def validate(self, *, truthkey_id, claim_type_id, observations, timeout=None) -> ValidationVote:
+        self.last_timeout = timeout
         return self.validator.validate(
             ValidatorRequest(
                 truthkey_id=truthkey_id,
@@ -306,7 +327,9 @@ def test_relevant_coral_evidence_ratifies_as_generalist():
     response = client.post("/v1/compile", json=compile_body(), headers=auth_header())
 
     assert response.status_code == 200, response.text
-    assert response.json()["status"] == "PENDING_HUMAN_REVIEW"
+    join_validate_threads(client.app)
+    compiled = wait_for_truth(client, compile_body()["truth_key"])
+    assert compiled.json()["status"] == "PENDING_HUMAN_REVIEW"
     assert clip.calls == [
         {
             "count": 2,
@@ -339,7 +362,9 @@ def test_unrelated_image_rejects_and_status_stays_pending_human_review():
     response = client.post("/v1/compile", json=compile_body(), headers=auth_header())
 
     assert response.status_code == 200, response.text
-    assert response.json()["status"] == "PENDING_HUMAN_REVIEW"
+    join_validate_threads(client.app)
+    compiled = wait_for_truth(client, compile_body()["truth_key"])
+    assert compiled.json()["status"] == "PENDING_HUMAN_REVIEW"
     votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
     assert len(votes) == 1
     assert votes[0].agent_id == "ai:generalist_v1"
@@ -467,6 +492,8 @@ def test_non_coral_compile_records_generalist_vote():
     )
 
     assert response.status_code == 200, response.text
+    join_validate_threads(client.app)
+    compiled = wait_for_truth(client, COASTAL_TRUTHKEY)
     assert clip.calls == [
         {
             "count": 1,
@@ -477,7 +504,7 @@ def test_non_coral_compile_records_generalist_vote():
     votes = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)
     assert len(votes) == 1
     assert votes[0].agent_id == "ai:generalist_v1"
-    assert votes[0].object_id == response.json()["truthkey"]
+    assert votes[0].object_id == compiled.json()["truthkey"]
     assert votes[0].payload["vote"] == "RATIFY"
 
 
@@ -508,6 +535,8 @@ def test_in_cell_coords_ratify_when_clip_relevant():
     )
 
     assert response.status_code == 200, response.text
+    join_validate_threads(client.app)
+    wait_for_truth(client, COASTAL_TRUTHKEY)
     assert clip.calls[0]["context"] == coastal_package_context(
         COASTAL_TRUTHKEY, IN_CELL_LAT, IN_CELL_LON
     )
@@ -543,7 +572,9 @@ def test_out_of_cell_coords_reject_same_generalist_vote():
     )
 
     assert response.status_code == 200, response.text
-    assert "VALIDATION" not in response.json()["status"]
+    join_validate_threads(client.app)
+    compiled = wait_for_truth(client, OUT_CELL_TRUTHKEY)
+    assert "VALIDATION" not in compiled.json()["status"]
     assert COASTAL_H3 not in OUT_CELL_TRUTHKEY
     assert h3.latlng_to_cell(IN_CELL_LAT, IN_CELL_LON, 6) != OUT_CELL_TRUTHKEY.split(":")[3]
     assert clip.calls[0]["context"] == coastal_package_context(
@@ -575,6 +606,8 @@ def test_dummy_image_rejects_even_when_coords_are_in_cell():
     )
 
     assert response.status_code == 200, response.text
+    join_validate_threads(client.app)
+    wait_for_truth(client, COASTAL_TRUTHKEY)
     vote = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)[0]
     assert vote.agent_id == "ai:generalist_v1"
     assert vote.payload["vote"] == "REJECT"
@@ -597,6 +630,7 @@ def test_generalist_client_sends_full_observation_package(monkeypatch):
 
     def fake_urlopen(request, timeout):
         captured["body"] = json.loads(request.data.decode("utf-8"))
+        captured["timeout"] = timeout
         return FakeHttp()
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
@@ -610,7 +644,11 @@ def test_generalist_client_sends_full_observation_package(monkeypatch):
         truthkey_id=TRUTHKEY,
         claim_type_id=CORAL_CLAIM_TYPE,
         observations=observations,
+        timeout=120.0,
     )
+    assert client.last_timeout == 120.0
+    assert client.last_timeout != 30.0
+    assert captured["timeout"] != 30.0
 
     body = captured["body"]
     assert body["truthkey_id"] == TRUTHKEY
