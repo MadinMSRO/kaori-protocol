@@ -192,7 +192,7 @@ def vote_as_compiler_record(vote: ValidationVote) -> dict:
         "vote_type": vote.vote,
         "confidence": vote.confidence,
         "timestamp": canonical_timestamp(vote.timestamp),
-        "signal_type": SignalTypes.VALIDATION_VOTE.value,
+        "signal_type": SignalTypes.VALIDATION_VOTE,
     }
     return {key: value for key, value in record.items() if value is not None}
 
