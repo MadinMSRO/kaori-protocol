@@ -11,7 +11,7 @@ Production `SignalStore` and TruthState persist for Kaori Flow / the Pattern B s
 `PostgresTruthStateStore` upserts compiled TruthStates:
 
 - table `kaori.truth_states` (`truthkey` PK, `artifact` JSONB, `compiled_at`)
-- `artifact` is the full `TruthState.model_dump` including `evidence_refs`
+- `artifact` is the full `TruthState.model_dump` including content-bound `evidence_refs` (`{uri, sha256}`), `compile_inputs.observations`, and `consensus.votes` when a vote was recorded
 - upsert on `truthkey`
 
 Connect with `DATABASE_URL` only — Cloud SQL Postgres. Do not provision a Cloud SQL instance from this package.

@@ -49,14 +49,51 @@ class VerificationBasis(str, Enum):
     TIMEOUT_INCONCLUSIVE = "TIMEOUT_INCONCLUSIVE"
 
 
+def _canonical_evidence_refs(refs: List[Any]) -> List[dict]:
+    """Sort content-bound evidence refs for semantic hashing."""
+    items = []
+    for ref in refs:
+        if hasattr(ref, "canonical"):
+            items.append(ref.canonical())
+        elif isinstance(ref, dict):
+            items.append(
+                {
+                    "sha256": str(ref.get("sha256", "")).lower(),
+                    "uri": ref.get("uri", ""),
+                }
+            )
+        else:
+            raise TypeError(
+                "TruthState.evidence_refs must be content-bound {uri, sha256}"
+            )
+    return sorted(items, key=lambda item: (item["sha256"], item["uri"]))
+
+
+class ContentBoundEvidenceRef(BaseModel):
+    """
+    Content-bound evidence pointer on TruthState.
+
+    Identity is sha256; uri is a fetch location. Not a URI-only string.
+    """
+    uri: str
+    sha256: str
+
+    def canonical(self) -> dict:
+        return {"sha256": self.sha256.lower(), "uri": self.uri}
+
+
 class CompileInputs(BaseModel):
     """
     Explicit record of all inputs to truth compilation.
     
     Per protocol requirements, TruthState MUST store enough
-    information to replay compilation.
+    information to replay compilation. observation_ids / hashes
+    alone are not enough — observations carry geo, payload, and
+    content-bound evidence_refs.
     """
     observation_ids: List[str]  # UUIDs as strings
+    observation_hashes: List[str] = Field(default_factory=list)
+    observations: List[Dict[str, Any]] = Field(default_factory=list)
     claim_type_id: str
     claim_type_hash: str  # Hash of claim type contract
     policy_version: str
@@ -68,6 +105,8 @@ class CompileInputs(BaseModel):
         """Get canonical representation."""
         return {
             "observation_ids": sorted(self.observation_ids),  # Sort for determinism
+            "observation_hashes": sorted(self.observation_hashes),
+            "observations": list(self.observations),
             "claim_type_id": self.claim_type_id.lower(),
             "claim_type_hash": self.claim_type_hash.lower(),
             "policy_version": self.policy_version,
@@ -149,8 +188,8 @@ class TruthState(BaseModel):
     # Audit fields for determinism
     compile_inputs: CompileInputs
     
-    # Evidence
-    evidence_refs: List[str] = Field(default_factory=list)
+    # Evidence — content-bound {uri, sha256}, not a URI string list
+    evidence_refs: List[ContentBoundEvidenceRef] = Field(default_factory=list)
     observation_ids: List[str] = Field(default_factory=list)
     
     # Consensus
@@ -180,7 +219,7 @@ class TruthState(BaseModel):
             "ai_confidence": round(self.ai_confidence, 6),
             "confidence": round(self.confidence, 6),
             "transparency_flags": sorted(self.transparency_flags),
-            "evidence_refs": sorted(self.evidence_refs),
+            "evidence_refs": _canonical_evidence_refs(self.evidence_refs),
             "observation_ids": sorted(self.observation_ids),
             "trust_snapshot_hash": self.compile_inputs.trust_snapshot_hash.lower(),
             "policy_version": self.compile_inputs.policy_version,

@@ -537,6 +537,22 @@ def test_non_coral_compile_records_generalist_vote():
     assert votes[0].agent_id == "ai:generalist_v1"
     assert votes[0].object_id == compiled.json()["truthkey"]
     assert votes[0].payload["vote"] == "RATIFY"
+    artifact = compiled.json()
+    package = artifact["compile_inputs"]["observations"][0]
+    assert package["geo"] == {"lat": IN_CELL_LAT, "lon": IN_CELL_LON}
+    assert package["payload"]["recession_m"] == 1.5
+    assert package["evidence_refs"] == [
+        {"uri": "gs://kaori-evidence/a.jpg", "sha256": "a" * 64}
+    ]
+    assert artifact["evidence_refs"] == [
+        {"uri": "gs://kaori-evidence/a.jpg", "sha256": "a" * 64}
+    ]
+    recorded = artifact["consensus"]["votes"][0]
+    assert recorded["agent_id"] == "ai:generalist_v1"
+    assert recorded["vote"] == "RATIFY"
+    assert recorded["signal_type"] == "VALIDATION_VOTE"
+    assert recorded["truthkey_id"] == COASTAL_TRUTHKEY
+    assert "signature" not in recorded
 
 
 def test_in_cell_coords_ratify_when_clip_relevant():
@@ -638,11 +654,17 @@ def test_dummy_image_rejects_even_when_coords_are_in_cell():
 
     assert response.status_code == 200, response.text
     join_validate_threads(client.app)
-    wait_for_truth(client, COASTAL_TRUTHKEY)
+    artifact = wait_for_truth(client, COASTAL_TRUTHKEY).json()
     vote = flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)[0]
     assert vote.agent_id == "ai:generalist_v1"
     assert vote.payload["vote"] == "REJECT"
     assert vote.payload["confidence"] == pytest.approx(0.11)
+    assert artifact["consensus"]["votes"][0]["agent_id"] == "ai:generalist_v1"
+    assert artifact["consensus"]["votes"][0]["vote"] == "REJECT"
+    assert artifact["compile_inputs"]["observations"][0]["geo"] == {
+        "lat": IN_CELL_LAT,
+        "lon": IN_CELL_LON,
+    }
 
 
 def test_generalist_client_sends_full_observation_package(monkeypatch):

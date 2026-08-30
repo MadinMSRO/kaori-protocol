@@ -98,6 +98,8 @@ SCHEMA_FIELDS: Dict[CanonicalSchema, List[str]] = {
     ],
     CanonicalSchema.COMPILE_INPUTS: [
         "observation_ids",
+        "observation_hashes",
+        "observations",
         "claim_type_id",
         "claim_type_hash",
         "policy_version",

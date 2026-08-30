@@ -150,6 +150,8 @@ def test_only_three_http_routes():
         "/v1/standing/{agent_id}",
         "/v1/truth/{truthkey:path}",
     }
+    assert "/v1/vote" not in paths
+    assert not any(path and "vote" in path for path in paths)
 
 
 def test_compile_invokes_validator_before_compile_truth_state(monkeypatch):
@@ -261,6 +263,12 @@ def test_integration_describes_pre_compile_validation_vote():
     assert "/v1/standing/claimtype:" not in integration
     assert "Player standing stays" in integration
     assert "Artifact `claim` still comes from `GET /v1/truth/{truthkey}`" in integration
+    assert "compile_inputs.observations" in integration
+    assert "consensus.votes" in integration
+    assert "No `GET /v1/vote`" in integration
+    assert "No `GET /v1/vote`" in readme
+    assert "content-bound `{uri, sha256}`" in integration
+    assert "content-bound `{uri, sha256}`" in readme
     assert "same `{standing}` body" in integration
     assert "No fourth path" in integration
     assert "No fourth path" in readme
@@ -376,6 +384,21 @@ def test_late_generalist_200_still_records_vote_then_compiles(monkeypatch, caplo
     assert order == ["compile_truth_state"]
     assert compiled.status_code == 200
     assert compiled.json()["status"] != "VALIDATION"
+    artifact = compiled.json()
+    package = artifact["compile_inputs"]["observations"][0]
+    assert package["geo"] == {"lat": -8.3405, "lon": 115.0920}
+    assert package["payload"]["bleaching_percentage"] == 40
+    assert package["evidence_refs"][0] == {
+        "uri": "gs://kaori-evidence/coral1.jpg",
+        "sha256": "a" * 64,
+    }
+    assert all(set(item.keys()) == {"uri", "sha256"} for item in artifact["evidence_refs"])
+    votes_on_artifact = artifact["consensus"]["votes"]
+    assert votes_on_artifact[0]["agent_id"] == "ai:generalist_v1"
+    assert votes_on_artifact[0]["vote"] == "RATIFY"
+    assert votes_on_artifact[0]["signal_type"] == "VALIDATION_VOTE"
+    assert votes_on_artifact[0]["truthkey_id"] == body["truth_key"]
+    assert "signature" not in votes_on_artifact[0]
     assert "kaori-api ValidationVote" in caplog.text
     assert '"vote": "RATIFY"' in caplog.text
     assert '"confidence": 0.91' in caplog.text

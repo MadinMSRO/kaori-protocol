@@ -269,7 +269,21 @@ def test_compile_200_signed_truth_state(client: TestClient):
     assert body["security"]["state_hash"]
     assert body["security"]["semantic_hash"]
     assert isinstance(body["evidence_refs"], list)
-    assert all(isinstance(item, str) for item in body["evidence_refs"])
+    assert body["evidence_refs"]
+    assert all(isinstance(item, dict) for item in body["evidence_refs"])
+    assert all(set(item.keys()) == {"uri", "sha256"} for item in body["evidence_refs"])
+    assert {item["uri"] for item in body["evidence_refs"]} == {
+        "gs://kaori-evidence/coral1.jpg",
+        "gs://kaori-evidence/coral2.jpg",
+    }
+    assert all(len(item["sha256"]) == 64 for item in body["evidence_refs"])
+    packages = body["compile_inputs"]["observations"]
+    assert len(packages) == 1
+    assert packages[0]["geo"] == {"lat": -8.3405, "lon": 115.0920}
+    assert packages[0]["payload"]["bleaching_percentage"] == 40
+    assert packages[0]["evidence_refs"][0]["uri"].endswith("coral1.jpg")
+    assert packages[0]["evidence_refs"][0]["sha256"] == "a" * 64
+    assert body.get("consensus") is None
     assert "evidence_refs" in body
     assert body["claim"]["bleaching_present"] is True
     assert body["claim"]["bleaching_percentage"] == 40

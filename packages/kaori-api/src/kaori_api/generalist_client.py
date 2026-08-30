@@ -17,6 +17,7 @@ from kaori_truth.primitives.observation import Observation
 from kaori_api.generalist import (
     ValidationVote,
     ValidatorRequest,
+    canonical_timestamp,
     log_validation_vote,
     validator_signing_key,
     verify_validation_vote,
@@ -177,12 +178,21 @@ def cloud_run_id_token(audience: str) -> str:
 
 
 def vote_as_compiler_record(vote: ValidationVote) -> dict:
-    """Compiler input: FLOW_SPEC vote fields. Not a TruthStatus."""
+    """
+    Compiler input: FLOW_SPEC ValidationSignal fields plus signal_type.
+
+    Lands on TruthState.consensus.votes. vote_type stays RATIFY/REJECT
+    for compute_consensus. Signature is omitted (not an artifact secret).
+    """
     record = {
         "agent_id": vote.agent_id,
+        "truthkey_id": vote.truthkey_id,
+        "window_id": vote.window_id,
         "vote": vote.vote,
         "vote_type": vote.vote,
         "confidence": vote.confidence,
+        "timestamp": canonical_timestamp(vote.timestamp),
+        "signal_type": SignalTypes.VALIDATION_VOTE.value,
     }
     return {key: value for key, value in record.items() if value is not None}
 
