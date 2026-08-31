@@ -99,6 +99,34 @@ Editor. Do not put GCS HMAC or JSON keys in Liminal or the browser.
 The Cloud SQL database user mapped to this service should be a member of
 `kaori_runtime` only.
 
+Live remainder (do this as project Owner — Cloud Agent WIF is `roles/editor`
+and cannot `setIamPolicy`):
+
+```bash
+gcloud projects add-iam-policy-binding msro-kaori-sandbox \
+  --member="serviceAccount:kaori-api@msro-kaori-sandbox.iam.gserviceaccount.com" \
+  --role="roles/cloudsql.client" --condition=None
+gcloud projects add-iam-policy-binding msro-kaori-sandbox \
+  --member="serviceAccount:kaori-api@msro-kaori-sandbox.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor" --condition=None
+```
+
+Then `./scripts/production/cutover.sh switch-runtime-sa` (no-traffic revision
+of the current image as `kaori-api@`). Keep 100% traffic on the serving
+revision until that tagged URL smokes. Do not switch the Cloud Run service
+account before those two bindings exist — the revision cannot mount
+`DATABASE_URL` / signing secrets or open Cloud SQL.
+
+Already done without those project bindings:
+
+- `kaori-api@` exists; bucket `objectAdmin` and `kaori-generalist` `run.invoker` are bound
+- Cloud SQL user `kaori_runtime` is `LOGIN` with the `roles.sql` grants (no `CREATE` on schema `kaori`)
+- Secret `DATABASE_URL` version `2` is the runtime URL (version `1` remains enabled for rollback)
+- Serving Cloud Run is image `kaori-api:1321905cf545`, revision `kaori-api-00015-hl6`, still the default compute SA, connecting as `kaori_runtime`
+- Automated Cloud SQL backups: enabled, start `18:00`, retain 7
+
+Do not apply a unique index on `(truthkey, reporter_id)` while duplicate bronze rows exist. The API already returns `409` for a same-observer recompile.
+
 ## 4. Production TruthState signing configuration
 
 Create a **new** Secret Manager secret, for example

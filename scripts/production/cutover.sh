@@ -7,6 +7,7 @@
 #   I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh backups-enable
 #   I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh bucket
 #   I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh iam
+#   I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh switch-runtime-sa
 #   I_ACCEPT_PRODUCTION_CUTOVER=1 DATABASE_URL=... ./scripts/production/cutover.sh migrate
 #   I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh deploy-no-traffic
 #   KAORI_SMOKE_URL=... SMOKE_TOKEN_1=... SMOKE_TOKEN_2=... SMOKE_TOKEN_3=... \
@@ -184,13 +185,47 @@ cmd_iam() {
     --member="serviceAccount:${API_SA}" \
     --role="roles/cloudsql.client" \
     --condition="None" >/dev/null
+  gcloud projects add-iam-policy-binding "$PROJECT" \
+    --member="serviceAccount:${API_SA}" \
+    --role="roles/secretmanager.secretAccessor" \
+    --condition="None" >/dev/null
   gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
     --project="$PROJECT" \
     --member="serviceAccount:${API_SA}" \
     --role="roles/storage.objectAdmin"
-  echo "cutover: grant secretAccessor on ${SIGNING_SECRET} and the generalist signing secret out of band if not already bound"
+  gcloud secrets add-iam-policy-binding DATABASE_URL \
+    --project="$PROJECT" \
+    --member="serviceAccount:${API_SA}" \
+    --role="roles/secretmanager.secretAccessor" || \
+    echo "cutover: DATABASE_URL secret IAM skipped (project secretAccessor may already cover it)"
+  gcloud secrets add-iam-policy-binding "$SIGNING_SECRET" \
+    --project="$PROJECT" \
+    --member="serviceAccount:${API_SA}" \
+    --role="roles/secretmanager.secretAccessor" || \
+    echo "cutover: ${SIGNING_SECRET} secret IAM skipped"
+  echo "cutover: grant secretAccessor on the generalist signing secret if not already bound"
   echo "cutover: bind roles/run.invoker on kaori-generalist only"
   echo "cutover: Cloud SQL instance=${instance} serviceAccount=${API_SA}"
+  echo "cutover: after iam succeeds, run: I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh switch-runtime-sa"
+}
+
+cmd_switch_runtime_sa() {
+  require_accept
+  gcloud_ok
+  local image
+  image="$(gcloud run services describe "$SERVICE" \
+    --project="$PROJECT" --region="$REGION" \
+    --format='value(spec.template.spec.containers[0].image)')"
+  [[ -n "$image" ]] || die "cannot read current ${SERVICE} image"
+  echo "cutover: no-traffic deploy of ${image} as ${API_SA}"
+  gcloud run deploy "$SERVICE" \
+    --project="$PROJECT" \
+    --region="$REGION" \
+    --image="$image" \
+    --no-traffic \
+    --service-account="$API_SA"
+  echo "cutover: tag/smoke the new revision before promote. Keep current traffic until then."
+  gcloud run revisions list --project="$PROJECT" --region="$REGION" --service="$SERVICE" --limit=3
 }
 
 cmd_secrets() {
@@ -290,7 +325,7 @@ cmd_promote() {
 
 usage() {
   sed -n '2,18p' "$0"
-  echo "commands: preflight | backup | backups-enable | bucket | iam | secrets | migrate | deploy-no-traffic | smoke | promote"
+  echo "commands: preflight | backup | backups-enable | bucket | iam | secrets | migrate | deploy-no-traffic | switch-runtime-sa | smoke | promote"
 }
 
 cmd="${1:-preflight}"
@@ -303,6 +338,7 @@ case "$cmd" in
   secrets) cmd_secrets ;;
   migrate) cmd_migrate ;;
   deploy-no-traffic) cmd_deploy_no_traffic ;;
+  switch-runtime-sa) cmd_switch_runtime_sa ;;
   smoke) cmd_smoke ;;
   promote) cmd_promote ;;
   -h|--help|help) usage ;;
