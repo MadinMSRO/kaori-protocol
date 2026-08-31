@@ -227,9 +227,9 @@ def test_no_new_http_routes_for_validation_vote():
     assert paths == {
         "/v1/evidence",
         "/v1/compile",
+        "/v1/validate",
         "/v1/standing/{agent_id}",
         "/v1/truth/{truthkey:path}",
     }
-    assert not any("vote" in (path or "") for path in paths)
+    assert "/v1/vote" not in paths
     assert not any("generalist" in (path or "") for path in paths)
-    assert not any("validat" in (path or "") for path in paths)

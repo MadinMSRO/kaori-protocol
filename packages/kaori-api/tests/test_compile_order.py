@@ -176,11 +176,12 @@ def test_only_protocol_http_routes():
     assert paths == {
         "/v1/evidence",
         "/v1/compile",
+        "/v1/validate",
         "/v1/standing/{agent_id}",
         "/v1/truth/{truthkey:path}",
     }
     assert "/v1/vote" not in paths
-    assert not any(path and "vote" in path for path in paths)
+    assert not any(path and path.endswith("/vote") for path in paths)
 
 
 def test_compile_invokes_validator_before_compile_truth_state(monkeypatch):
@@ -302,6 +303,7 @@ def test_integration_describes_pre_compile_validation_vote():
     assert "`kaori.truth_artifacts`" in integration
     assert "`kaori.truth_artifacts`" in readme
     assert "There is no public vote route" in integration
+    assert "`POST` | `/v1/validate`" in integration
     assert "There is no `/v1/vote` route" in readme
     assert "evidence bytes" in integration
     assert "timeout: float = 30.0" not in Path(

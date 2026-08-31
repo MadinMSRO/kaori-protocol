@@ -81,8 +81,9 @@ Protocol routes:
 |--------|------|--------|
 | `POST` | `/v1/evidence` | authenticated, content-addressed upload to the private Kaori observations bucket |
 | `POST` | `/v1/compile` | immutable observation admission → distinct-reporter gate → `VALIDATION_VOTE` → compile → append Silver / refresh Gold |
+| `POST` | `/v1/validate` | authenticated ValidationSignal ingest + recompile of the same TruthKey |
 | `GET` | `/v1/standing/{agent_id}` | `FlowCore.get_standing` |
-| `GET` | `/v1/truth/{truthkey}` | stored `kaori.truth_states` artifact (`{truthkey:path}`) |
+| `GET` | `/v1/truth/{truthkey}` | stored `kaori.truth_states` artifact (`{truthkey:path}`) plus `agents[]` |
 
 Auth: `Authorization: Bearer <token>` is verified by `GET {SUPABASE_URL}/auth/v1/user` with `apikey: SUPABASE_PUBLISHABLE_KEY`. Agent id is `user:{user.id}`—never `profiles.id`. `POST /v1/evidence` computes SHA-256 server-side, writes once to `gs://$KAORI_OBSERVATIONS_BUCKET/observations/...`, and returns a content-bound EvidenceRef. The bucket is private; signed URLs are transport credentials and MUST NOT replace the stored `gs://` URI.
 
@@ -90,7 +91,7 @@ Auth: `Authorization: Bearer <token>` is verified by `GET {SUPABASE_URL}/auth/v1
 
 After the distinct-reporter threshold, Kaori loads all immutable observations for that TruthKey, records the private generalist `VALIDATION_VOTE`, creates and persists the complete frozen TrustSnapshot, calls the pure compiler, appends the signed revision to `kaori.truth_artifacts`, and atomically refreshes the Gold `kaori.truth_states` projection. No TruthState is written to `public.truths`. A `200` is returned only after the vote and signed artifact persist; it is the same artifact returned by `GET /v1/truth`, not `{truthkey}`.
 
-If the YAML generalist timeout elapses with no vote, do not compile or return 200 as if validated. A late generalist 200 still records the vote but does not retroactively turn the timed-out request into a successful compile. Do not log evidence bytes, bearer tokens, signatures, or secret values. There is no public vote route: recorded votes remain in Flow signals and `TruthState.consensus.votes`. The sidecar stamps reporter context from Flow, and the compiler remains pure.
+If the YAML generalist timeout elapses with no vote, do not compile or return 200 as if validated. A late generalist 200 still records the vote but does not retroactively turn the timed-out request into a successful compile. Do not log evidence bytes, bearer tokens, signatures, or secret values. There is no public vote route: recorded votes remain in Flow signals and `TruthState.consensus.votes`. Authenticated `POST /v1/validate` is the reviewer ingest (not `/v1/vote`). The sidecar stamps reporter context from Flow, and the compiler remains pure. The TrustSnapshot includes every participating agent (observers, validators, claim type). Intermediate compiles emit `TRUTHSTATE_EMITTED` with `outcome=unknown`; `VERIFIED_TRUE` / `VERIFIED_FALSE` score each agent.
 
 Compile body (Open Core names only): `{ "truth_key", "claim_type_id", "observations" }`. Observation field is `evidence_refs`. 200 TruthState field is `truthkey`. Sidecar loads ClaimType YAML for the given `claim_type_id` (404 if missing). Required payload fields come from that spec `ui_schema`.
 

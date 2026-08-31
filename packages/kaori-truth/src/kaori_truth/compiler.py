@@ -341,9 +341,11 @@ def _is_human_vote(vote: dict) -> bool:
 
 
 def _recorded_ai_mean(votes: List[dict], fallback: float) -> float:
-    """Use recorded vote confidence when present; otherwise compile aggregate."""
+    """Mean confidence from non-human validator votes; else compile aggregate."""
     scores = []
     for vote in votes:
+        if _is_human_vote(vote):
+            continue
         confidence = _vote_field(vote, "confidence")
         if confidence is None:
             continue
@@ -372,7 +374,9 @@ def _determine_status(
     Determine truth status from ClaimType YAML + recorded votes.
 
     YAML is the law:
-    - always_require_human true → PENDING_HUMAN_REVIEW even after RATIFY
+    - always_require_human true → PENDING_HUMAN_REVIEW until a human
+      RATIFY/REJECT is recorded. After that, the same thresholds apply
+      and the human vote must agree with VERIFIED_TRUE / VERIFIED_FALSE.
     - always_require_human false → do not stamp PENDING_HUMAN_REVIEW from
       risk_profile alone; use autovalidation thresholds + recorded votes
     - required_for_risk_profiles: those lanes need human consensus before
@@ -398,12 +402,16 @@ def _determine_status(
 
     ai_mean = _recorded_ai_mean(votes, aggregate.get("ai_confidence_mean", 0.0))
     ai_variance = aggregate.get("ai_variance", 0.0)
+    has_human = _has_human_consensus(votes)
+    human_required_to_verify = always_require_human or (
+        claim_type.risk_profile in required_profiles
+    )
 
     if ai_variance > 0.15:
         transparency_flags.append("CONTRADICTION_DETECTED")
         return TruthStatus.UNDECIDED, None, transparency_flags
 
-    if always_require_human:
+    if always_require_human and not has_human:
         if ai_mean >= ai_true_threshold:
             transparency_flags.append("AI_RECOMMENDS_TRUE")
         elif ai_mean <= ai_false_threshold:
@@ -411,13 +419,15 @@ def _determine_status(
         transparency_flags.append("AWAITING_HUMAN_CONSENSUS")
         return TruthStatus.PENDING_HUMAN_REVIEW, None, transparency_flags
 
-    human_required_to_verify = claim_type.risk_profile in required_profiles
-    has_human = _has_human_consensus(votes)
+    human_direction = _human_vote_direction(votes) if has_human else None
 
     if ai_mean >= ai_true_threshold:
         if human_required_to_verify and not has_human:
             transparency_flags.append("AI_RECOMMENDS_TRUE")
             return TruthStatus.LEANING_TRUE, None, transparency_flags
+        if human_required_to_verify and human_direction == "REJECT":
+            transparency_flags.append("CONTRADICTION_DETECTED")
+            return TruthStatus.UNDECIDED, None, transparency_flags
         basis = (
             VerificationBasis.HUMAN_CONSENSUS
             if has_human
@@ -429,6 +439,9 @@ def _determine_status(
         if human_required_to_verify and not has_human:
             transparency_flags.append("AI_RECOMMENDS_FALSE")
             return TruthStatus.LEANING_FALSE, None, transparency_flags
+        if human_required_to_verify and human_direction == "RATIFY":
+            transparency_flags.append("CONTRADICTION_DETECTED")
+            return TruthStatus.UNDECIDED, None, transparency_flags
         basis = (
             VerificationBasis.HUMAN_CONSENSUS
             if has_human
@@ -436,7 +449,26 @@ def _determine_status(
         )
         return TruthStatus.VERIFIED_FALSE, basis, transparency_flags
 
+    if has_human and human_direction == "REJECT":
+        return (
+            TruthStatus.VERIFIED_FALSE,
+            VerificationBasis.HUMAN_CONSENSUS,
+            transparency_flags,
+        )
+
     return TruthStatus.INVESTIGATING, None, transparency_flags
+
+
+def _human_vote_direction(votes: List[dict]) -> Optional[str]:
+    """Latest human RATIFY/REJECT. ABSTAIN is ignored."""
+    direction = None
+    for vote in votes:
+        if not _is_human_vote(vote):
+            continue
+        value = _vote_value(vote)
+        if value in ("RATIFY", "REJECT"):
+            direction = value
+    return direction
 
 
 def _compute_confidence(

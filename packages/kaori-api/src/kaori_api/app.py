@@ -3,6 +3,7 @@ Kaori API — Pattern B sidecar.
 
 Thin FastAPI surface Liminal can call this week:
   POST /v1/compile
+  POST /v1/validate
   GET  /v1/standing/{agent_id}
   GET  /v1/truth/{truthkey}
 
@@ -12,7 +13,7 @@ internally. POST /v1/compile 200 is returned only after VALIDATION_VOTE is
 recorded and the full TruthState is persisted (GET /v1/truth shape, not
 {truthkey}). A late generalist 200 still records VALIDATION_VOTE. YAML
 timeout with no vote does not compile and does not return 200. No 422.
-CLIP stays private. Same three routes. Compiler stays pure.
+CLIP stays private. Compiler stays pure.
 """
 from __future__ import annotations
 
@@ -30,9 +31,17 @@ from fastapi.responses import JSONResponse
 from kaori_flow import FlowCore, InMemorySignalStore
 from kaori_flow.primitives.agent import Agent
 from kaori_flow.primitives.signal import SignalTypes
+from kaori_flow.settlement import (
+    OUTCOME_UNKNOWN,
+    RECKLESS_PENALTY_DEFAULT,
+    participating_agent_ids,
+    quality_score_from_confidence,
+    score_contributors,
+)
 from kaori_truth.compiler import CompilationError
 from kaori_truth.primitives.observation import Observation, ReporterContext, Standing
 from kaori_truth.primitives.truthstate import TruthState, TruthStatus
+from kaori_truth.signing import production_signing_required
 from pydantic import ValidationError
 
 from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
@@ -41,8 +50,14 @@ from kaori_api.evidence_store import (
     GcsEvidenceStore,
     InMemoryEvidenceStore,
 )
+from kaori_api.claims import attach_claim_agents
+from kaori_api.generalist import (
+    ValidationVote,
+    sign_validation_vote,
+)
 from kaori_api.generalist_client import (
     GeneralistClient,
+    compiler_votes_for_truthkey,
     generalist_timeout_seconds,
     start_validate_and_record,
     vote_as_compiler_record,
@@ -51,9 +66,13 @@ from kaori_api.generalist_client import (
 from kaori_api.orchestrator import TruthOrchestrator, UnknownClaimTypeError
 from kaori_api.trust_adapter import FlowTrustProvider
 from kaori_api.validation import (
+    VALIDATION_VOTES,
     agent_is_known,
+    ensure_agent_registered,
     ensure_claimtype_registered,
     ensure_generalist_registered,
+    record_observation_submitted,
+    record_validation_vote,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -245,6 +264,22 @@ def validate_payload_fields(observations: List[Observation], claim_type) -> None
                 raise HTTPException(status_code=400, detail=f"Missing payload field: {field}")
 
 
+class TruthKeyLocks:
+    """One compile lock per TruthKey so recompile does not serialize the world."""
+
+    def __init__(self) -> None:
+        self._meta = threading.Lock()
+        self._locks: Dict[str, threading.Lock] = {}
+
+    def get(self, truth_key: str) -> threading.Lock:
+        with self._meta:
+            lock = self._locks.get(truth_key)
+            if lock is None:
+                lock = threading.Lock()
+                self._locks[truth_key] = lock
+            return lock
+
+
 def compile_after_vote(
     *,
     orchestrator: TruthOrchestrator,
@@ -260,23 +295,66 @@ def compile_after_vote(
     """compile_truth_state only after a VALIDATION_VOTE exists for this TruthKey."""
     if not votes_for_truthkey(flow, truth_key):
         raise RuntimeError("compile_truth_state forbidden without a recorded vote")
+    recorded = compiler_votes_for_truthkey(flow, truth_key)
+    merged = _merge_vote_records(recorded, votes)
+    for agent in participating_agent_ids(
+        observations=observations,
+        votes=merged,
+        claim_type_id=claim_type_id,
+    ):
+        if agent.startswith("ai:") or agent.startswith("validator:"):
+            ensure_agent_registered(flow, agent, role="validator")
+        elif agent.startswith("claimtype:"):
+            ensure_claimtype_registered(flow, claim_type_id)
+        else:
+            ensure_agent_registered(flow, agent, role="observer")
     truth_state, trust_snapshot = orchestrator.compile_observations_with_snapshot(
         observations=observations,
         truth_key=truth_key,
         claim_type_id=claim_type_id,
         ai_scores=ai_scores,
-        votes=votes,
+        votes=merged,
     )
-    artifact = persist_truth_state(truth_store, truth_state, trust_snapshot)
-    emit_compile_truthstate(flow, truth_state, agent_id, claim_type_id)
+    artifact = persist_truth_state(
+        truth_store, truth_state, trust_snapshot, claim_type_id
+    )
+    emit_compile_truthstate(flow, truth_state, observations, claim_type_id)
     return artifact
 
 
-def persist_truth_state(truth_store: Any, state: TruthState, trust_snapshot: Any) -> dict:
+def _merge_vote_records(
+    recorded: List[dict], extra: Optional[List[dict]]
+) -> List[dict]:
+    merged: List[dict] = []
+    seen: set[tuple] = set()
+    for record in [*(recorded or []), *(extra or [])]:
+        key = (
+            record.get("agent_id"),
+            record.get("vote") or record.get("vote_type"),
+            record.get("timestamp"),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(record)
+    return merged
+
+
+def persist_truth_state(
+    truth_store: Any,
+    state: TruthState,
+    trust_snapshot: Any,
+    claim_type_id: Optional[str] = None,
+) -> dict:
     """Append signed Silver revision and atomically refresh the Gold projection."""
     artifact = state.model_dump(mode="json")
+    if claim_type_id:
+        artifact = attach_claim_agents(artifact, trust_snapshot, claim_type_id, state)
     if hasattr(truth_store, "append"):
-        return truth_store.append(state, trust_snapshot)
+        stored = truth_store.append(state, trust_snapshot)
+        if claim_type_id and isinstance(stored, dict):
+            return attach_claim_agents(stored, trust_snapshot, claim_type_id, state)
+        return stored
     # Compatibility for injected legacy stores while integrations migrate.
     truth_store.upsert(
         truthkey=state.truthkey,
@@ -289,20 +367,66 @@ def persist_truth_state(truth_store: Any, state: TruthState, trust_snapshot: Any
 def emit_compile_truthstate(
     flow: FlowCore,
     state: TruthState,
-    agent_id: str,
+    observations: List[Observation],
     claim_type_id: str,
 ) -> None:
     """Standing moves from TRUTHSTATE_EMITTED history, not a minted number."""
-    claimtype_id = ensure_claimtype_registered(flow, claim_type_id)
+    ensure_claimtype_registered(flow, claim_type_id)
+    votes = list((state.consensus.votes if state.consensus else None) or [])
     status = state.status.value
-    outcome = "correct" if state.status == TruthStatus.VERIFIED_TRUE else "unknown"
-    flow.emit_truthstate(
-        truthkey=state.truthkey,
+    quality = quality_score_from_confidence(state.confidence)
+    scores = score_contributors(
         status=status,
-        confidence=state.confidence,
-        contributors=[agent_id, claimtype_id],
-        outcome=outcome,
+        observations=observations,
+        votes=votes,
+        claim_type_id=claim_type_id,
     )
+    if not scores:
+        contributors = participating_agent_ids(
+            observations=observations,
+            votes=votes,
+            claim_type_id=claim_type_id,
+        )
+        flow.emit_truthstate(
+            truthkey=state.truthkey,
+            status=status,
+            confidence=state.confidence,
+            contributors=contributors,
+            outcome=OUTCOME_UNKNOWN,
+            quality_score=quality,
+        )
+        return
+    for score in scores:
+        flow.emit_truthstate(
+            truthkey=state.truthkey,
+            status=status,
+            confidence=state.confidence,
+            contributors=[score.agent_id],
+            outcome=score.outcome,
+            quality_score=quality,
+        )
+        if score.reckless:
+            amount = min(50.0, RECKLESS_PENALTY_DEFAULT)
+            flow.apply_penalty(
+                score.agent_id,
+                amount,
+                "reckless_confidence",
+                truthkey=state.truthkey,
+            )
+
+
+def enrich_truth_artifact(stored: Dict[str, Any], truth_store: Any) -> Dict[str, Any]:
+    """Attach agents[] from the frozen snapshot. Does not remint standing."""
+    payload = {key: value for key, value in stored.items() if key != "agents"}
+    try:
+        state = TruthState.model_validate(payload)
+    except (ValidationError, TypeError, ValueError):
+        return stored
+    snapshot = None
+    getter = getattr(truth_store, "get_trust_snapshot", None)
+    if callable(getter):
+        snapshot = getter(state.truthkey)
+    return attach_claim_agents(dict(stored), snapshot, state.claim_type, state)
 
 
 def create_app(
@@ -372,7 +496,7 @@ def create_app(
     app.state.verify_token = verify_token
     app.state.orchestrator = orchestrator
     app.state.generalist_client = generalist_client
-    app.state.compile_lock = threading.Lock()
+    app.state.compile_lock = TruthKeyLocks()
     app.state.validate_threads = []
 
     def require_agent(request: Request) -> str:
@@ -463,12 +587,21 @@ def create_app(
         received_at = datetime.now(timezone.utc)
         try:
             for observation in observations:
-                request.app.state.observation_store.append(
+                inserted = request.app.state.observation_store.append(
                     observation,
                     truthkey=truth_key,
                     claim_type_hash=claim_type.hash(),
                     received_at=received_at,
                 )
+                if inserted:
+                    record_observation_submitted(
+                        flow_core,
+                        observer_id=agent_id,
+                        truthkey_id=truth_key,
+                        observation_id=str(observation.observation_id),
+                        observation_hash=observation.hash(),
+                        claim_type_id=claim_type_id,
+                    )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -496,9 +629,14 @@ def create_app(
             )
 
         client = request.app.state.generalist_client
+        if client is None and production_signing_required():
+            raise HTTPException(
+                status_code=503,
+                detail="generalist unavailable",
+            )
         if client is not None:
             timeout = generalist_timeout_seconds(claim_type)
-            lock = request.app.state.compile_lock
+            lock = request.app.state.compile_lock.get(truth_key)
             loop = asyncio.get_running_loop()
             finished = asyncio.Event()
             outcome: Dict[str, Any] = {}
@@ -572,6 +710,21 @@ def create_app(
                 raise HTTPException(status_code=400, detail=str(outcome["compile_error"]))
             raise HTTPException(status_code=500, detail="generalist failed")
 
+        recorded = compiler_votes_for_truthkey(flow_core, truth_key)
+        if recorded:
+            with request.app.state.compile_lock.get(truth_key):
+                artifact = compile_after_vote(
+                    orchestrator=request.app.state.orchestrator,
+                    truth_store=request.app.state.truth_store,
+                    flow=flow_core,
+                    observations=observations,
+                    truth_key=truth_key,
+                    claim_type_id=claim_type_id,
+                    agent_id=agent_id,
+                    votes=recorded,
+                )
+            return JSONResponse(status_code=200, content=artifact)
+
         try:
             truth_state, trust_snapshot = (
                 request.app.state.orchestrator.compile_observations_with_snapshot(
@@ -593,8 +746,99 @@ def create_app(
             request.app.state.truth_store,
             truth_state,
             trust_snapshot,
+            claim_type_id,
         )
-        emit_compile_truthstate(flow_core, truth_state, agent_id, claim_type_id)
+        emit_compile_truthstate(flow_core, truth_state, observations, claim_type_id)
+        return JSONResponse(status_code=200, content=artifact)
+
+    @app.post("/v1/validate")
+    async def validate_route(
+        request: Request,
+        agent_id: str = Depends(require_agent),
+    ):
+        """Authenticated ValidationSignal ingest and recompile. Not a public vote arcade."""
+        try:
+            raw = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
+        if not isinstance(raw, dict):
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
+        truth_key = raw.get("truth_key")
+        vote = raw.get("vote")
+        if not truth_key or not isinstance(truth_key, str):
+            raise HTTPException(status_code=400, detail="Missing truth_key")
+        if vote not in VALIDATION_VOTES:
+            raise HTTPException(
+                status_code=400, detail="vote must be RATIFY, REJECT, or ABSTAIN"
+            )
+        confidence = raw.get("confidence")
+        if confidence is not None:
+            try:
+                confidence = float(confidence)
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(status_code=400, detail="Invalid confidence") from exc
+            if not 0.0 <= confidence <= 1.0:
+                raise HTTPException(status_code=400, detail="Invalid confidence")
+
+        observations = request.app.state.observation_store.get_for_truthkey(truth_key)
+        if not observations:
+            stored = request.app.state.truth_store.get(truth_key)
+            if stored is None:
+                raise HTTPException(status_code=404, detail="Unknown truthkey")
+            raise HTTPException(status_code=409, detail="No observations for truthkey")
+
+        flow = request.app.state.flow
+        claim_type_id = observations[0].claim_type
+        ensure_agent_registered(flow, agent_id, role="observer")
+        now = datetime.now(timezone.utc)
+        signed = sign_validation_vote(
+            ValidationVote(
+                agent_id=agent_id,
+                truthkey_id=truth_key,
+                window_id=f"window:{truth_key}",
+                vote=vote,
+                confidence=confidence,
+                timestamp=now,
+                signature="pending",
+            )
+        )
+        record_validation_vote(
+            flow,
+            agent_id=agent_id,
+            truthkey_id=truth_key,
+            window_id=signed.window_id,
+            vote=vote,
+            confidence=confidence,
+            time=now,
+            signature=signed.signature,
+        )
+        recorded = compiler_votes_for_truthkey(flow, truth_key)
+        ai_scores = None
+        ai_confidences = [
+            float(item["confidence"])
+            for item in recorded
+            if item.get("confidence") is not None
+            and not str(item.get("agent_id", "")).startswith(("user:", "human:"))
+        ]
+        if ai_confidences:
+            ai_scores = [sum(ai_confidences) / len(ai_confidences)] * len(observations)
+        try:
+            with request.app.state.compile_lock.get(truth_key):
+                artifact = compile_after_vote(
+                    orchestrator=request.app.state.orchestrator,
+                    truth_store=request.app.state.truth_store,
+                    flow=flow,
+                    observations=observations,
+                    truth_key=truth_key,
+                    claim_type_id=claim_type_id,
+                    agent_id=agent_id,
+                    votes=recorded,
+                    ai_scores=ai_scores,
+                )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except CompilationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(status_code=200, content=artifact)
 
     @app.get("/v1/standing/{agent_id}")
@@ -618,7 +862,7 @@ def create_app(
         stored = request.app.state.truth_store.get(truthkey)
         if stored is None:
             raise HTTPException(status_code=404, detail="Unknown truthkey")
-        return stored
+        return enrich_truth_artifact(stored, request.app.state.truth_store)
 
     return app
 

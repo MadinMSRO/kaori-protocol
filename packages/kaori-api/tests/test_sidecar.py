@@ -101,6 +101,7 @@ def test_only_protocol_http_routes():
     assert paths == {
         "/v1/evidence",
         "/v1/compile",
+        "/v1/validate",
         "/v1/standing/{agent_id}",
         "/v1/truth/{truthkey:path}",
     }
@@ -410,12 +411,17 @@ def test_compile_persists_truthstate_and_standing_from_emit_not_register():
     registered = flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)
     assert AGENT_ID not in {s.object_id for s in registered}
     assert flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) == []
+    submitted = flow.store.get_by_type(SignalTypes.OBSERVATION_SUBMITTED)
+    assert len(submitted) == 1
+    assert submitted[0].agent_id == AGENT_ID
+    assert submitted[0].object_id == truthkey
     emitted = flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED)
     assert len(emitted) == 1
     signal = emitted[0]
     assert signal.object_id == truthkey
     claimtype_agent = f"claimtype:{CORAL_CLAIM_TYPE}"
-    assert signal.payload["contributors"] == [AGENT_ID, claimtype_agent]
+    assert set(signal.payload["contributors"]) == {AGENT_ID, claimtype_agent}
+    assert signal.payload["outcome"] == "unknown"
     assert signal.payload["status"] == artifact["status"]
     assert signal.payload["confidence"] == artifact["confidence"]
     expected_outcome = "correct" if artifact["status"] == "VERIFIED_TRUE" else "unknown"
@@ -587,6 +593,7 @@ def test_claimtype_standing_200_float_after_compile_unknown_still_404():
 
     emitted = flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED)
     assert compiled_id in emitted[0].payload["contributors"]
+    assert emitted[0].payload["outcome"] == "unknown"
     registered = [
         s
         for s in flow.store.get_by_type(SignalTypes.AGENT_REGISTERED)

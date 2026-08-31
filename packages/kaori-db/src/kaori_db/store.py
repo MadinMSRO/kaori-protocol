@@ -23,6 +23,7 @@ from sqlalchemy import (
     String,
     Table,
     UniqueConstraint,
+    and_,
     create_engine,
     func,
     or_,
@@ -93,7 +94,11 @@ def _observations_table(metadata: MetaData, schema: Optional[str]) -> Table:
         Column("canonical", JSON, nullable=False),
         Column("evidence_refs", JSON, nullable=False),
         Index("ix_observations_truthkey", "truthkey"),
-        Index("ix_observations_truthkey_reporter", "truthkey", "reporter_id"),
+        UniqueConstraint(
+            "truthkey",
+            "reporter_id",
+            name="uq_observations_truthkey_reporter",
+        ),
         Index("ix_observations_reported_at", "reported_at"),
         schema=schema,
     )
@@ -372,6 +377,14 @@ class InMemoryObservationStore:
             if existing["observation_hash"] != observation_hash:
                 raise ValueError("observation_id already exists with different content")
             return False
+        for row in self._by_id.values():
+            if (
+                row["truthkey"] == truthkey
+                and row["reporter_id"] == observation.reporter_id
+            ):
+                raise ValueError(
+                    "observer already recorded an observation for this truthkey"
+                )
         self._by_id[observation_id] = {
             "observation_hash": observation_hash,
             "truthkey": truthkey,
@@ -448,6 +461,18 @@ class PostgresObservationStore:
                 if existing.observation_hash != observation_hash:
                     raise ValueError("observation_id already exists with different content")
                 return False
+            existing_observer = conn.execute(
+                select(table.c.observation_id).where(
+                    and_(
+                        table.c.truthkey == truthkey,
+                        table.c.reporter_id == observation.reporter_id,
+                    )
+                )
+            ).first()
+            if existing_observer and str(existing_observer.observation_id) != observation_id:
+                raise ValueError(
+                    "observer already recorded an observation for this truthkey"
+                )
             try:
                 with conn.begin_nested():
                     conn.execute(table.insert().values(**values))
@@ -459,6 +484,18 @@ class PostgresObservationStore:
                 ).first()
                 if raced and raced.observation_hash == observation_hash:
                     return False
+                conflict = conn.execute(
+                    select(table.c.observation_id).where(
+                        and_(
+                            table.c.truthkey == truthkey,
+                            table.c.reporter_id == observation.reporter_id,
+                        )
+                    )
+                ).first()
+                if conflict and str(conflict.observation_id) != observation_id:
+                    raise ValueError(
+                        "observer already recorded an observation for this truthkey"
+                    ) from exc
                 raise ValueError("observation_id already exists with different content") from exc
         return True
 
@@ -663,6 +700,16 @@ class InMemoryTruthArtifactStore:
         row = self._latest.get(truthkey)
         return None if row is None else dict(row["artifact"])
 
+    def get_trust_snapshot(self, truthkey: str) -> Optional[TrustSnapshot]:
+        row = self._latest.get(truthkey)
+        if row is None:
+            return None
+        wanted = (row["artifact"].get("compile_inputs") or {}).get("trust_snapshot_hash")
+        for item in self.trust_snapshots._by_id.values():
+            if item.get("snapshot_hash") == wanted:
+                return TrustSnapshot.model_validate(item)
+        return None
+
     def get_history(self, truthkey: str) -> List[dict]:
         return [
             dict(self._artifacts[state_hash]["artifact"])
@@ -789,6 +836,26 @@ class PostgresTruthArtifactStore:
                 select(latest.c.artifact).where(latest.c.truthkey == truthkey)
             ).first()
         return None if row is None else dict(row.artifact)
+
+    def get_trust_snapshot(self, truthkey: str) -> Optional[TrustSnapshot]:
+        artifacts, _, snapshots = self._tables()
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                select(artifacts.c.trust_snapshot_id)
+                .where(artifacts.c.truthkey == truthkey)
+                .order_by(artifacts.c.revision.desc())
+                .limit(1)
+            ).first()
+            if row is None:
+                return None
+            snap = conn.execute(
+                select(snapshots.c.artifact).where(
+                    snapshots.c.snapshot_id == row.trust_snapshot_id
+                )
+            ).first()
+        if snap is None:
+            return None
+        return TrustSnapshot.model_validate(snap.artifact)
 
     def get_history(self, truthkey: str) -> List[dict]:
         artifacts, _, _ = self._tables()

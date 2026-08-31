@@ -101,10 +101,15 @@ class TruthOrchestrator:
         # 1. Load ClaimType
         claim_type = self._get_claim_type(claim_type_id)
         
-        # 2. Get TrustSnapshot from Flow
-        # Gather all reporter IDs
-        agent_ids = list(set(obs.reporter_id for obs in observations))
-        
+        # 2. Get TrustSnapshot from Flow — every participating agent
+        from kaori_flow.settlement import participating_agent_ids
+
+        agent_ids = participating_agent_ids(
+            observations=observations,
+            votes=votes,
+            claim_type_id=claim_type_id,
+        )
+
         # Use explicit compile_time or current UTC
         if compile_time is None:
             compile_time = datetime.now(timezone.utc)

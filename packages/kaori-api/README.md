@@ -6,6 +6,7 @@ Protocol HTTP surface:
 
 - `POST /v1/evidence`
 - `POST /v1/compile`
+- `POST /v1/validate`
 - `GET /v1/standing/{agent_id}`
 - `GET /v1/truth/{truthkey}` (`{truthkey:path}` so colons work)
 
@@ -26,6 +27,8 @@ After the threshold, validation runs before `compile_observations`. With
 `KAORI_GENERALIST_URL`, 200 is returned only after a `VALIDATION_VOTE` is
 recorded. A timeout does not compile; a late vote is recorded without
 retroactively completing the timed-out request. There is no `/v1/vote` route.
+Authenticated `POST /v1/validate` records a human (or other agent) vote and
+recompiles. Production without a generalist client does not compile.
 
 The orchestrator freezes and persists the full TrustSnapshot, calls the pure
 compiler, appends the signed TruthState to `kaori.truth_artifacts`, and refreshes

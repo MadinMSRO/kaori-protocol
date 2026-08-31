@@ -120,15 +120,18 @@ def test_observations_are_idempotent_but_conflicting_content_is_rejected(tmp_pat
         )
 
 
-def test_distinct_reporters_ignore_repeat_observations_from_same_reporter(tmp_path):
+def test_second_observation_from_same_observer_is_rejected(tmp_path):
     store = PostgresObservationStore(f"sqlite:///{tmp_path / 'reporters.db'}")
     store.ensure_schema()
-    for observation_id in (
-        "11111111-1111-1111-1111-111111111111",
-        "22222222-2222-2222-2222-222222222222",
-    ):
+    store.append(
+        _observation("11111111-1111-1111-1111-111111111111"),
+        truthkey=TRUTHKEY,
+        claim_type_hash="a" * 64,
+        received_at=COMPILE_TIME,
+    )
+    with pytest.raises(ValueError, match="observer already recorded"):
         store.append(
-            _observation(observation_id),
+            _observation("22222222-2222-2222-2222-222222222222"),
             truthkey=TRUTHKEY,
             claim_type_hash="a" * 64,
             received_at=COMPILE_TIME,
@@ -143,7 +146,7 @@ def test_distinct_reporters_ignore_repeat_observations_from_same_reporter(tmp_pa
         received_at=COMPILE_TIME,
     )
 
-    assert len(store.get_for_truthkey(TRUTHKEY)) == 3
+    assert len(store.get_for_truthkey(TRUTHKEY)) == 2
     assert store.count_distinct_reporters(TRUTHKEY) == 2
 
 
