@@ -1,11 +1,35 @@
 # Kaori production deployment runbook
 
-This document is the ordered rollout plan. **Do not execute it from this
-repository change.** Nothing here provisions Cloud SQL, creates a GCS
-bucket, mutates IAM, deploys Cloud Run, or promotes traffic.
+This document is the ordered rollout plan. Runtime image must be built from
+**Kaori `main` at `7a313a25300e6335ae64f1a0581d91cb69a27621` or a later
+descendant**. Do not build or promote PR 8
+(`cursor/artifact-ledger-d7b6`).
 
-Stacked base: `cursor/immutable-artifact-ledger-d7b6`. Runtime image must
-include the production-readiness commits on top of that branch.
+A Cloud Agent without `gcloud` Application Default Credentials cannot
+execute these steps. On a machine that is authenticated to
+`msro-kaori-sandbox`, use the operator scripts (they still refuse to
+promote until smoke passes):
+
+```bash
+./scripts/production/cutover.sh preflight
+I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh backup
+I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh bucket
+I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh iam
+I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh secrets
+I_ACCEPT_PRODUCTION_CUTOVER=1 DATABASE_URL='postgresql://kaori_migration_owner@...' \
+  ./scripts/production/cutover.sh migrate
+I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh deploy-no-traffic
+KAORI_SMOKE_URL='https://<revision-url>' \
+  SMOKE_TOKEN_1=... SMOKE_TOKEN_2=... SMOKE_TOKEN_3=... \
+  ./scripts/production/cutover.sh smoke
+I_ACCEPT_PRODUCTION_CUTOVER=1 SMOKE_PASSED=1 PROMOTE_REVISION='<revision>' \
+  ./scripts/production/cutover.sh promote
+```
+
+`scripts/production/smoke_ledger.py` is the 1 / retry / 2 / 3-reporter
+contract. It fails if the first reporter receives `200`, if evidence is not
+`gs://msro-kaori-observations/...`, if `security.key_id` is `local_dev_key`,
+or if the `200` artifact has no `consensus.votes`.
 
 ## Preconditions
 
@@ -75,6 +99,16 @@ Editor. Do not put GCS HMAC or JSON keys in Liminal or the browser.
 The Cloud SQL database user mapped to this service should be a member of
 `kaori_runtime` only.
 
+Live runtime identity (after Owner bound project IAM):
+
+- `kaori-api@` has `roles/cloudsql.client` and `roles/secretmanager.secretAccessor` on the project, bucket `objectAdmin` on `msro-kaori-observations`, and `run.invoker` on `kaori-generalist` only
+- Cloud SQL user `kaori_runtime` is `LOGIN` with the `roles.sql` grants (no `CREATE` on schema `kaori`)
+- Secret `DATABASE_URL` version `2` is the runtime URL (version `1` remains enabled for rollback)
+- Serving Cloud Run is image `kaori-api:1321905cf545`, revision `kaori-api-00016-ph2`, service account `kaori-api@`, connecting as `kaori_runtime`. Previous tag is `kaori-api-00015-hl6`
+- Automated Cloud SQL backups: enabled, start `18:00`, retain 7
+
+Do not apply a unique index on `(truthkey, reporter_id)` while duplicate bronze rows exist. The API already returns `409` for a same-observer recompile. To rotate the runtime SA again without changing the image, `./scripts/production/cutover.sh switch-runtime-sa` still deploys no-traffic.
+
 ## 4. Production TruthState signing configuration
 
 Create a **new** Secret Manager secret, for example
@@ -97,7 +131,7 @@ the validator key.
 
 ## 5. Cloud Run revision with no traffic
 
-1. Build and push `kaori-api` from this stacked branch (not PR 8).
+1. Build and push `kaori-api` from `main` at `7a313a25` or later (not PR 8).
 2. Deploy a **new revision** of `kaori-api` with `--no-traffic` (or
    `--to-revisions <current>=100,<new>=0`).
 3. Attach Cloud SQL, the runtime DB user, the production signing secret,
