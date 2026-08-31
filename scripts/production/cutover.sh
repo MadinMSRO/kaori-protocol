@@ -4,6 +4,7 @@
 # Usage (from a machine with gcloud + docker, project msro-kaori-sandbox):
 #   ./scripts/production/cutover.sh preflight
 #   I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh backup
+#   I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh backups-enable
 #   I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh bucket
 #   I_ACCEPT_PRODUCTION_CUTOVER=1 ./scripts/production/cutover.sh iam
 #   I_ACCEPT_PRODUCTION_CUTOVER=1 DATABASE_URL=... ./scripts/production/cutover.sh migrate
@@ -135,6 +136,19 @@ cmd_backup() {
   echo "cutover: on-demand backup of Cloud SQL ${instance}"
   gcloud sql backups create --project="$PROJECT" --instance="$instance"
   gcloud sql backups list --project="$PROJECT" --instance="$instance" --limit=3
+}
+
+cmd_backups_enable() {
+  require_accept
+  gcloud_ok
+  local instance
+  instance="$(sql_instance)"
+  echo "cutover: enable automated backups + PITR on Cloud SQL ${instance} (may restart)"
+  gcloud sql instances patch "$instance" \
+    --project="$PROJECT" \
+    --backup-start-time=18:00 \
+    --retained-backups-count=7 \
+    --enable-point-in-time-recovery
 }
 
 cmd_bucket() {
@@ -276,13 +290,14 @@ cmd_promote() {
 
 usage() {
   sed -n '2,18p' "$0"
-  echo "commands: preflight | backup | bucket | iam | secrets | migrate | deploy-no-traffic | smoke | promote"
+  echo "commands: preflight | backup | backups-enable | bucket | iam | secrets | migrate | deploy-no-traffic | smoke | promote"
 }
 
 cmd="${1:-preflight}"
 case "$cmd" in
   preflight) cmd_preflight ;;
   backup) cmd_backup ;;
+  backups-enable) cmd_backups_enable ;;
   bucket) cmd_bucket ;;
   iam) cmd_iam ;;
   secrets) cmd_secrets ;;
