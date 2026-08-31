@@ -22,6 +22,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import Path
 from typing import Any, Mapping
 
 CLAIM_TYPE_ID = "ocean.vessel_anomaly.v1"
@@ -192,10 +193,23 @@ def compile_observation(
     )
 
 
+_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
+
+
+def _jpeg_fixture(name: str) -> bytes:
+    path = _FIXTURE_DIR / name
+    data = path.read_bytes()
+    if data[:3] != b"\xff\xd8\xff":
+        raise SmokeFailure(f"smoke fixture {name} is not a JPEG")
+    return data
+
+
 def reporter_bundle(base_url: str, token: str, label: str) -> list[dict[str, Any]]:
-    photo = upload_evidence(base_url, token, f"photo-{label}-{time.time_ns()}".encode(), f"{label}.jpg")
+    # CLIP rejects non-image bytes. Use distinct JPEGs so phash duplicate
+    # checks do not collapse reporters.
+    photo = upload_evidence(base_url, token, _jpeg_fixture(f"{label}-photo.jpg"), f"{label}.jpg")
     context = upload_evidence(
-        base_url, token, f"context-{label}-{time.time_ns()}".encode(), f"{label}-context.jpg"
+        base_url, token, _jpeg_fixture(f"{label}-context.jpg"), f"{label}-context.jpg"
     )
     return [photo, context]
 
