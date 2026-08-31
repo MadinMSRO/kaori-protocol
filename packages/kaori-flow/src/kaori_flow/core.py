@@ -258,6 +258,32 @@ class FlowCore:
         )
         self.emit(signal)
         return signal
+
+    def apply_penalty(
+        self,
+        agent_id: str,
+        amount: float,
+        reason: str,
+        *,
+        truthkey: Optional[str] = None,
+    ) -> Signal:
+        """Emit PENALTY_APPLIED. object_id is the penalized agent."""
+        payload: Dict[str, object] = {
+            "amount": float(amount),
+            "reason": reason,
+        }
+        if truthkey:
+            payload["truthkey"] = truthkey
+        signal = Signal(
+            signal_type=SignalTypes.PENALTY_APPLIED,
+            time=datetime.now(timezone.utc),
+            agent_id="system:truth",
+            object_id=agent_id,
+            payload=payload,
+            policy_version=self.policy.version,
+        )
+        self.emit(signal)
+        return signal
     
     def endorse(self, endorser_id: str, endorsed_id: str) -> Signal:
         """

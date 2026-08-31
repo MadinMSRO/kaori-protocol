@@ -2,7 +2,7 @@
 Internal Flow helpers for V4 validation signals.
 
 Kaori records signed validator output. It does not execute validators inside
-the compiler. record_validation_vote is not an HTTP route.
+the compiler. HTTP ingest is POST /v1/validate — not a public map vote.
 """
 from __future__ import annotations
 
@@ -116,6 +116,35 @@ def record_validation_vote(
         payload=payload,
         policy_version=flow.policy.version,
         signature=signature,
+    )
+    flow.emit(signal)
+    return signal
+
+
+def record_observation_submitted(
+    flow: FlowCore,
+    *,
+    observer_id: str,
+    truthkey_id: str,
+    observation_id: str,
+    observation_hash: str,
+    claim_type_id: str,
+) -> Signal:
+    """Emit OBSERVATION_SUBMITTED after Bronze admit. Does not move standing."""
+    from kaori_flow.primitives.signal import SignalContext
+
+    signal = Signal(
+        signal_type=SignalTypes.OBSERVATION_SUBMITTED,
+        time=datetime.now(timezone.utc),
+        agent_id=observer_id,
+        object_id=truthkey_id,
+        context=SignalContext(claimtype_id=claim_type_id),
+        payload={
+            "observation_id": observation_id,
+            "observation_hash": observation_hash,
+            "claim_type_id": claim_type_id,
+        },
+        policy_version=flow.policy.version,
     )
     flow.emit(signal)
     return signal

@@ -149,3 +149,42 @@ def test_coral_yaml_always_require_human_is_pending_human_review():
         ai_scores=[0.99],
     )
     assert state.status == TruthStatus.PENDING_HUMAN_REVIEW
+
+
+def test_coral_human_ratify_after_ai_closes_verified_true():
+    claim_type = load_claim_type(SCHEMAS / "ocean" / "coral_bleaching_v1.yaml")
+    state = _compile(
+        claim_type,
+        {"depth_meters": 8.0, "bleaching_percentage": 40},
+        votes=[
+            {"agent_id": "ai:generalist_v1", "vote": "RATIFY", "confidence": 0.99},
+            {"agent_id": "user:reviewer", "vote": "RATIFY", "confidence": 0.8},
+        ],
+        ai_scores=[0.99],
+    )
+    assert state.status == TruthStatus.VERIFIED_TRUE
+
+
+def test_vessel_human_reject_closes_verified_false():
+    claim_type = load_claim_type(SCHEMAS / "ocean" / "vessel_anomaly_v1.yaml")
+    state = _compile(
+        claim_type,
+        {"observation_duration_min": 15, "vessels": [{"id": "v1"}]},
+        votes=[
+            {"agent_id": "ai:generalist_v1", "vote": "REJECT", "confidence": 0.1},
+            {"agent_id": "user:reviewer", "vote": "REJECT", "confidence": 0.85},
+        ],
+        ai_scores=[0.1],
+    )
+    assert state.status == TruthStatus.VERIFIED_FALSE
+
+
+def test_human_confidence_is_not_treated_as_ai_mean():
+    claim_type = load_claim_type(SCHEMAS / "ocean" / "coral_bleaching_v1.yaml")
+    state = _compile(
+        claim_type,
+        {"depth_meters": 8.0, "bleaching_percentage": 40},
+        votes=[{"agent_id": "user:reviewer", "vote": "RATIFY", "confidence": 0.99}],
+    )
+    # Human 0.99 must not be read as AI mean (that would VERIFIED_TRUE).
+    assert state.status != TruthStatus.VERIFIED_TRUE

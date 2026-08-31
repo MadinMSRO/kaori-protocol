@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS kaori.observations (
 
 CREATE INDEX IF NOT EXISTS ix_observations_truthkey
     ON kaori.observations (truthkey);
-CREATE INDEX IF NOT EXISTS ix_observations_truthkey_reporter
+CREATE UNIQUE INDEX IF NOT EXISTS uq_observations_truthkey_reporter
     ON kaori.observations (truthkey, reporter_id);
 CREATE INDEX IF NOT EXISTS ix_observations_reported_at
     ON kaori.observations (reported_at);

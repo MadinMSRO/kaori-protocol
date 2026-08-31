@@ -198,6 +198,31 @@ def cloud_run_id_token(audience: str) -> str:
         return response.read().decode("utf-8")
 
 
+def signal_as_compiler_record(signal) -> dict:
+    """FLOW_SPEC ValidationSignal stored on kaori.signals → compiler vote dict."""
+    payload = dict(signal.payload or {})
+    vote = payload.get("vote")
+    record = {
+        "agent_id": payload.get("agent_id") or signal.agent_id,
+        "truthkey_id": payload.get("truthkey_id") or signal.object_id,
+        "window_id": payload.get("window_id"),
+        "vote": vote,
+        "vote_type": vote,
+        "confidence": payload.get("confidence"),
+        "timestamp": payload.get("timestamp"),
+        "signal_type": SignalTypes.VALIDATION_VOTE,
+    }
+    return {key: value for key, value in record.items() if value is not None}
+
+
+def compiler_votes_for_truthkey(flow: FlowCore, truthkey_id: str) -> list:
+    """All recorded VALIDATION_VOTE signals for this TruthKey, oldest first."""
+    records = []
+    for signal in votes_for_truthkey(flow, truthkey_id):
+        records.append(signal_as_compiler_record(signal))
+    return records
+
+
 def vote_as_compiler_record(vote: ValidationVote) -> dict:
     """
     Compiler input: FLOW_SPEC ValidationSignal fields plus signal_type.
