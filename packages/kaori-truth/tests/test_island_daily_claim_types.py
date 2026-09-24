@@ -88,7 +88,7 @@ def test_daily_types_set_an_explicit_floor_of_three_and_a_day_bucket():
             for field in claim_type.get_config()["ui_schema"]["fields"]
             if field.get("required")
         ]
-        assert fields == ["period_name", "wind", "sea", "sky"]
+        assert fields == ["period_name", "rain", "wind", "sea", "sky"]
         assert list(claim_type.output_schema["properties"]) == fields
         implicit = claim_type.get_config()["implicit_consensus"]
         assert implicit["enabled"] is True
@@ -122,10 +122,11 @@ def test_nakaiy_output_is_the_comparison_not_a_failed_tradition():
     state = _compile(
         claim_type,
         "earth:nakaiy:h3:abc:surface:2026-01-07T00:00Z",
-        {"period_name": "Mula", "wind": "east", "sea": "rough", "sky": "clear"},
+        {"period_name": "Mula", "rain": "light", "wind": "east", "sea": "rough", "sky": "clear"},
     )
     assert state.claim == {
         "period_name": "Mula",
+        "rain": "light",
         "wind": "east",
         "sea": "rough",
         "sky": "clear",

@@ -1,36 +1,32 @@
 # ============================================================================
 # Kaori Protocol — ClaimType Definition
 # ============================================================================
-# Claim:   Nakaiy check (Earth Domain)
+# Claim:   Turbidity (Ocean Domain)
 # Version: 1
 # Status:  DRAFT
 # ============================================================================
-# The observer photographs sea and sky and reads rain, wind, and sea state.
-# The period is named. This does not replace a shoreline or turbidity claim.
-# The output is that comparison. It is not a verdict that tradition failed.
+# An ocean cell in a planned scene. The claim is a photo of the Secchi disk
+# at the depth read. It is not a satellite pass.
 # Distinct reporters: three. This floor is explicit.
 
-id: earth.nakaiy.v1
+id: ocean.turbidity.v1
 version: 1
-domain: earth
-topic: nakaiy
+domain: ocean
+topic: turbidity
 
 # ----------------------------------------------------------------------------
 # TruthKey Formation
 # ----------------------------------------------------------------------------
-# Island weather. Daily bucket. The period name is a field, not the time key.
+# Resolution 8 is the TruthKey. Zoom does not change it. Hour of the planned scene.
 truthkey:
   spatial_system: h3
-  resolution: 6
+  resolution: 8
   z_index: surface
-  time_bucket: P1D
+  time_bucket: PT1H
 
 # ----------------------------------------------------------------------------
 # Risk Profile
 # ----------------------------------------------------------------------------
-# Determines which verification lane applies (Section 12 of SPEC).
-# - monitor: AI can auto-verify, with transparency flags
-# - critical: Human consensus required before VERIFIED_TRUE
 risk_profile: monitor
 
 # ----------------------------------------------------------------------------
@@ -38,55 +34,26 @@ risk_profile: monitor
 # ----------------------------------------------------------------------------
 ui_schema:
   fields:
-    - name: period_name
-      type: string
-      label: "Nakaiy period"
-      required: true
-    - name: rain
-      type: string
-      label: "Rain"
-      required: true
-    - name: wind
-      type: string
-      label: "Wind"
-      required: true
-    - name: sea
-      type: string
-      label: "Sea state"
-      required: true
-    - name: sky
-      type: string
-      label: "Sky"
+    - name: depth
+      type: number
+      label: "Secchi depth (m)"
       required: true
 
 # ----------------------------------------------------------------------------
 # Output Schema (TruthState.claim)
 # ----------------------------------------------------------------------------
-# Comparison of the named period with wind, sea, and sky as observed.
-# Do not add a boolean that tradition failed or that the period was wrong.
 output_schema:
   type: object
   additionalProperties: false
   required:
-    - period_name
-    - rain
-    - wind
-    - sea
-    - sky
+    - depth
   properties:
-    period_name:
-      type: string
-    rain:
-      type: string
-    wind:
-      type: string
-    sea:
-      type: string
-    sky:
-      type: string
+    depth:
+      type: number
 
 # ----------------------------------------------------------------------------
 # Evidence Requirements
+
 # ----------------------------------------------------------------------------
 evidence:
   required: true
@@ -136,12 +103,12 @@ ai_validation_routing:
     engine: generalist_v1
     # New field: CLIP/generalist HTTP wait. Was missing (do not use 30s or dispute PT12H).
     timeout: PT2M
-    prompt_context: "Nakaiy. Photograph sea and sky. Record rain, wind, and sea state for the named period. Do not judge that tradition failed."
+    prompt_context: "Turbidity. The evidence is a photo of the Secchi disk at the depth read. Do not treat the satellite plan as the observation."
     routes:
       high_confidence: accept       # ai_confidence >= 0.82
       low_confidence: specialist
   specialist:
-    engine: nakaiy_specialist_v1
+    engine: turbidity_specialist_v1
     routes:
       pass: accept
       fail: human_review
@@ -297,5 +264,5 @@ credits:
     standard: 1.0
 
 # ============================================================================
-# End of ClaimType: earth.nakaiy.v1
+# End of ClaimType: ocean.turbidity.v1
 # ============================================================================

@@ -31,6 +31,8 @@ TYPES = {
     "ocean/sentinel2_water_v1.yaml": ("ocean", "sentinel2_water", "h3", 6, "surface", "PT1H", "2026-09-24T05:00Z"),
     "ocean/sentinel3_olci_v1.yaml": ("ocean", "sentinel3_olci", "h3", 5, "surface", "PT1H", "2026-09-24T05:00Z"),
     "earth/sentinel1_sar_v1.yaml": ("earth", "sentinel1_sar", "h3", 6, "surface", "PT1H", "2026-09-24T05:00Z"),
+    "earth/shoreline_v1.yaml": ("earth", "shoreline", "h3", 8, "surface", "PT1H", "2026-09-24T05:00Z"),
+    "ocean/turbidity_v1.yaml": ("ocean", "turbidity", "h3", 8, "surface", "PT1H", "2026-09-24T05:00Z"),
 }
 
 # Required observation fields. Same names the timetable cockpit sends.
@@ -42,6 +44,8 @@ OBSERVATION_FIELDS = {
     "ocean/sentinel2_water_v1.yaml": ["granule", "water", "clarity"],
     "ocean/sentinel3_olci_v1.yaml": ["granule", "colour"],
     "earth/sentinel1_sar_v1.yaml": ["granule", "surface", "roughness"],
+    "earth/shoreline_v1.yaml": ["waterline"],
+    "ocean/turbidity_v1.yaml": ["depth"],
 }
 
 # Existing space contracts that were still addressed with H3.
