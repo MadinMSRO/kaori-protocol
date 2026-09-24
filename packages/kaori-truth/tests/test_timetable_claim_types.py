@@ -5,6 +5,8 @@ timetable event, never a human window.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -22,6 +24,7 @@ LOCATION = {"lat": 4.175, "lon": 73.509}
 
 # Space resolution is NSIDE. The compiler passes it through unchanged.
 TYPES = {
+    "space/satellite_pass_v1.yaml": ("space", "satellite_pass", "healpix", 64, "orbital_shell", "PT1H", "2026-09-24T05:00Z"),
     "space/asteroid_occultation_v1.yaml": ("space", "asteroid_occultation", "healpix", 64, "sky", "PT1H", "2026-09-24T05:00Z"),
     "space/lunar_occultation_v1.yaml": ("space", "lunar_occultation", "healpix", 64, "sky", "PT1H", "2026-09-24T05:00Z"),
     "earth/sentinel2_scene_v1.yaml": ("earth", "sentinel2_scene", "h3", 6, "surface", "PT1H", "2026-09-24T05:00Z"),
@@ -29,6 +32,23 @@ TYPES = {
     "ocean/sentinel3_olci_v1.yaml": ("ocean", "sentinel3_olci", "h3", 5, "surface", "PT1H", "2026-09-24T05:00Z"),
     "earth/sentinel1_sar_v1.yaml": ("earth", "sentinel1_sar", "h3", 6, "surface", "PT1H", "2026-09-24T05:00Z"),
 }
+
+# Required observation fields. Same names the timetable cockpit sends.
+OBSERVATION_FIELDS = {
+    "space/satellite_pass_v1.yaml": ["bearing", "first_visible", "last_visible", "max_elevation"],
+    "space/asteroid_occultation_v1.yaml": ["asteroid", "star", "disappeared"],
+    "space/lunar_occultation_v1.yaml": ["star", "disappearance_utc", "seen"],
+    "earth/sentinel2_scene_v1.yaml": ["granule", "surface", "ground"],
+    "ocean/sentinel2_water_v1.yaml": ["granule", "water", "clarity"],
+    "ocean/sentinel3_olci_v1.yaml": ["granule", "colour"],
+    "earth/sentinel1_sar_v1.yaml": ["granule", "surface", "roughness"],
+}
+
+# Existing space contracts that were still addressed with H3.
+SPACE_SPATIAL_FIXES = (
+    "space/debris_track_v1.yaml",
+    "space/light_pollution_v1.yaml",
+)
 
 
 def _load(name: str):
@@ -45,6 +65,14 @@ def test_timetable_types_set_an_explicit_floor_and_an_hour_bucket():
         assert claim_type.truthkey.z_index == z_index
         assert claim_type.truthkey.time_bucket == duration
         assert claim_type.minimum_observations() == 3
+        claim_type.validate_domain_config()
+        fields = [
+            field["name"]
+            for field in claim_type.get_config()["ui_schema"]["fields"]
+            if field.get("required")
+        ]
+        assert fields == OBSERVATION_FIELDS[name]
+        assert list(claim_type.output_schema["properties"]) == fields
         implicit = claim_type.get_config()["implicit_consensus"]
         assert implicit["enabled"] is True
         assert implicit["min_observations"] == 3
@@ -118,3 +146,25 @@ def test_sentinel_scene_compiles_the_ground_not_the_plan():
     assert first.claim == payload
     assert "acquisition_true" not in first.claim
     assert first.security.semantic_hash == second.security.semantic_hash
+
+
+def test_space_contracts_use_healpix_and_the_lock_matches_the_files():
+    for name in SPACE_SPATIAL_FIXES:
+        claim_type = _load(name)
+        assert claim_type.domain == "space"
+        assert claim_type.truthkey.spatial_system == "healpix"
+        assert claim_type.truthkey.resolution == 64
+        claim_type.validate_domain_config()
+
+    repo = Path(__file__).resolve().parents[3]
+    lock = json.loads((repo / "packages" / "kaori-spec" / "claimtype.lock.json").read_text(encoding="utf-8"))
+    locked = lock["locked"]
+    expected = [
+        f"packages/kaori-spec/schemas/{name}"
+        for name in (*TYPES, *SPACE_SPATIAL_FIXES, "earth/nakaiy_v1.yaml")
+    ]
+    assert set(locked) == set(expected)
+    for rel in expected:
+        text = (repo / rel).read_text(encoding="utf-8")
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        assert locked[rel]["sha256"] == digest

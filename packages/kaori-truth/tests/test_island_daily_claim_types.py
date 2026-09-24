@@ -1,4 +1,4 @@
-"""Island-daily ClaimTypes: rain gauge, nakaiy check, attributed memory.
+"""Nakaiy is the island-daily ClaimType the published timetable still opens.
 
 These tests load published YAML and call the existing compiler.
 They do not change compile_truth_state. A human window is not a TruthKey.
@@ -21,9 +21,7 @@ COMPILE_TIME = datetime(2026, 1, 7, 14, 35, 0, tzinfo=timezone.utc)
 LOCATION = {"lat": 4.175, "lon": 73.509}
 
 DAILY = {
-    "earth.rain.v1": ("rain", 8),
     "earth.nakaiy.v1": ("nakaiy", 6),
-    "earth.memory.v1": ("memory", 6),
 }
 
 
@@ -81,8 +79,17 @@ def test_daily_types_set_an_explicit_floor_of_three_and_a_day_bucket():
         assert claim_type.id == claim_id
         assert claim_type.truthkey.time_bucket == "P1D"
         assert claim_type.truthkey.resolution == resolution
+        assert claim_type.truthkey.spatial_system == "h3"
         assert claim_type.truthkey.z_index == "surface"
         assert claim_type.minimum_observations() == 3
+        claim_type.validate_domain_config()
+        fields = [
+            field["name"]
+            for field in claim_type.get_config()["ui_schema"]["fields"]
+            if field.get("required")
+        ]
+        assert fields == ["period_name", "wind", "sea", "sky"]
+        assert list(claim_type.output_schema["properties"]) == fields
         implicit = claim_type.get_config()["implicit_consensus"]
         assert implicit["enabled"] is True
         assert implicit["min_observations"] == 3
@@ -110,16 +117,6 @@ def test_truthkey_is_an_iso_bucket_not_a_human_window():
         assert "hour" not in parts.time_bucket
 
 
-def test_rain_compiles_the_gauge_reading_and_replays():
-    claim_type = _load("rain_v1.yaml")
-    key = "earth:rain:h3:abc:surface:2026-01-07T00:00Z"
-    first = _compile(claim_type, key, {"rainfall_mm": 12.5})
-    second = _compile(claim_type, key, {"rainfall_mm": 12.5})
-    assert first.claim == {"rainfall_mm": 12.5}
-    assert first.security.semantic_hash == second.security.semantic_hash
-    assert first.model_dump(mode="json") == second.model_dump(mode="json")
-
-
 def test_nakaiy_output_is_the_comparison_not_a_failed_tradition():
     claim_type = _load("nakaiy_v1.yaml")
     state = _compile(
@@ -135,29 +132,3 @@ def test_nakaiy_output_is_the_comparison_not_a_failed_tradition():
     }
     assert "tradition_failed" not in state.claim
     assert "nakaiy_wrong" not in state.claim
-
-
-def test_memory_records_that_the_account_was_given():
-    claim_type = _load("memory_v1.yaml")
-    key = "earth:memory:h3:abc:surface:2026-01-07T00:00Z"
-    payload = {
-        "subject": "the reef at the marker",
-        "account": "The reef reached the beach when I was young.",
-        "period_year": 1980,
-    }
-    first = _compile(claim_type, key, payload)
-    second = _compile(claim_type, key, payload)
-    assert first.claim["account_recorded"] is True
-    assert first.claim["subject"] == "the reef at the marker"
-    assert first.claim["period_year"] == 1980
-    assert "account" not in first.claim
-    assert "past_true" not in first.claim
-    assert first.security.semantic_hash == second.security.semantic_hash
-    assert first.model_dump(mode="json") == second.model_dump(mode="json")
-
-    absent = _compile(
-        claim_type,
-        key,
-        {**payload, "period_year": 0},
-    )
-    assert absent.claim["account_recorded"] is False

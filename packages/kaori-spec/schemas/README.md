@@ -11,9 +11,7 @@ schemas/
 │   ├── coastal_erosion_v1.yaml
 │   ├── infrastructure_v1.yaml
 │   ├── vegetation_v1.yaml
-│   ├── rain_v1.yaml
 │   ├── nakaiy_v1.yaml
-│   ├── memory_v1.yaml
 │   ├── sentinel2_scene_v1.yaml
 │   └── sentinel1_sar_v1.yaml
 ├── ocean/

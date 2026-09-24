@@ -67,11 +67,6 @@ PRODUCT_CLAIMS = [
         {"sky_quality": "poor", "sqm_value": 18.5, "weather": "clear"},
     ),
     (
-        "earth.rain.v1",
-        "earth:rain:h3:abc:surface:2026-01-07T00:00Z",
-        {"rainfall_mm": 12.5},
-    ),
-    (
         "earth.nakaiy.v1",
         "earth:nakaiy:h3:abc:surface:2026-01-07T00:00Z",
         {"period_name": "Mula", "wind": "east", "sea": "rough", "sky": "clear"},
@@ -222,43 +217,8 @@ def test_does_not_invent_earth_flood_or_orbital_debris_as_product_ids():
     assert "earth.flood.v1" not in ids
     assert "space.orbital_debris.v1" not in ids
     assert "ocean.coral_bleaching.v1" not in ids
-
-
-def test_attributed_memory_records_the_account_not_the_past(client: TestClient):
-    """Output is that the account was recorded. The words are not a past-is-true claim."""
-    payload = {
-        "subject": "the reef at the marker",
-        "account": "The reef reached the beach when I was young.",
-        "period_year": 1980,
-    }
-    observation_ids = (
-        "11111111-1111-1111-1111-111111111111",
-        "22222222-2222-2222-2222-222222222222",
-        "33333333-3333-3333-3333-333333333333",
-    )
-    responses = []
-    for index, observation_id in enumerate(observation_ids):
-        token = TOKEN if index == 2 else f"reporter-{index}"
-        responses.append(
-            client.post(
-                "/v1/compile",
-                json={
-                    "truth_key": "earth:memory:h3:abc:surface:2026-01-07T00:00Z",
-                    "claim_type_id": "earth.memory.v1",
-                    "observations": [observation("earth.memory.v1", payload, observation_id)],
-                },
-                headers={"Authorization": f"Bearer {token}"},
-            )
-        )
-    assert [item.status_code for item in responses[:2]] == [202, 202]
-    body = responses[2].json()
-    assert responses[2].status_code == 200, responses[2].text
-    assert body["claim"]["account_recorded"] is True
-    assert body["claim"]["subject"] == "the reef at the marker"
-    assert body["claim"]["period_year"] == 1980
-    assert "account" not in body["claim"]
-    assert "tradition_failed" not in body["claim"]
-    assert "past_true" not in body["claim"]
+    assert "earth.rain.v1" not in ids
+    assert "earth.memory.v1" not in ids
 
 
 def test_unknown_yaml_still_404(client: TestClient):

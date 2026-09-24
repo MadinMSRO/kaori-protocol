@@ -1,3 +1,34 @@
 {
-    "locked": {}
+    "locked": {
+        "packages/kaori-spec/schemas/space/satellite_pass_v1.yaml": {
+            "sha256": "5a4f1ecb5b93837bdb79472145351c90e0e1ca4f68e7785e155d99ffcf6af933"
+        },
+        "packages/kaori-spec/schemas/space/asteroid_occultation_v1.yaml": {
+            "sha256": "6450526c1896b317ba79d09a775aa354a64bab08eb97bbfde752b7347563f759"
+        },
+        "packages/kaori-spec/schemas/space/lunar_occultation_v1.yaml": {
+            "sha256": "65d47346fb54ccfca1bd4ab8ff438d500c9fdaea00d6e375be1df37054b9b608"
+        },
+        "packages/kaori-spec/schemas/earth/sentinel2_scene_v1.yaml": {
+            "sha256": "80fb908641effdb161c4e93f4075c5ecf48e5976e45e2c9c41d841a51724eaab"
+        },
+        "packages/kaori-spec/schemas/ocean/sentinel2_water_v1.yaml": {
+            "sha256": "27047f428909a6603a8cfaf4ee6acded175a7ff9fd00036117e5ca74eafac3e3"
+        },
+        "packages/kaori-spec/schemas/ocean/sentinel3_olci_v1.yaml": {
+            "sha256": "55d8e1d5a6ca082ed8b07aeaf4cac6516e92a73f17a03e73131d6ac0f610eb9f"
+        },
+        "packages/kaori-spec/schemas/earth/sentinel1_sar_v1.yaml": {
+            "sha256": "2bd21fe03880661787bec8c05f5c4e9ee619c4e7e2a1e98ed5a03426bfd82467"
+        },
+        "packages/kaori-spec/schemas/space/debris_track_v1.yaml": {
+            "sha256": "13af8d6a21308d515487a757c6ae63f44c12f1637657c19c5d725a72b6e04c10"
+        },
+        "packages/kaori-spec/schemas/space/light_pollution_v1.yaml": {
+            "sha256": "aaf709e98c75c09b8bd9f28ba9e3e8f10be2e381054173c181ffb67ff436b194"
+        },
+        "packages/kaori-spec/schemas/earth/nakaiy_v1.yaml": {
+            "sha256": "579ca26db361f513494d5f05ba72c2dc25786d624667eb417d58e3caa47b8727"
+        }
+    }
 }
