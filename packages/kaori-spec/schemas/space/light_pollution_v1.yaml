@@ -15,9 +15,10 @@ topic: light_pollution
 # TruthKey Formation
 # ----------------------------------------------------------------------------
 # Defines how observations are bucketed into discrete truth cells.
+# Space addresses are HEALPix pixels. resolution is NSIDE.
 truthkey:
-  spatial_system: h3
-  resolution: 6
+  spatial_system: healpix
+  resolution: 64
   z_index: surface
   time_bucket: PT1H
 

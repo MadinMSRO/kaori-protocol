@@ -16,10 +16,11 @@ topic: asteroid_occultation
 # ----------------------------------------------------------------------------
 # TruthKey Formation
 # ----------------------------------------------------------------------------
-# Cell where the predicted path crosses. Hour bucket of the predicted UTC. The path is not written into the key.
+# The star's HEALPix pixel. Hour bucket of the predicted UTC. The ground path is not written into the key.
+# resolution is NSIDE. The compiler passes this number through as nside. 64 is a power of two.
 truthkey:
-  spatial_system: h3
-  resolution: 6
+  spatial_system: healpix
+  resolution: 64
   z_index: sky
   time_bucket: PT1H
 

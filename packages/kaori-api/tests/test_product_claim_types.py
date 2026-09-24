@@ -54,7 +54,7 @@ PRODUCT_CLAIMS = [
     ),
     (
         "space.debris_track.v1",
-        "space:debris_track:h3:abc:orbital_shell:2026-01-07T12:00Z",
+        "space:debris_track:healpix:35632:orbital_shell:2026-01-07T12:00Z",
         {
             "first_visible": "2026-01-07T12:00:00Z",
             "last_visible": "2026-01-07T12:05:00Z",
@@ -63,7 +63,7 @@ PRODUCT_CLAIMS = [
     ),
     (
         "space.light_pollution.v1",
-        "space:light_pollution:h3:abc:surface:2026-01-07T12:00Z",
+        "space:light_pollution:healpix:35632:surface:2026-01-07T12:00Z",
         {"sky_quality": "poor", "sqm_value": 18.5, "weather": "clear"},
     ),
     (
@@ -78,7 +78,7 @@ PRODUCT_CLAIMS = [
     ),
     (
         "space.satellite_pass.v1",
-        "space:satellite_pass:h3:abc:orbital_shell:2026-01-07T12:00Z",
+        "space:satellite_pass:healpix:35632:orbital_shell:2026-01-07T12:00Z",
         {
             "bearing": "NE",
             "first_visible": "2026-01-07T12:00:00Z",
@@ -88,12 +88,12 @@ PRODUCT_CLAIMS = [
     ),
     (
         "space.asteroid_occultation.v1",
-        "space:asteroid_occultation:h3:abc:sky:2026-01-07T16:00Z",
+        "space:asteroid_occultation:healpix:33666:sky:2026-01-07T16:00Z",
         {"asteroid": "9 Metis", "star": "HIP 1000", "disappeared": True},
     ),
     (
         "space.lunar_occultation.v1",
-        "space:lunar_occultation:h3:abc:sky:2026-01-07T15:00Z",
+        "space:lunar_occultation:healpix:35632:sky:2026-01-07T15:00Z",
         {"star": "Antares", "disappearance_utc": "2026-01-07T15:40:00Z", "seen": True},
     ),
     (
