@@ -69,7 +69,7 @@ PRODUCT_CLAIMS = [
     (
         "earth.nakaiy.v1",
         "earth:nakaiy:h3:abc:surface:2026-01-07T00:00Z",
-        {"period_name": "Mula", "wind": "east", "sea": "rough", "sky": "clear"},
+        {"period_name": "Mula", "rain": "light", "wind": "east", "sea": "rough", "sky": "clear"},
     ),
     (
         "space.satellite_pass.v1",

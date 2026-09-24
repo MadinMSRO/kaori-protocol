@@ -28,7 +28,13 @@
             "sha256": "aaf709e98c75c09b8bd9f28ba9e3e8f10be2e381054173c181ffb67ff436b194"
         },
         "packages/kaori-spec/schemas/earth/nakaiy_v1.yaml": {
-            "sha256": "579ca26db361f513494d5f05ba72c2dc25786d624667eb417d58e3caa47b8727"
+            "sha256": "f134afdbfeaadada2830b14c6976e6c5951b4f652617746f62ca6b5345c52b2a"
+        },
+        "packages/kaori-spec/schemas/earth/shoreline_v1.yaml": {
+            "sha256": "3c7566b42eab58d57f0cb9d5af250d21488b614463bcafc0d0b7f2e972beb4cd"
+        },
+        "packages/kaori-spec/schemas/ocean/turbidity_v1.yaml": {
+            "sha256": "800a3883addfb5fb7e63118dfa9b87ed545b66c6d0f8cd557eb40027d6618984"
         }
     }
 }
