@@ -1,33 +1,32 @@
 # ============================================================================
 # Kaori Protocol — ClaimType Definition
 # ============================================================================
-# Claim:   Satellite Pass (Space Domain)
+# Claim:   Asteroid occultation (Space Domain)
 # Version: 1
 # Status:  DRAFT
 # ============================================================================
+# The timetable path is not the claim. The claim is whether the observer recorded the star disappearing.
+# Distinct reporters: three. This floor is explicit.
 
-id: space.satellite_pass.v1
+id: space.asteroid_occultation.v1
 version: 1
 domain: space
-topic: satellite_pass
+topic: asteroid_occultation
 
 # ----------------------------------------------------------------------------
 # TruthKey Formation
 # ----------------------------------------------------------------------------
-# Defines how observations are bucketed into discrete truth cells.
-# Space addresses are HEALPix pixels. resolution is NSIDE.
+# The star's HEALPix pixel. Hour bucket of the predicted UTC. The ground path is not written into the key.
+# resolution is NSIDE. The compiler passes this number through as nside. 64 is a power of two.
 truthkey:
   spatial_system: healpix
   resolution: 64
-  z_index: orbital_shell
+  z_index: sky
   time_bucket: PT1H
 
 # ----------------------------------------------------------------------------
 # Risk Profile
 # ----------------------------------------------------------------------------
-# Determines which verification lane applies (Section 12 of SPEC).
-# - monitor: AI can auto-verify, with transparency flags
-# - critical: Human consensus required before VERIFIED_TRUE
 risk_profile: monitor
 
 # ----------------------------------------------------------------------------
@@ -35,45 +34,44 @@ risk_profile: monitor
 # ----------------------------------------------------------------------------
 ui_schema:
   fields:
-    - name: bearing
+    - name: asteroid
       type: string
-      label: "Bearing"
+      label: "Asteroid"
       required: true
-    - name: first_visible
+    - name: star
       type: string
-      label: "First visible"
+      label: "Star"
       required: true
-    - name: last_visible
-      type: string
-      label: "Last visible"
-      required: true
-    - name: max_elevation
-      type: number
-      label: "Max elevation"
+    - name: disappeared
+      type: boolean
+      label: "Star disappeared"
       required: true
 
 # ----------------------------------------------------------------------------
-# Output Schema (TruthState.claim / observation payload names)
+# Output Schema (TruthState.claim)
 # ----------------------------------------------------------------------------
 output_schema:
   type: object
-  additionalProperties: true
+  additionalProperties: false
+  required:
+    - asteroid
+    - star
+    - disappeared
   properties:
-    bearing:
+    asteroid:
       type: string
-    first_visible:
+    star:
       type: string
-    last_visible:
-      type: string
-    max_elevation:
-      type: number
+    disappeared:
+      type: boolean
 
 # ----------------------------------------------------------------------------
 # Evidence Requirements
+
 # ----------------------------------------------------------------------------
 evidence:
   required: true
-  types: ["timing", "bearing"]
+  types: ["photo"]
   min_count: 1
   max_count: 10
   storage:
@@ -117,13 +115,14 @@ ai_validation_routing:
       pass: generalist
   generalist:
     engine: generalist_v1
+    # New field: CLIP/generalist HTTP wait. Was missing (do not use 30s or dispute PT12H).
     timeout: PT2M
-    prompt_context: "Satellite pass observation"
+    prompt_context: "Asteroid occultation. Record the asteroid, the star, and whether the star disappeared. The prediction is not the observation."
     routes:
       high_confidence: accept       # ai_confidence >= 0.82
       low_confidence: specialist
   specialist:
-    engine: satellite_pass_specialist_v1
+    engine: asteroid_occultation_specialist_v1
     routes:
       pass: accept
       fail: human_review
@@ -179,7 +178,7 @@ consensus_model:
 # to determine implicit consensus without requiring explicit votes.
 implicit_consensus:
   enabled: true
-  min_observations: 3              # Need at least 3 independent reports
+  min_observations: 3              # Explicit floor. Three distinct reporters.
   min_network_trust: 50.0          # Sum of reporter standings
   min_ai_confidence: 0.80          # Average AI confidence across observations
   max_ai_variance: 0.15            # Low variance = no contradiction
@@ -279,5 +278,5 @@ credits:
     standard: 1.0
 
 # ============================================================================
-# End of ClaimType: space.satellite_pass.v1
+# End of ClaimType: space.asteroid_occultation.v1
 # ============================================================================

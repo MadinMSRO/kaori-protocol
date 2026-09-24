@@ -54,7 +54,7 @@ PRODUCT_CLAIMS = [
     ),
     (
         "space.debris_track.v1",
-        "space:debris_track:h3:abc:orbital_shell:2026-01-07T12:00Z",
+        "space:debris_track:healpix:35632:orbital_shell:2026-01-07T12:00Z",
         {
             "first_visible": "2026-01-07T12:00:00Z",
             "last_visible": "2026-01-07T12:05:00Z",
@@ -63,18 +63,53 @@ PRODUCT_CLAIMS = [
     ),
     (
         "space.light_pollution.v1",
-        "space:light_pollution:h3:abc:surface:2026-01-07T12:00Z",
+        "space:light_pollution:healpix:35632:surface:2026-01-07T12:00Z",
         {"sky_quality": "poor", "sqm_value": 18.5, "weather": "clear"},
     ),
     (
+        "earth.nakaiy.v1",
+        "earth:nakaiy:h3:abc:surface:2026-01-07T00:00Z",
+        {"period_name": "Mula", "wind": "east", "sea": "rough", "sky": "clear"},
+    ),
+    (
         "space.satellite_pass.v1",
-        "space:satellite_pass:h3:abc:orbital_shell:2026-01-07T12:00Z",
+        "space:satellite_pass:healpix:35632:orbital_shell:2026-01-07T12:00Z",
         {
             "bearing": "NE",
             "first_visible": "2026-01-07T12:00:00Z",
             "last_visible": "2026-01-07T12:05:00Z",
             "max_elevation": 45.0,
         },
+    ),
+    (
+        "space.asteroid_occultation.v1",
+        "space:asteroid_occultation:healpix:33666:sky:2026-01-07T16:00Z",
+        {"asteroid": "9 Metis", "star": "HIP 1000", "disappeared": True},
+    ),
+    (
+        "space.lunar_occultation.v1",
+        "space:lunar_occultation:healpix:35632:sky:2026-01-07T15:00Z",
+        {"star": "Antares", "disappearance_utc": "2026-01-07T15:40:00Z", "seen": True},
+    ),
+    (
+        "earth.sentinel2_scene.v1",
+        "earth:sentinel2_scene:h3:abc:surface:2026-01-07T05:00Z",
+        {"granule": "S2A_T43NCE", "surface": "shore", "ground": "sand and scrub"},
+    ),
+    (
+        "ocean.sentinel2_water.v1",
+        "ocean:sentinel2_water:h3:abc:surface:2026-01-07T05:00Z",
+        {"granule": "S2A_T43NCE", "water": "reef", "clarity": "reef flat visible"},
+    ),
+    (
+        "ocean.sentinel3_olci.v1",
+        "ocean:sentinel3_olci:h3:abc:surface:2026-01-07T06:00Z",
+        {"granule": "S3A_OL_1_EFR", "colour": "blue-green"},
+    ),
+    (
+        "earth.sentinel1_sar.v1",
+        "earth:sentinel1_sar:h3:abc:surface:2026-01-07T23:00Z",
+        {"granule": "S1A_IW_GRDH", "surface": "island", "roughness": "dry shore"},
     ),
 ]
 
@@ -182,6 +217,8 @@ def test_does_not_invent_earth_flood_or_orbital_debris_as_product_ids():
     assert "earth.flood.v1" not in ids
     assert "space.orbital_debris.v1" not in ids
     assert "ocean.coral_bleaching.v1" not in ids
+    assert "earth.rain.v1" not in ids
+    assert "earth.memory.v1" not in ids
 
 
 def test_unknown_yaml_still_404(client: TestClient):

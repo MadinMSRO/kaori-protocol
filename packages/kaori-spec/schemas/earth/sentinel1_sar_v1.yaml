@@ -1,33 +1,31 @@
 # ============================================================================
 # Kaori Protocol — ClaimType Definition
 # ============================================================================
-# Claim:   Satellite Pass (Space Domain)
+# Claim:   Sentinel-1 SAR scene (Earth Domain)
 # Version: 1
 # Status:  DRAFT
 # ============================================================================
+# Planned SAR acquisition over island, shore, or reef. Cloud does not cancel the pass. The claim is the surface as seen.
+# Distinct reporters: three. This floor is explicit.
 
-id: space.satellite_pass.v1
+id: earth.sentinel1_sar.v1
 version: 1
-domain: space
-topic: satellite_pass
+domain: earth
+topic: sentinel1_sar
 
 # ----------------------------------------------------------------------------
 # TruthKey Formation
 # ----------------------------------------------------------------------------
-# Defines how observations are bucketed into discrete truth cells.
-# Space addresses are HEALPix pixels. resolution is NSIDE.
+# Cell the SAR footprint covers. Hour bucket of the planned acquisition. Cloud is not a key.
 truthkey:
-  spatial_system: healpix
-  resolution: 64
-  z_index: orbital_shell
+  spatial_system: h3
+  resolution: 6
+  z_index: surface
   time_bucket: PT1H
 
 # ----------------------------------------------------------------------------
 # Risk Profile
 # ----------------------------------------------------------------------------
-# Determines which verification lane applies (Section 12 of SPEC).
-# - monitor: AI can auto-verify, with transparency flags
-# - critical: Human consensus required before VERIFIED_TRUE
 risk_profile: monitor
 
 # ----------------------------------------------------------------------------
@@ -35,45 +33,44 @@ risk_profile: monitor
 # ----------------------------------------------------------------------------
 ui_schema:
   fields:
-    - name: bearing
+    - name: granule
       type: string
-      label: "Bearing"
+      label: "Granule"
       required: true
-    - name: first_visible
+    - name: surface
       type: string
-      label: "First visible"
+      label: "Island, shore, or reef"
       required: true
-    - name: last_visible
+    - name: roughness
       type: string
-      label: "Last visible"
-      required: true
-    - name: max_elevation
-      type: number
-      label: "Max elevation"
+      label: "What the surface shows"
       required: true
 
 # ----------------------------------------------------------------------------
-# Output Schema (TruthState.claim / observation payload names)
+# Output Schema (TruthState.claim)
 # ----------------------------------------------------------------------------
 output_schema:
   type: object
-  additionalProperties: true
+  additionalProperties: false
+  required:
+    - granule
+    - surface
+    - roughness
   properties:
-    bearing:
+    granule:
       type: string
-    first_visible:
+    surface:
       type: string
-    last_visible:
+    roughness:
       type: string
-    max_elevation:
-      type: number
 
 # ----------------------------------------------------------------------------
 # Evidence Requirements
+
 # ----------------------------------------------------------------------------
 evidence:
   required: true
-  types: ["timing", "bearing"]
+  types: ["photo"]
   min_count: 1
   max_count: 10
   storage:
@@ -117,13 +114,14 @@ ai_validation_routing:
       pass: generalist
   generalist:
     engine: generalist_v1
+    # New field: CLIP/generalist HTTP wait. Was missing (do not use 30s or dispute PT12H).
     timeout: PT2M
-    prompt_context: "Satellite pass observation"
+    prompt_context: "Sentinel-1 SAR. Record the granule, the surface (island, shore, or reef), and what that surface shows. Cloud does not cancel the acquisition, and the plan is not the observation."
     routes:
       high_confidence: accept       # ai_confidence >= 0.82
       low_confidence: specialist
   specialist:
-    engine: satellite_pass_specialist_v1
+    engine: sentinel1_sar_specialist_v1
     routes:
       pass: accept
       fail: human_review
@@ -179,7 +177,7 @@ consensus_model:
 # to determine implicit consensus without requiring explicit votes.
 implicit_consensus:
   enabled: true
-  min_observations: 3              # Need at least 3 independent reports
+  min_observations: 3              # Explicit floor. Three distinct reporters.
   min_network_trust: 50.0          # Sum of reporter standings
   min_ai_confidence: 0.80          # Average AI confidence across observations
   max_ai_variance: 0.15            # Low variance = no contradiction
@@ -279,5 +277,5 @@ credits:
     standard: 1.0
 
 # ============================================================================
-# End of ClaimType: space.satellite_pass.v1
+# End of ClaimType: earth.sentinel1_sar.v1
 # ============================================================================

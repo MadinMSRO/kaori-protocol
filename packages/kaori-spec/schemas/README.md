@@ -10,17 +10,24 @@ schemas/
 │   ├── flood_v1.yaml
 │   ├── coastal_erosion_v1.yaml
 │   ├── infrastructure_v1.yaml
-│   └── vegetation_v1.yaml
+│   ├── vegetation_v1.yaml
+│   ├── nakaiy_v1.yaml
+│   ├── sentinel2_scene_v1.yaml
+│   └── sentinel1_sar_v1.yaml
 ├── ocean/
 │   ├── coral_bleaching_v1.yaml
 │   ├── reef_recovery_v1.yaml
 │   ├── sea_temperature_v1.yaml
-│   └── vessel_anomaly_v1.yaml
+│   ├── vessel_anomaly_v1.yaml
+│   ├── sentinel2_water_v1.yaml
+│   └── sentinel3_olci_v1.yaml
 ├── space/
 │   ├── orbital_debris_v1.yaml
 │   ├── debris_track_v1.yaml
 │   ├── light_pollution_v1.yaml
-│   └── satellite_pass_v1.yaml
+│   ├── satellite_pass_v1.yaml
+│   ├── asteroid_occultation_v1.yaml
+│   └── lunar_occultation_v1.yaml
 └── meta/
     └── claimtype.schema.json    # JSON Schema for validation
 ```

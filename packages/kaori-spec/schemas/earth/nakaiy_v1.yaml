@@ -1,26 +1,28 @@
 # ============================================================================
 # Kaori Protocol — ClaimType Definition
 # ============================================================================
-# Claim:   Satellite Pass (Space Domain)
+# Claim:   Nakaiy check (Earth Domain)
 # Version: 1
 # Status:  DRAFT
 # ============================================================================
+# The observer names the period and records wind, sea, and sky as seen.
+# The output is that comparison. It is not a verdict that tradition failed.
+# Distinct reporters: three. This floor is explicit.
 
-id: space.satellite_pass.v1
+id: earth.nakaiy.v1
 version: 1
-domain: space
-topic: satellite_pass
+domain: earth
+topic: nakaiy
 
 # ----------------------------------------------------------------------------
 # TruthKey Formation
 # ----------------------------------------------------------------------------
-# Defines how observations are bucketed into discrete truth cells.
-# Space addresses are HEALPix pixels. resolution is NSIDE.
+# Island weather. Daily bucket. The period name is a field, not the time key.
 truthkey:
-  spatial_system: healpix
-  resolution: 64
-  z_index: orbital_shell
-  time_bucket: PT1H
+  spatial_system: h3
+  resolution: 6
+  z_index: surface
+  time_bucket: P1D
 
 # ----------------------------------------------------------------------------
 # Risk Profile
@@ -35,45 +37,52 @@ risk_profile: monitor
 # ----------------------------------------------------------------------------
 ui_schema:
   fields:
-    - name: bearing
+    - name: period_name
       type: string
-      label: "Bearing"
+      label: "Nakaiy period"
       required: true
-    - name: first_visible
+    - name: wind
       type: string
-      label: "First visible"
+      label: "Wind, as observed"
       required: true
-    - name: last_visible
+    - name: sea
       type: string
-      label: "Last visible"
+      label: "Sea, as observed"
       required: true
-    - name: max_elevation
-      type: number
-      label: "Max elevation"
+    - name: sky
+      type: string
+      label: "Sky, as observed"
       required: true
 
 # ----------------------------------------------------------------------------
-# Output Schema (TruthState.claim / observation payload names)
+# Output Schema (TruthState.claim)
 # ----------------------------------------------------------------------------
+# Comparison of the named period with wind, sea, and sky as observed.
+# Do not add a boolean that tradition failed or that the period was wrong.
 output_schema:
   type: object
-  additionalProperties: true
+  additionalProperties: false
+  required:
+    - period_name
+    - wind
+    - sea
+    - sky
   properties:
-    bearing:
+    period_name:
       type: string
-    first_visible:
+    wind:
       type: string
-    last_visible:
+    sea:
       type: string
-    max_elevation:
-      type: number
+    sky:
+      type: string
 
 # ----------------------------------------------------------------------------
 # Evidence Requirements
 # ----------------------------------------------------------------------------
 evidence:
   required: true
-  types: ["timing", "bearing"]
+  types: ["photo"]
   min_count: 1
   max_count: 10
   storage:
@@ -117,13 +126,14 @@ ai_validation_routing:
       pass: generalist
   generalist:
     engine: generalist_v1
+    # New field: CLIP/generalist HTTP wait. Was missing (do not use 30s or dispute PT12H).
     timeout: PT2M
-    prompt_context: "Satellite pass observation"
+    prompt_context: "Nakaiy check. Compare the named period with wind, sea, and sky as observed. Do not judge that tradition failed."
     routes:
       high_confidence: accept       # ai_confidence >= 0.82
       low_confidence: specialist
   specialist:
-    engine: satellite_pass_specialist_v1
+    engine: nakaiy_specialist_v1
     routes:
       pass: accept
       fail: human_review
@@ -179,7 +189,7 @@ consensus_model:
 # to determine implicit consensus without requiring explicit votes.
 implicit_consensus:
   enabled: true
-  min_observations: 3              # Need at least 3 independent reports
+  min_observations: 3              # Explicit floor. Three distinct reporters.
   min_network_trust: 50.0          # Sum of reporter standings
   min_ai_confidence: 0.80          # Average AI confidence across observations
   max_ai_variance: 0.15            # Low variance = no contradiction
@@ -279,5 +289,5 @@ credits:
     standard: 1.0
 
 # ============================================================================
-# End of ClaimType: space.satellite_pass.v1
+# End of ClaimType: earth.nakaiy.v1
 # ============================================================================
