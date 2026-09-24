@@ -86,6 +86,36 @@ PRODUCT_CLAIMS = [
             "max_elevation": 45.0,
         },
     ),
+    (
+        "space.asteroid_occultation.v1",
+        "space:asteroid_occultation:h3:abc:sky:2026-01-07T16:00Z",
+        {"asteroid": "9 Metis", "star": "HIP 1000", "disappeared": True},
+    ),
+    (
+        "space.lunar_occultation.v1",
+        "space:lunar_occultation:h3:abc:sky:2026-01-07T15:00Z",
+        {"star": "Antares", "disappearance_utc": "2026-01-07T15:40:00Z", "seen": True},
+    ),
+    (
+        "earth.sentinel2_scene.v1",
+        "earth:sentinel2_scene:h3:abc:surface:2026-01-07T05:00Z",
+        {"granule": "S2A_T43NCE", "surface": "shore", "ground": "sand and scrub"},
+    ),
+    (
+        "ocean.sentinel2_water.v1",
+        "ocean:sentinel2_water:h3:abc:surface:2026-01-07T05:00Z",
+        {"granule": "S2A_T43NCE", "water": "reef", "clarity": "reef flat visible"},
+    ),
+    (
+        "ocean.sentinel3_olci.v1",
+        "ocean:sentinel3_olci:h3:abc:surface:2026-01-07T06:00Z",
+        {"granule": "S3A_OL_1_EFR", "colour": "blue-green"},
+    ),
+    (
+        "earth.sentinel1_sar.v1",
+        "earth:sentinel1_sar:h3:abc:surface:2026-01-07T23:00Z",
+        {"granule": "S1A_IW_GRDH", "surface": "island", "roughness": "dry shore"},
+    ),
 ]
 
 
