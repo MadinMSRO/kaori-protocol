@@ -17,7 +17,7 @@ topic: flood
 # Defines how observations are bucketed into discrete truth cells.
 truthkey:
   spatial_system: h3
-  resolution: 8                    # ~460m hexagons (neighborhood level)
+  resolution: 10                   # ~66m hexagons (street / building block)
   z_index: surface
   time_bucket: PT1H                # 1-hour buckets
 
