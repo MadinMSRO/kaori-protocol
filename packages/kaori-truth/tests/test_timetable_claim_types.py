@@ -161,7 +161,7 @@ def test_space_contracts_use_healpix_and_the_lock_matches_the_files():
     locked = lock["locked"]
     expected = [
         f"packages/kaori-spec/schemas/{name}"
-        for name in (*TYPES, *SPACE_SPATIAL_FIXES, "earth/nakaiy_v1.yaml")
+        for name in (*TYPES, *SPACE_SPATIAL_FIXES, "earth/nakaiy_v1.yaml", "earth/flood_water_v1.yaml")
     ]
     assert set(locked) == set(expected)
     for rel in expected:

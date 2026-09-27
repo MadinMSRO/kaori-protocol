@@ -7,7 +7,8 @@ This directory contains **ClaimType YAML contracts** that define validation rule
 ```
 schemas/
 ├── earth/
-│   ├── flood_v1.yaml
+│   ├── flood_v1.yaml            # Open Core example (no output_schema)
+│   ├── flood_water_v1.yaml      # product flood contract (Liminal)
 │   ├── coastal_erosion_v1.yaml
 │   ├── infrastructure_v1.yaml
 │   ├── vegetation_v1.yaml

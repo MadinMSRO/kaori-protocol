@@ -15,6 +15,11 @@ TOKEN = "valid-supabase-token"
 
 PRODUCT_CLAIMS = [
     (
+        "earth.flood_water.v1",
+        "earth:flood_water:h3:886142a8e7fffff:surface:2026-01-07T12:00Z",
+        {"water_level_cm": 30, "flow_velocity": "slow", "affected_structures": True},
+    ),
+    (
         "earth.coastal_erosion.v1",
         "earth:coastal_erosion:h3:abc:surface:2026-01-07T00:00Z",
         {"recession_m": 1.5, "scarp_present": True, "stake_readings": [0.1, 0.2]},
