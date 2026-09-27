@@ -5,9 +5,11 @@
 # Version: 1
 # Status:  RELEASED (Immutable — changes require v2)
 #
-# The product contract for reported flood water (Liminal). Same rules as the
-# Open Core example earth.flood.v1, plus an output_schema so a compiled
-# TruthState carries the claim. earth.flood.v1 stays the Open Core example.
+# The product contract for reported flood water (Liminal): presence or
+# absence of flood water in a hexagon-hour, and how far it reaches. Same
+# rules as the Open Core example earth.flood.v1 (which stays unchanged), with
+# its own fields and an output_schema so a compiled TruthState carries the
+# claim.
 # ============================================================================
 
 id: earth.flood_water.v1
@@ -36,41 +38,42 @@ risk_profile: critical             # Floods are high-stakes; require human gate
 # ----------------------------------------------------------------------------
 # UI Schema (for MissionHub / Field Apps)
 # ----------------------------------------------------------------------------
+# A presence/absence and extent claim: is there flood water here, and how far
+# does it reach. "No water" is a real report, not a missing one.
 ui_schema:
   fields:
-    - name: water_level_cm
-      type: number
-      label: "Water Level (cm)"
-      required: true
-      validation:
-        min: 0
-        max: 500
-    - name: flow_velocity
-      type: select
-      label: "Flow Velocity"
-      required: false
-      options: ["still", "slow", "moderate", "fast", "torrential"]
-    - name: affected_structures
+    - name: water_present
       type: boolean
-      label: "Are buildings/roads affected?"
-      required: false
+      label: "Is there flood water here?"
+      required: true
+    - name: extent
+      type: select
+      label: "How far does the water reach?"
+      required: true
+      options: ["none", "patches", "street", "block", "widespread"]
+      # none:       no standing flood water
+      # patches:    scattered pools, the way is still passable
+      # street:     water across the street or path where you stand
+      # block:      water across several streets around you
+      # widespread: water as far as you can see
 
 # ----------------------------------------------------------------------------
 # Output Schema (TruthState.claim)
 # ----------------------------------------------------------------------------
 # Claim keys come only from these properties (kaori-truth claim derivation).
+# Both are consensus values across reporters, weighted by trust.
 output_schema:
   type: object
   additionalProperties: false
   required:
-    - water_level_cm
+    - water_present
+    - extent
   properties:
-    water_level_cm:
-      type: number
-    flow_velocity:
-      type: string
-    affected_structures:
+    water_present:
       type: boolean
+    extent:
+      type: string
+      enum: ["none", "patches", "street", "block", "widespread"]
 
 # ----------------------------------------------------------------------------
 # Evidence Requirements

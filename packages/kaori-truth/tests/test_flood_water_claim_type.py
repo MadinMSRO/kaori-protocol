@@ -1,7 +1,8 @@
 """earth.flood_water.v1: the product flood contract (Liminal).
 
-Same rules as the Open Core example earth.flood.v1, plus an output_schema,
-so a compiled TruthState carries the reported flood. earth.flood.v1 keeps
+A presence/absence and extent claim with the same rules as the Open Core
+example earth.flood.v1, plus an output_schema, so a compiled TruthState
+carries the reported flood. earth.flood.v1 keeps
 failing compile by design (test_claim_derivation).
 """
 from __future__ import annotations
@@ -37,7 +38,8 @@ def test_flood_water_keeps_the_flood_rules_and_adds_the_claim():
     water.validate_domain_config()
     fields = [f["name"] for f in water.get_config()["ui_schema"]["fields"]]
     assert list(water.output_schema["properties"]) == fields
-    assert water.output_schema["required"] == ["water_level_cm"]
+    assert water.output_schema["required"] == ["water_present", "extent"]
+    assert "water_level_cm" not in water.output_schema["properties"]
     assert flood.output_schema is None
 
 
@@ -56,7 +58,7 @@ def test_flood_water_truthkey_is_the_hexagon_and_the_hour():
     assert parse_truthkey(key).topic == "flood_water"
 
 
-def _observation(n: int, level: float) -> Observation:
+def _observation(n: int, present: bool, extent: str) -> Observation:
     return Observation(
         observation_id=UUID(f"{n:08d}-1111-1111-1111-111111111111"),
         claim_type="earth.flood_water.v1",
@@ -64,15 +66,13 @@ def _observation(n: int, level: float) -> Observation:
         reporter_id=f"user:reporter-{n}",
         reporter_context=ReporterContext(standing=Standing.SILVER, trust_score=0.75, source_type="human"),
         geo=MALE,
-        payload={"water_level_cm": level, "flow_velocity": "slow", "affected_structures": True},
+        payload={"water_present": present, "extent": extent},
         evidence_refs=[EvidenceRef(uri=f"gs://kaori-evidence/flood-{n}.jpg", sha256=f"{n}" * 64)],
     )
 
 
-def test_three_reports_compile_to_a_flood_claim_deterministically():
-    water = _load()
-    observations = [_observation(1, 30.0), _observation(2, 35.0), _observation(3, 25.0)]
-    trust = TrustSnapshot.create(
+def _trust(observations):
+    return TrustSnapshot.create(
         snapshot_id="snapshot-flood-water",
         snapshot_time=EVENT,
         agent_trusts={
@@ -80,20 +80,30 @@ def test_three_reports_compile_to_a_flood_claim_deterministically():
             for o in observations
         },
     )
-    key = "earth:flood_water:h3:886142a8e7fffff:surface:2026-09-27T08:00Z"
-    run = lambda: compile_truth_state(  # noqa: E731
+
+
+def _compile(observations):
+    water = _load()
+    return compile_truth_state(
         claim_type=water,
-        truth_key=key,
+        truth_key="earth:flood_water:h3:886142a8e7fffff:surface:2026-09-27T08:00Z",
         observations=observations,
-        trust_snapshot=trust,
+        trust_snapshot=_trust(observations),
         policy_version=water.policy_version,
         compile_time=EVENT,
     )
-    first, second = run(), run()
-    assert set(first.claim) == {"water_level_cm", "flow_velocity", "affected_structures"}
-    assert 25.0 <= first.claim["water_level_cm"] <= 35.0
-    assert first.claim["flow_velocity"] == "slow"
-    assert first.claim["affected_structures"] is True
+
+
+def test_three_reports_compile_to_a_flood_claim_deterministically():
+    observations = [_observation(1, True, "street"), _observation(2, True, "street"), _observation(3, True, "block")]
+    first, second = _compile(observations), _compile(observations)
+    assert first.claim == {"water_present": True, "extent": "street"}
     # critical: never verified without a human vote
     assert first.status.value != "VERIFIED_TRUE"
     assert first.security.semantic_hash == second.security.semantic_hash
+
+
+def test_absence_is_a_claim_too():
+    observations = [_observation(1, False, "none"), _observation(2, False, "none"), _observation(3, True, "patches")]
+    state = _compile(observations)
+    assert state.claim == {"water_present": False, "extent": "none"}

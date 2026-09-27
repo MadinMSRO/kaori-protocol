@@ -17,7 +17,7 @@ PRODUCT_CLAIMS = [
     (
         "earth.flood_water.v1",
         "earth:flood_water:h3:886142a8e7fffff:surface:2026-01-07T12:00Z",
-        {"water_level_cm": 30, "flow_velocity": "slow", "affected_structures": True},
+        {"water_present": True, "extent": "street"},
     ),
     (
         "earth.coastal_erosion.v1",
