@@ -9,6 +9,7 @@ schemas/
 ├── earth/
 │   ├── flood_v1.yaml            # Open Core example (no output_schema)
 │   ├── flood_water_v1.yaml      # product flood contract (Liminal)
+│   ├── sky_cover_v1.yaml        # cloud cover and rain, doable anywhere (Liminal)
 │   ├── coastal_erosion_v1.yaml
 │   ├── infrastructure_v1.yaml
 │   ├── vegetation_v1.yaml

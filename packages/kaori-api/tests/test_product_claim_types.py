@@ -20,6 +20,11 @@ PRODUCT_CLAIMS = [
         {"water_present": True, "extent": "street"},
     ),
     (
+        "earth.sky_cover.v1",
+        "earth:sky_cover:h3:883f6e36d3fffff:surface:2026-10-05T09:00Z",
+        {"cover": "few", "raining": False},
+    ),
+    (
         "earth.coastal_erosion.v1",
         "earth:coastal_erosion:h3:abc:surface:2026-01-07T00:00Z",
         {"recession_m": 1.5, "scarp_present": True, "stake_readings": [0.1, 0.2]},
