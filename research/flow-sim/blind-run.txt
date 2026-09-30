@@ -1,0 +1,18 @@
+                                right  wrong  worst  stuck   AUC           cabal           ring        sleeper        patient           calm
+seed, validators see claims      0.88  0.015  0.034   0.06  0.86      0.65/0.013     0.86/0.012     0.95/0.025     0.97/0.023     0.96/0.003
+seed, blind validators           0.87  0.012  0.033   0.06  0.88      0.63/0.014     0.84/0.005     0.94/0.024     0.97/0.020     0.96/0.000
+blind, no realness flags         0.87  0.013  0.034   0.07  0.88      0.62/0.013     0.85/0.005     0.94/0.026     0.97/0.020     0.95/0.000
+
+### validator standing (log-odds) and fake-spotting learned, per scenario
+  old   cabal (co-evolved) validators {'diligent0': 3.57, 'diligent1': 2.57, 'hasty': 2.1, 'bribed': 1.78}
+  old   ring               validators {'diligent0': 3.25, 'diligent1': 3.47, 'hasty': 2.32, 'bribed': 1.37}
+  old   sleeper + theft    validators {'diligent0': 3.44, 'diligent1': 4.38, 'hasty': 4.27, 'bribed': 3.68}
+  old   patient scatterers validators {'diligent0': 3.86, 'diligent1': 4.18, 'hasty': 3.66, 'bribed': 3.44}
+  old   calm               validators {'diligent0': 3.97, 'diligent1': 3.74, 'hasty': 3.88, 'bribed': 4.09}
+  blind cabal (co-evolved) validators {'diligent0': 3.2, 'diligent1': 2.76, 'hasty': 0.69, 'bribed': 1.69}
+  blind ring               validators {'diligent0': 3.19, 'diligent1': 3.85, 'hasty': 0.73, 'bribed': 1.98}
+  blind sleeper + theft    validators {'diligent0': 3.55, 'diligent1': 3.51, 'hasty': 0.88, 'bribed': 3.39}
+  blind patient scatterers validators {'diligent0': 3.77, 'diligent1': 4.02, 'hasty': 0.9, 'bribed': 3.18}
+  blind calm               validators {'diligent0': 3.83, 'diligent1': 4.46, 'hasty': 0.53, 'bribed': 3.78}
+
+31s

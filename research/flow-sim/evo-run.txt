@@ -1,0 +1,76 @@
+
+### evolution run 1
+gen  0  best 0.683  right 0.55 wrong 0.016 auc 0.97  replicator margin phase linear both none critical
+gen  1  best 0.720  right 0.55 wrong 0.013 auc 1.00  replicator margin phase linear both none critical
+gen  2  best 0.761  right 0.56 wrong 0.010 auc 1.00  replicator margin phase linear both none critical
+gen  3  best 0.737  right 0.56 wrong 0.012 auc 1.00  magnet margin phase linear both none critical
+gen  4  best 0.751  right 0.57 wrong 0.012 auc 1.00  replicator margin boltzmann power flocking none critical
+gen  5  best 0.772  right 0.57 wrong 0.009 auc 0.97  replicator flat phase linear both none critical
+gen  6  best 0.722  right 0.57 wrong 0.014 auc 0.98  replicator margin boltzmann linear both none critical
+gen  7  best 0.718  right 0.55 wrong 0.012 auc 0.96  replicator flat phase linear both none critical
+gen  8  best 0.749  right 0.56 wrong 0.011 auc 1.00  magnet margin boltzmann linear both continuity critical
+gen  9  best 0.811  right 0.60 wrong 0.009 auc 1.00  magnet margin boltzmann linear both continuity critical
+gen 10  best 0.741  right 0.54 wrong 0.009 auc 0.97  replicator flat boltzmann linear both none critical
+gen 11  best 0.719  right 0.55 wrong 0.013 auc 1.00  replicator surprise boltzmann linear flocking continuity critical
+gen 12  best 0.770  right 0.56 wrong 0.009 auc 1.00  replicator flat boltzmann linear both none critical
+gen 13  best 0.746  right 0.53 wrong 0.009 auc 1.00  replicator surprise boltzmann linear both continuity critical
+gen 14  best 0.788  right 0.55 wrong 0.006 auc 0.98  replicator flat boltzmann linear both continuity critical
+gen 15  best 0.790  right 0.60 wrong 0.011 auc 1.00  replicator flat boltzmann linear both continuity critical
+gen 16  best 0.794  right 0.56 wrong 0.007 auc 1.00  replicator flat boltzmann linear both continuity critical
+gen 17  best 0.770  right 0.55 wrong 0.008 auc 1.00  replicator surprise boltzmann linear both continuity critical
+
+### evolution run 2
+gen  0  best 0.657  right 0.59 wrong 0.023 auc 1.00  bayes margin power power both none critical
+gen  1  best 0.667  right 0.53 wrong 0.016 auc 1.00  additive flat boltzmann linear both none critical
+gen  2  best 0.797  right 0.59 wrong 0.009 auc 1.00  additive flat boltzmann linear both none critical
+gen  3  best 0.711  right 0.58 wrong 0.015 auc 0.95  replicator margin boltzmann linear both none critical
+gen  4  best 0.721  right 0.49 wrong 0.007 auc 1.00  replicator margin boltzmann linear both continuity critical
+gen  5  best 0.790  right 0.56 wrong 0.007 auc 1.00  replicator flat boltzmann linear both none critical
+gen  6  best 0.761  right 0.55 wrong 0.009 auc 0.99  replicator margin phase linear both none critical
+gen  7  best 0.735  right 0.55 wrong 0.011 auc 0.97  replicator flat boltzmann power both none critical
+gen  8  best 0.780  right 0.57 wrong 0.009 auc 1.00  replicator margin boltzmann linear both none critical
+gen  9  best 0.828  right 0.61 wrong 0.007 auc 0.98  replicator margin boltzmann power both none critical
+gen 10  best 0.781  right 0.55 wrong 0.007 auc 1.00  replicator margin boltzmann power both none critical
+gen 11  best 0.767  right 0.56 wrong 0.009 auc 0.98  replicator margin boltzmann power both none critical
+gen 12  best 0.747  right 0.57 wrong 0.011 auc 0.94  replicator margin boltzmann power both none critical
+gen 13  best 0.733  right 0.59 wrong 0.015 auc 0.97  replicator margin boltzmann linear both none critical
+gen 14  best 0.733  right 0.57 wrong 0.014 auc 1.00  replicator surprise boltzmann power both none critical
+gen 15  best 0.739  right 0.56 wrong 0.011 auc 0.98  replicator margin boltzmann power both none critical
+gen 16  best 0.759  right 0.58 wrong 0.011 auc 0.96  replicator margin boltzmann power flocking none critical
+gen 17  best 0.817  right 0.58 wrong 0.007 auc 1.00  replicator surprise boltzmann power both none critical
+
+### held-out harsh worlds (6 x 400 h, bigger ring and swarm, faster whitewashing)
+
+today           fit -4.538 | right 0.39 wrong 0.483 stuck 0.05 undecided 0.08 honest-hurt 0.429 AUC 0.37
+   laws: dyn=additive, couple=flat, weight=phase, evidence=flatmean, topo=none, field=none, nucleate=none | alpha=0.15, beta=0.00, gamma=1.00, T=200.00, k=1.00, lam=0.00, kappa=1.00, mu=0.00, J=0.00, tau=6.00
+   standing: careful 335 sloppy 11 lazy 0 liar 2 faker 27 ring 1000 sybil 434 infiltrator 367 | wrong truths won by: {"ring": 1318, "sybil": 1083, "faker": 194, "liar": 95, "infiltrator": 174}
+
+hand-built law  fit -4.639 | right 0.38 wrong 0.500 stuck 0.08 undecided 0.04 honest-hurt 0.288 AUC 0.41
+   laws: dyn=pheromone, couple=margin, weight=linear, evidence=linear, topo=none, field=none, nucleate=critical | alpha=0.15, beta=0.02, gamma=1.00, T=200.00, k=1.00, lam=0.00, kappa=1.00, mu=0.00, J=0.00, tau=6.00
+   standing: careful 682 sloppy 205 lazy 38 liar 1 faker 45 ring 1000 sybil 362 infiltrator 689 | wrong truths won by: {"ring": 1328, "sybil": 1169, "faker": 199, "liar": 97, "infiltrator": 171}
+
+evolved 1       fit 0.615 | right 0.45 wrong 0.013 stuck 0.27 undecided 0.27 honest-hurt 0.004 AUC 0.99
+   laws: dyn=replicator, couple=surprise, weight=boltzmann, evidence=linear, topo=both, field=continuity, nucleate=critical | alpha=0.56, beta=0.01, gamma=0.73, T=98.01, k=1.84, lam=1.27, kappa=1.35, mu=2.75, J=0.51, tau=7.30
+   standing: careful 978 sloppy 511 lazy 53 liar 24 faker 28 ring 122 sybil 193 infiltrator 31 | wrong truths won by: {"ring": 16, "sybil": 21, "faker": 6, "infiltrator": 13, "liar": 10}
+
+evolved 2       fit 0.617 | right 0.47 wrong 0.014 stuck 0.24 undecided 0.28 honest-hurt 0.005 AUC 0.99
+   laws: dyn=replicator, couple=surprise, weight=boltzmann, evidence=linear, topo=both, field=continuity, nucleate=critical | alpha=0.60, beta=0.02, gamma=0.50, T=42.73, k=3.08, lam=1.83, kappa=1.75, mu=2.93, J=0.62, tau=4.20
+   standing: careful 948 sloppy 426 lazy 77 liar 38 faker 42 ring 154 sybil 197 infiltrator 50 | wrong truths won by: {"ring": 16, "sybil": 23, "faker": 6, "infiltrator": 14, "liar": 8}
+
+evolved 3       fit 0.627 | right 0.45 wrong 0.011 stuck 0.28 undecided 0.26 honest-hurt 0.003 AUC 0.98
+   laws: dyn=replicator, couple=surprise, weight=boltzmann, evidence=linear, topo=both, field=continuity, nucleate=critical | alpha=0.49, beta=0.02, gamma=0.50, T=98.01, k=2.72, lam=1.27, kappa=1.72, mu=3.56, J=0.51, tau=7.30
+   standing: careful 960 sloppy 442 lazy 77 liar 39 faker 44 ring 151 sybil 196 infiltrator 49 | wrong truths won by: {"ring": 14, "sybil": 23, "faker": 6, "infiltrator": 14, "liar": 9}
+
+evolved 4       fit 0.617 | right 0.48 wrong 0.015 stuck 0.22 undecided 0.28 honest-hurt 0.004 AUC 0.96
+   laws: dyn=replicator, couple=surprise, weight=boltzmann, evidence=power, topo=both, field=none, nucleate=critical | alpha=0.60, beta=0.04, gamma=0.63, T=40.00, k=0.95, lam=1.15, kappa=2.14, mu=4.00, J=1.48, tau=24.00
+   standing: careful 861 sloppy 377 lazy 97 liar 58 faker 63 ring 172 sybil 198 infiltrator 69 | wrong truths won by: {"ring": 17, "sybil": 30, "faker": 6, "infiltrator": 17, "liar": 10}
+
+evolved 5       fit 0.623 | right 0.48 wrong 0.014 stuck 0.23 undecided 0.28 honest-hurt 0.003 AUC 0.96
+   laws: dyn=replicator, couple=surprise, weight=boltzmann, evidence=power, topo=both, field=none, nucleate=critical | alpha=0.44, beta=0.05, gamma=0.98, T=60.96, k=0.78, lam=2.56, kappa=1.76, mu=3.53, J=1.48, tau=24.00
+   standing: careful 662 sloppy 295 lazy 128 liar 84 faker 91 ring 184 sybil 199 infiltrator 99 | wrong truths won by: {"ring": 18, "sybil": 31, "faker": 6, "infiltrator": 19, "liar": 9}
+
+evolved 6       fit 0.621 | right 0.49 wrong 0.016 stuck 0.20 undecided 0.29 honest-hurt 0.003 AUC 0.96
+   laws: dyn=replicator, couple=surprise, weight=boltzmann, evidence=power, topo=both, field=none, nucleate=critical | alpha=0.60, beta=0.04, gamma=1.80, T=40.00, k=0.89, lam=2.58, kappa=1.77, mu=2.62, J=2.05, tau=24.00
+   standing: careful 834 sloppy 366 lazy 101 liar 62 faker 67 ring 175 sybil 198 infiltrator 73 | wrong truths won by: {"ring": 17, "sybil": 30, "faker": 6, "infiltrator": 17, "liar": 10}
+
+42s

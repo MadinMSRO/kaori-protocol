@@ -1,0 +1,47 @@
+evolved no bonds (points only)  : a0=0.802, b0=5.487, tau=0.955, kappa=0.715, lam=0.002
+evolved emergent bonds          : a0=3.998, b0=3.995, tau=0.940, kappa=0.264, lam=0.008
+
+### fresh worlds, full attack suite
+                            right  wrong  worst  stuck   AUC
+no bonds (points only)       0.00  0.000  0.000   1.00  0.50
+emergent bonds               0.46  0.017  0.048   0.52  0.82
+
+### the shape that emerged (emergent bonds, one fresh world per scenario)
+
+[cabal (co-evolved)] right 0.16 wrong 0.013  components b0=1 of 22
+  bonds: ring-ring 0.769, ring-stolen 0.769, faker-ring 0.181, faker-stolen 0.181, lazy-sloppy 0.131, lazy-liar 0.118
+  fused: [[('ring', 8), ('stolen', 1)]]
+  standing: {'ring': 2.24, 'stolen': 2.24, 'careful': 3.41, 'faker': 1.82, 'lazy': 2.37, 'liar': 1.65, 'sloppy': 3.11}
+
+[cabal 2] right 0.16 wrong 0.013  components b0=1 of 22
+  bonds: ring-ring 0.769, ring-stolen 0.769, faker-ring 0.181, faker-stolen 0.181, lazy-sloppy 0.131, lazy-liar 0.118
+  fused: [[('ring', 8), ('stolen', 1)]]
+  standing: {'ring': 2.24, 'stolen': 2.24, 'careful': 3.41, 'faker': 1.82, 'lazy': 2.37, 'liar': 1.65, 'sloppy': 3.11}
+
+[cabal 3] right 0.16 wrong 0.013  components b0=1 of 22
+  bonds: ring-ring 0.769, ring-stolen 0.769, faker-ring 0.181, faker-stolen 0.181, lazy-sloppy 0.131, lazy-liar 0.118
+  fused: [[('ring', 8), ('stolen', 1)]]
+  standing: {'ring': 2.24, 'stolen': 2.24, 'careful': 3.41, 'faker': 1.82, 'lazy': 2.37, 'liar': 1.65, 'sloppy': 3.11}
+
+[ring] right 0.41 wrong 0.008  components b0=1 of 17
+  bonds: ring-ring 0.833, sloppy-sloppy 0.21, faker-ring 0.202, careful-liar 0.128, faker-liar 0.123, careful-careful 0.115
+  fused: [[('ring', 3)]]
+  standing: {'ring': 1.56, 'careful': 3.87, 'faker': 1.67, 'lazy': 2.37, 'liar': 1.15, 'sloppy': 3.42}
+
+[sleeper + theft] right 0.76 wrong 0.038  components b0=1 of 18
+  bonds: ring-ring 0.601, careful-ring 0.273, faker-lazy 0.165, sloppy-sloppy 0.146, liar-sloppy 0.1, careful-careful 0.084
+  fused: [[('careful', 2), ('ring', 4)]]
+  standing: {'ring': 4.45, 'careful': 4.0, 'faker': 1.21, 'lazy': 1.9, 'liar': 1.08, 'sloppy': 3.13}
+
+[patient scatterers] right 0.89 wrong 0.023  components b0=1 of 20
+  bonds: ring-ring 0.368, liar-liar 0.258, faker-lazy 0.229, faker-ring 0.128, faker-liar 0.117, liar-ring 0.1
+  fused: []
+  standing: {'ring': 5.01, 'careful': 4.3, 'faker': 1.47, 'lazy': 2.15, 'liar': 0.71, 'sloppy': 3.0}
+
+[calm] right 0.62 wrong 0.000  components b0=1 of 14
+  bonds: careful-sloppy 0.12, careful-careful 0.113, lazy-lazy 0.113, careful-lazy 0.09, careful-liar 0.087, sloppy-sloppy 0.084
+  fused: []
+  standing: {'careful': 3.94, 'faker': 1.24, 'lazy': 2.1, 'liar': 1.17, 'sloppy': 3.1}
+
+90s
+exit 0

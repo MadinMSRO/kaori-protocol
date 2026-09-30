@@ -1,0 +1,386 @@
+[
+ [
+  "today",
+  {
+   "dyn": "additive",
+   "couple": "flat",
+   "weight": "phase",
+   "evidence": "flatmean",
+   "topo": "none",
+   "nucleate": "none",
+   "field": "none",
+   "alpha": 0.15,
+   "beta": 0.0,
+   "gamma": 1.0,
+   "T": 200.0,
+   "k": 1.0,
+   "lam": 0.0,
+   "kappa": 1.0,
+   "mu": 0.0,
+   "J": 0.0,
+   "tau": 6.0
+  },
+  {
+   "right": 0.39242758604884526,
+   "wrong": 0.48272081987515136,
+   "stuck": 0.0474516439164883,
+   "undecided": 0.07739995015951512,
+   "hurt": 0.42916290381449373,
+   "auc": 0.3703703703703704,
+   "tiers": {
+    "careful": 335,
+    "sloppy": 11,
+    "lazy": 0,
+    "liar": 2,
+    "faker": 27,
+    "ring": 1000,
+    "sybil": 434,
+    "infiltrator": 367
+   },
+   "won": {
+    "ring": 1318,
+    "sybil": 1083,
+    "faker": 194,
+    "liar": 95,
+    "infiltrator": 174
+   },
+   "fit": -4.538250953498804
+  }
+ ],
+ [
+  "hand-built law",
+  {
+   "dyn": "pheromone",
+   "couple": "margin",
+   "weight": "linear",
+   "evidence": "linear",
+   "topo": "none",
+   "nucleate": "critical",
+   "field": "none",
+   "alpha": 0.15,
+   "beta": 0.02,
+   "gamma": 1.0,
+   "T": 200.0,
+   "k": 1.0,
+   "lam": 0.0,
+   "kappa": 1.0,
+   "mu": 0.0,
+   "J": 0.0,
+   "tau": 6.0
+  },
+  {
+   "right": 0.3828868758398026,
+   "wrong": 0.5000978804689563,
+   "stuck": 0.07754189879927582,
+   "undecided": 0.039473344891965294,
+   "hurt": 0.28835989640480275,
+   "auc": 0.40972222222222227,
+   "tiers": {
+    "careful": 682,
+    "sloppy": 205,
+    "lazy": 38,
+    "liar": 1,
+    "faker": 45,
+    "ring": 1000,
+    "sybil": 362,
+    "infiltrator": 689
+   },
+   "won": {
+    "ring": 1328,
+    "sybil": 1169,
+    "faker": 199,
+    "liar": 97,
+    "infiltrator": 171
+   },
+   "fit": -4.639355210385495
+  }
+ ],
+ [
+  "evolved 1",
+  {
+   "dyn": "replicator",
+   "couple": "surprise",
+   "weight": "boltzmann",
+   "evidence": "linear",
+   "topo": "both",
+   "field": "continuity",
+   "nucleate": "critical",
+   "alpha": 0.5561825068260511,
+   "beta": 0.01070628926962146,
+   "gamma": 0.7319630110875044,
+   "T": 98.0076143207522,
+   "k": 1.8364939300874865,
+   "lam": 1.2658787331114154,
+   "kappa": 1.3454587258675101,
+   "mu": 2.75254651513859,
+   "J": 0.5101679108136911,
+   "tau": 7.3017588433528795
+  },
+  {
+   "right": 0.45189459756522526,
+   "wrong": 0.013178954111056122,
+   "stuck": 0.26613111291908487,
+   "undecided": 0.2687953354046337,
+   "hurt": 0.0038586966471054625,
+   "auc": 0.9907407407407408,
+   "tiers": {
+    "careful": 978,
+    "sloppy": 511,
+    "lazy": 53,
+    "liar": 24,
+    "faker": 28,
+    "ring": 122,
+    "sybil": 193,
+    "infiltrator": 31
+   },
+   "won": {
+    "ring": 16,
+    "sybil": 21,
+    "faker": 6,
+    "infiltrator": 13,
+    "liar": 10
+   },
+   "fit": 0.6153979303533335
+  }
+ ],
+ [
+  "evolved 2",
+  {
+   "dyn": "replicator",
+   "couple": "surprise",
+   "weight": "boltzmann",
+   "evidence": "linear",
+   "topo": "both",
+   "field": "continuity",
+   "nucleate": "critical",
+   "alpha": 0.6,
+   "beta": 0.021047839653825236,
+   "gamma": 0.5,
+   "T": 42.72670399409824,
+   "k": 3.0821093838836098,
+   "lam": 1.8304350841807528,
+   "kappa": 1.753019010085331,
+   "mu": 2.927172149869182,
+   "J": 0.6194019370563285,
+   "tau": 4.196253979316267
+  },
+  {
+   "right": 0.4650498594325361,
+   "wrong": 0.014251394571042339,
+   "stuck": 0.2438447473411475,
+   "undecided": 0.2768539986552741,
+   "hurt": 0.004543813121243706,
+   "auc": 0.9884259259259259,
+   "tiers": {
+    "careful": 948,
+    "sloppy": 426,
+    "lazy": 77,
+    "liar": 38,
+    "faker": 42,
+    "ring": 154,
+    "sybil": 197,
+    "infiltrator": 50
+   },
+   "won": {
+    "ring": 16,
+    "sybil": 23,
+    "faker": 6,
+    "infiltrator": 14,
+    "liar": 8
+   },
+   "fit": 0.6167917849392686
+  }
+ ],
+ [
+  "evolved 3",
+  {
+   "dyn": "replicator",
+   "couple": "surprise",
+   "weight": "boltzmann",
+   "evidence": "linear",
+   "topo": "both",
+   "field": "continuity",
+   "nucleate": "critical",
+   "alpha": 0.49208352312972,
+   "beta": 0.016570228997814976,
+   "gamma": 0.5,
+   "T": 98.0076143207522,
+   "k": 2.7206756212909653,
+   "lam": 1.2658787331114154,
+   "kappa": 1.7244745903690228,
+   "mu": 3.5642103351001264,
+   "J": 0.5101679108136911,
+   "tau": 7.3017588433528795
+  },
+  {
+   "right": 0.44836517696198785,
+   "wrong": 0.011466521307252056,
+   "stuck": 0.28271424037522436,
+   "undecided": 0.2574540613555358,
+   "hurt": 0.002617810500336456,
+   "auc": 0.9814814814814815,
+   "tiers": {
+    "careful": 960,
+    "sloppy": 442,
+    "lazy": 77,
+    "liar": 39,
+    "faker": 44,
+    "ring": 151,
+    "sybil": 196,
+    "infiltrator": 49
+   },
+   "won": {
+    "ring": 14,
+    "sybil": 23,
+    "faker": 6,
+    "infiltrator": 14,
+    "liar": 9
+   },
+   "fit": 0.6268355030837436
+  }
+ ],
+ [
+  "evolved 4",
+  {
+   "dyn": "replicator",
+   "couple": "surprise",
+   "weight": "boltzmann",
+   "evidence": "power",
+   "topo": "both",
+   "field": "none",
+   "nucleate": "critical",
+   "alpha": 0.6,
+   "beta": 0.037184275568875755,
+   "gamma": 0.6340016445300298,
+   "T": 40.0,
+   "k": 0.9492418433506806,
+   "lam": 1.154038666773686,
+   "kappa": 2.141804602401442,
+   "mu": 4.0,
+   "J": 1.4846138753518947,
+   "tau": 24.0
+  },
+  {
+   "right": 0.48414562362765107,
+   "wrong": 0.01533672802016064,
+   "stuck": 0.21780395908239392,
+   "undecided": 0.28271368926979434,
+   "hurt": 0.0035651557498868718,
+   "auc": 0.960648148148148,
+   "tiers": {
+    "careful": 861,
+    "sloppy": 377,
+    "lazy": 97,
+    "liar": 58,
+    "faker": 63,
+    "ring": 172,
+    "sybil": 198,
+    "infiltrator": 69
+   },
+   "won": {
+    "ring": 17,
+    "sybil": 30,
+    "faker": 6,
+    "infiltrator": 17,
+    "liar": 10
+   },
+   "fit": 0.6171902099955456
+  }
+ ],
+ [
+  "evolved 5",
+  {
+   "dyn": "replicator",
+   "couple": "surprise",
+   "weight": "boltzmann",
+   "evidence": "power",
+   "topo": "both",
+   "field": "none",
+   "nucleate": "critical",
+   "alpha": 0.4439212228274923,
+   "beta": 0.04679380017022072,
+   "gamma": 0.9808601659656588,
+   "T": 60.95525302395889,
+   "k": 0.7776670535514614,
+   "lam": 2.5633678708367196,
+   "kappa": 1.759710203284896,
+   "mu": 3.5254641167744727,
+   "J": 1.4768699627922348,
+   "tau": 24.0
+  },
+  {
+   "right": 0.4771865914951801,
+   "wrong": 0.014052049853349407,
+   "stuck": 0.23156013884383456,
+   "undecided": 0.27720121980763596,
+   "hurt": 0.0031732569692509032,
+   "auc": 0.960648148148148,
+   "tiers": {
+    "careful": 662,
+    "sloppy": 295,
+    "lazy": 128,
+    "liar": 84,
+    "faker": 91,
+    "ring": 184,
+    "sybil": 199,
+    "infiltrator": 99
+   },
+   "won": {
+    "ring": 18,
+    "sybil": 31,
+    "faker": 6,
+    "infiltrator": 19,
+    "liar": 9
+   },
+   "fit": 0.623273908921505
+  }
+ ],
+ [
+  "evolved 6",
+  {
+   "dyn": "replicator",
+   "couple": "surprise",
+   "weight": "boltzmann",
+   "evidence": "power",
+   "topo": "both",
+   "field": "none",
+   "nucleate": "critical",
+   "alpha": 0.6,
+   "beta": 0.04091524812599133,
+   "gamma": 1.7951502838382727,
+   "T": 40.0,
+   "k": 0.8923989208768829,
+   "lam": 2.5817231121502426,
+   "kappa": 1.765307906790303,
+   "mu": 2.61949524788171,
+   "J": 2.054565125805113,
+   "tau": 24.0
+  },
+  {
+   "right": 0.4896413267197435,
+   "wrong": 0.015553783071205541,
+   "stuck": 0.20359930846520044,
+   "undecided": 0.29120558174385053,
+   "hurt": 0.003205352181547525,
+   "auc": 0.960648148148148,
+   "tiers": {
+    "careful": 834,
+    "sloppy": 366,
+    "lazy": 101,
+    "liar": 62,
+    "faker": 67,
+    "ring": 175,
+    "sybil": 198,
+    "infiltrator": 73
+   },
+   "won": {
+    "ring": 17,
+    "sybil": 30,
+    "faker": 6,
+    "infiltrator": 17,
+    "liar": 10
+   },
+   "fit": 0.6206952643613588
+  }
+ ]
+]

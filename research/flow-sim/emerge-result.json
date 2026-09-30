@@ -1,0 +1,390 @@
+{
+ "best": {
+  "no bonds (points only)": {
+   "a0": 0.8022546260562065,
+   "b0": 5.486900313250595,
+   "tau": 0.9553350517052988,
+   "kappa": 0.7146808076400947,
+   "lam": 0.0022955178278166676
+  },
+  "emergent bonds": {
+   "a0": 3.998298540362168,
+   "b0": 3.995058726082735,
+   "tau": 0.9395402282813151,
+   "kappa": 0.26432978848982464,
+   "lam": 0.00829672597453545
+  }
+ },
+ "res": {
+  "no bonds (points only)": {
+   "right": 0.0,
+   "wrong": 0.0,
+   "stuck": 1.0,
+   "auc": 0.5,
+   "worst_wrong": 0.0,
+   "fit": 0.14999999999999997
+  },
+  "emergent bonds": {
+   "right": 0.46115066779409475,
+   "wrong": 0.016512563280831134,
+   "stuck": 0.5223367689250742,
+   "auc": 0.8231292517006804,
+   "worst_wrong": 0.04788213627992634,
+   "fit": 0.40889197719043974
+  }
+ },
+ "shapes": {
+  "cabal (co-evolved)": {
+   "right": 0.16302521008403362,
+   "wrong": 0.013445378151260505,
+   "stuck": 0.8235294117647058,
+   "auc": 1.0,
+   "shape": {
+    "bonds": {
+     "ring-ring": 0.769,
+     "ring-stolen": 0.769,
+     "careful-ring": 0.079,
+     "faker-ring": 0.181,
+     "lazy-ring": 0.0,
+     "liar-ring": 0.062,
+     "ring-sloppy": 0.044,
+     "careful-stolen": 0.079,
+     "faker-stolen": 0.181,
+     "lazy-stolen": 0.0,
+     "liar-stolen": 0.062,
+     "sloppy-stolen": 0.044,
+     "careful-careful": 0.051,
+     "careful-faker": 0.074,
+     "careful-lazy": 0.022,
+     "careful-liar": 0.047,
+     "careful-sloppy": 0.07,
+     "faker-lazy": 0.108,
+     "faker-liar": 0.024,
+     "faker-sloppy": 0.001,
+     "lazy-lazy": 0.0,
+     "lazy-liar": 0.118,
+     "lazy-sloppy": 0.131,
+     "liar-liar": 0.0,
+     "liar-sloppy": 0.0,
+     "sloppy-sloppy": 0.031
+    },
+    "fused": [
+     [
+      [
+       "ring",
+       8
+      ],
+      [
+       "stolen",
+       1
+      ]
+     ]
+    ],
+    "b0": 1,
+    "n": 22,
+    "standing": {
+     "ring": 2.24,
+     "stolen": 2.24,
+     "careful": 3.41,
+     "faker": 1.82,
+     "lazy": 2.37,
+     "liar": 1.65,
+     "sloppy": 3.11
+    }
+   }
+  },
+  "cabal 2": {
+   "right": 0.16302521008403362,
+   "wrong": 0.013445378151260505,
+   "stuck": 0.8235294117647058,
+   "auc": 1.0,
+   "shape": {
+    "bonds": {
+     "ring-ring": 0.769,
+     "ring-stolen": 0.769,
+     "careful-ring": 0.079,
+     "faker-ring": 0.181,
+     "lazy-ring": 0.0,
+     "liar-ring": 0.062,
+     "ring-sloppy": 0.044,
+     "careful-stolen": 0.079,
+     "faker-stolen": 0.181,
+     "lazy-stolen": 0.0,
+     "liar-stolen": 0.062,
+     "sloppy-stolen": 0.044,
+     "careful-careful": 0.051,
+     "careful-faker": 0.074,
+     "careful-lazy": 0.022,
+     "careful-liar": 0.047,
+     "careful-sloppy": 0.07,
+     "faker-lazy": 0.108,
+     "faker-liar": 0.024,
+     "faker-sloppy": 0.001,
+     "lazy-lazy": 0.0,
+     "lazy-liar": 0.118,
+     "lazy-sloppy": 0.131,
+     "liar-liar": 0.0,
+     "liar-sloppy": 0.0,
+     "sloppy-sloppy": 0.031
+    },
+    "fused": [
+     [
+      [
+       "ring",
+       8
+      ],
+      [
+       "stolen",
+       1
+      ]
+     ]
+    ],
+    "b0": 1,
+    "n": 22,
+    "standing": {
+     "ring": 2.24,
+     "stolen": 2.24,
+     "careful": 3.41,
+     "faker": 1.82,
+     "lazy": 2.37,
+     "liar": 1.65,
+     "sloppy": 3.11
+    }
+   }
+  },
+  "cabal 3": {
+   "right": 0.16302521008403362,
+   "wrong": 0.013445378151260505,
+   "stuck": 0.8235294117647058,
+   "auc": 1.0,
+   "shape": {
+    "bonds": {
+     "ring-ring": 0.769,
+     "ring-stolen": 0.769,
+     "careful-ring": 0.079,
+     "faker-ring": 0.181,
+     "lazy-ring": 0.0,
+     "liar-ring": 0.062,
+     "ring-sloppy": 0.044,
+     "careful-stolen": 0.079,
+     "faker-stolen": 0.181,
+     "lazy-stolen": 0.0,
+     "liar-stolen": 0.062,
+     "sloppy-stolen": 0.044,
+     "careful-careful": 0.051,
+     "careful-faker": 0.074,
+     "careful-lazy": 0.022,
+     "careful-liar": 0.047,
+     "careful-sloppy": 0.07,
+     "faker-lazy": 0.108,
+     "faker-liar": 0.024,
+     "faker-sloppy": 0.001,
+     "lazy-lazy": 0.0,
+     "lazy-liar": 0.118,
+     "lazy-sloppy": 0.131,
+     "liar-liar": 0.0,
+     "liar-sloppy": 0.0,
+     "sloppy-sloppy": 0.031
+    },
+    "fused": [
+     [
+      [
+       "ring",
+       8
+      ],
+      [
+       "stolen",
+       1
+      ]
+     ]
+    ],
+    "b0": 1,
+    "n": 22,
+    "standing": {
+     "ring": 2.24,
+     "stolen": 2.24,
+     "careful": 3.41,
+     "faker": 1.82,
+     "lazy": 2.37,
+     "liar": 1.65,
+     "sloppy": 3.11
+    }
+   }
+  },
+  "ring": {
+   "right": 0.4117647058823529,
+   "wrong": 0.00784313725490196,
+   "stuck": 0.5803921568627451,
+   "auc": 1.0,
+   "shape": {
+    "bonds": {
+     "ring-ring": 0.833,
+     "careful-ring": 0.01,
+     "faker-ring": 0.202,
+     "lazy-ring": 0.075,
+     "liar-ring": 0.0,
+     "ring-sloppy": 0.062,
+     "careful-careful": 0.115,
+     "careful-faker": 0.031,
+     "careful-lazy": 0.059,
+     "careful-liar": 0.128,
+     "careful-sloppy": 0.069,
+     "faker-lazy": 0.11,
+     "faker-liar": 0.123,
+     "faker-sloppy": 0.05,
+     "lazy-lazy": 0.024,
+     "lazy-liar": 0.101,
+     "lazy-sloppy": 0.042,
+     "liar-liar": 0.013,
+     "liar-sloppy": 0.056,
+     "sloppy-sloppy": 0.21
+    },
+    "fused": [
+     [
+      [
+       "ring",
+       3
+      ]
+     ]
+    ],
+    "b0": 1,
+    "n": 17,
+    "standing": {
+     "ring": 1.56,
+     "careful": 3.87,
+     "faker": 1.67,
+     "lazy": 2.37,
+     "liar": 1.15,
+     "sloppy": 3.42
+    }
+   }
+  },
+  "sleeper + theft": {
+   "right": 0.7627986348122867,
+   "wrong": 0.03754266211604096,
+   "stuck": 0.19965870307167236,
+   "auc": 0.42857142857142855,
+   "shape": {
+    "bonds": {
+     "ring-ring": 0.601,
+     "careful-ring": 0.273,
+     "faker-ring": 0.0,
+     "lazy-ring": 0.05,
+     "liar-ring": 0.016,
+     "ring-sloppy": 0.06,
+     "careful-careful": 0.084,
+     "careful-faker": 0.042,
+     "careful-lazy": 0.016,
+     "careful-liar": 0.068,
+     "careful-sloppy": 0.053,
+     "faker-lazy": 0.165,
+     "faker-liar": 0.0,
+     "faker-sloppy": 0.079,
+     "lazy-lazy": 0.0,
+     "lazy-liar": 0.01,
+     "lazy-sloppy": 0.012,
+     "liar-liar": 0.0,
+     "liar-sloppy": 0.1,
+     "sloppy-sloppy": 0.146
+    },
+    "fused": [
+     [
+      [
+       "careful",
+       2
+      ],
+      [
+       "ring",
+       4
+      ]
+     ]
+    ],
+    "b0": 1,
+    "n": 18,
+    "standing": {
+     "ring": 4.45,
+     "careful": 4.0,
+     "faker": 1.21,
+     "lazy": 1.9,
+     "liar": 1.08,
+     "sloppy": 3.13
+    }
+   }
+  },
+  "patient scatterers": {
+   "right": 0.887292817679558,
+   "wrong": 0.023204419889502764,
+   "stuck": 0.08950276243093923,
+   "auc": 0.3333333333333333,
+   "shape": {
+    "bonds": {
+     "ring-ring": 0.368,
+     "careful-ring": 0.035,
+     "faker-ring": 0.128,
+     "lazy-ring": 0.029,
+     "liar-ring": 0.1,
+     "ring-sloppy": 0.031,
+     "careful-careful": 0.026,
+     "careful-faker": 0.063,
+     "careful-lazy": 0.063,
+     "careful-liar": 0.026,
+     "careful-sloppy": 0.061,
+     "faker-lazy": 0.229,
+     "faker-liar": 0.117,
+     "faker-sloppy": 0.0,
+     "lazy-lazy": 0.0,
+     "lazy-liar": 0.038,
+     "lazy-sloppy": 0.012,
+     "liar-liar": 0.258,
+     "liar-sloppy": 0.049,
+     "sloppy-sloppy": 0.029
+    },
+    "fused": [],
+    "b0": 1,
+    "n": 20,
+    "standing": {
+     "ring": 5.01,
+     "careful": 4.3,
+     "faker": 1.47,
+     "lazy": 2.15,
+     "liar": 0.71,
+     "sloppy": 3.0
+    }
+   }
+  },
+  "calm": {
+   "right": 0.6186666666666667,
+   "wrong": 0.0,
+   "stuck": 0.38133333333333336,
+   "auc": 1.0,
+   "shape": {
+    "bonds": {
+     "careful-careful": 0.113,
+     "careful-faker": 0.03,
+     "careful-lazy": 0.09,
+     "careful-liar": 0.087,
+     "careful-sloppy": 0.12,
+     "faker-lazy": 0.036,
+     "faker-liar": 0.013,
+     "faker-sloppy": 0.0,
+     "lazy-lazy": 0.113,
+     "lazy-liar": 0.063,
+     "lazy-sloppy": 0.078,
+     "liar-liar": 0.063,
+     "liar-sloppy": 0.081,
+     "sloppy-sloppy": 0.084
+    },
+    "fused": [],
+    "b0": 1,
+    "n": 14,
+    "standing": {
+     "careful": 3.94,
+     "faker": 1.24,
+     "lazy": 2.1,
+     "liar": 1.17,
+     "sloppy": 3.1
+    }
+   }
+  }
+ }
+}

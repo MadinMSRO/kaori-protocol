@@ -1,0 +1,35 @@
+### attackers evolving against the full contest penalty (wrong truths, contests, or dragging honest standing)
+  gen 0: best attacker fitness 0.082
+  gen 1: best attacker fitness 0.132
+  gen 2: best attacker fitness 0.128
+  gen 3: best attacker fitness 0.092
+  gen 4: best attacker fitness 0.135
+  gen 5: best attacker fitness 0.127
+  gen 6: best attacker fitness 0.189
+  gen 7: best attacker fitness 0.172
+  gen 8: best attacker fitness 0.180
+  gen 9: best attacker fitness 0.182
+  adaptive attacker: 7 ids, out 72% of hours, attacks 20% of those, scatter 3%, sleeps 17% of the run, never re-registers, steals 2 account(s), true-photo lies 24% farm 11 of 40, signed 23%
+
+                                            right  wrong  worst contest implicit   AUC careful S attacker S  validator load by quarter
+contest = no signal                          0.91  0.017  0.071    0.05     0.41  0.82       956        479  67% -> 57% -> 57% -> 54%
+contest = mild penalty (standing x 0.5)      0.91  0.017  0.071    0.05     0.40  0.83       947        474  68% -> 58% -> 58% -> 56%
+contest = full penalty (standing -> 0)       0.91  0.017  0.071    0.05     0.40  0.83       938        473  68% -> 58% -> 59% -> 57%
+
+### right / wrong / contested per scenario
+                                           cabal (co-evolve              ring   sleeper + theft  patient scattere              calm  farm + signed re   wash every 48 h  adaptive (vs con
+contest = no signal                         0.63/0.007/0.33   0.85/0.003/0.11   0.96/0.037/0.00   0.98/0.012/0.00   0.99/0.002/0.00   1.00/0.000/0.00   0.99/0.000/0.00   0.92/0.071/0.00
+contest = mild penalty (standing x 0.5)     0.62/0.007/0.33   0.86/0.003/0.11   0.96/0.037/0.00   0.98/0.012/0.00   0.99/0.002/0.00   1.00/0.000/0.00   0.99/0.000/0.00   0.92/0.071/0.00
+contest = full penalty (standing -> 0)      0.62/0.007/0.33   0.86/0.003/0.11   0.96/0.037/0.00   0.98/0.012/0.00   0.99/0.002/0.00   1.00/0.000/0.00   0.99/0.000/0.00   0.92/0.071/0.00
+
+### standing by type at the end (full contest penalty, one fresh world)
+  cabal (co-evolved)       {'liar': 153, 'adv': 12, 'stolen': 12, 'sloppy': 724, 'careful': 877, 'lazy': 579, 'faker': 120, 'v:dil': 391, 'v:lazy': 333, 'ai': 410}
+  ring                     {'lazy': 539, 'adv': 23, 'sloppy': 776, 'careful': 972, 'faker': 140, 'liar': 116, 'v:dil': 649, 'v:lazy': 453, 'ai': 642}
+  sleeper + theft          {'lazy': 589, 'adv': 983, 'sloppy': 698, 'careful': 968, 'liar': 131, 'faker': 172, 'v:dil': 827, 'v:lazy': 550, 'ai': 807}
+  patient scatterers       {'lazy': 583, 'adv': 955, 'sloppy': 835, 'careful': 998, 'liar': 140, 'faker': 100, 'v:dil': 854, 'v:lazy': 585, 'ai': 762}
+  calm                     {'lazy': 521, 'sloppy': 877, 'careful': 997, 'liar': 118, 'faker': 121, 'v:dil': 842, 'v:lazy': 547, 'ai': 772}
+  farm + signed real photo {'lazy': 574, 'adv': 256, 'sloppy': 806, 'careful': 832, 'liar': 170, 'faker': 191, 'v:dil': 894, 'v:lazy': 541, 'v:farm': 463, 'ai': 739}
+  wash every 48 h          {'lazy': 573, 'adv': 176, 'sloppy': 856, 'careful': 998, 'liar': 176, 'faker': 145, 'v:dil': 888, 'v:lazy': 566, 'ai': 696}
+  adaptive (vs contest pen {'lazy': 601, 'adv': 958, 'sloppy': 813, 'careful': 894, 'liar': 160, 'faker': 157, 'v:dil': 846, 'v:lazy': 559, 'v:farm': 849, 'ai': 764}
+
+148s

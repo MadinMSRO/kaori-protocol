@@ -1,0 +1,37 @@
+evolved critical nucleus               risk  3: magnet flat power linear flocking none critical
+evolved critical nucleus               risk 10: bayes flat power power both none critical
+evolved critical nucleus               risk 30: bayes margin phase power flocking none critical
+evolved Jeans collapse                 risk  3: pheromone flat boltzmann linear flocking none jeans
+evolved Jeans collapse                 risk 10: pheromone flat power linear flocking none jeans
+evolved Jeans collapse                 risk 30: magnet margin power power both none jeans
+evolved bee quorum + cross-inhibition  risk  3: additive flat linear linear flocking none quorum
+evolved bee quorum + cross-inhibition  risk 10: bayes flat phase linear flocking none quorum
+evolved bee quorum + cross-inhibition  risk 30: pheromone margin phase power flocking none quorum
+evolved Jeans + triggered formation    risk  3: magnet flat power power both triggered jeans
+evolved Jeans + triggered formation    risk 10: additive flat phase linear flocking triggered jeans
+evolved Jeans + triggered formation    risk 30: pheromone flat saturating linear both triggered jeans
+evolved bee quorum + triggered         risk  3: magnet flat power power both triggered quorum
+evolved bee quorum + triggered         risk 10: pheromone margin power linear both triggered quorum
+evolved bee quorum + triggered         risk 30: pheromone flat phase linear flocking triggered quorum
+
+### safety-yield frontier on fresh worlds (costly identities, full attack suite)
+nucleation law                   risk  right  wrong  worst calm right   AUC
+today                               -   0.61  0.301  0.583       0.89  0.45
+critical nucleus                    3   0.68  0.013  0.035       0.93  0.89
+critical nucleus                   10   0.66  0.008  0.031       0.91  0.82
+critical nucleus                   30   0.53  0.004  0.017       0.71  0.88
+Jeans collapse                      3   0.68  0.015  0.036       0.92  0.89
+Jeans collapse                     10   0.68  0.011  0.032       0.93  0.85
+Jeans collapse                     30   0.64  0.009  0.031       0.87  0.88
+bee quorum + cross-inhibition       3   0.69  0.017  0.037       0.94  0.88
+bee quorum + cross-inhibition      10   0.67  0.010  0.032       0.93  0.85
+bee quorum + cross-inhibition      30   0.46  0.002  0.007       0.60  0.90
+Jeans + triggered formation         3   0.69  0.013  0.036       0.93  0.89
+Jeans + triggered formation        10   0.66  0.011  0.035       0.92  0.87
+Jeans + triggered formation        30   0.54  0.006  0.025       0.72  0.84
+bee quorum + triggered              3   0.70  0.019  0.044       0.94  0.84
+bee quorum + triggered             10   0.64  0.008  0.030       0.88  0.85
+bee quorum + triggered             30   0.46  0.003  0.010       0.62  0.86
+
+998s
+exit 0

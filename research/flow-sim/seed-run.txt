@@ -1,0 +1,17 @@
+### fresh worlds, full attack suite; seed arms have NO offline tuning
+                              right  wrong  worst  stuck  late   AUC           cabal           ring        sleeper        patient           calm
+evolved champion (offline)     0.86  0.012  0.035   0.09  0.01  0.79      0.62/0.006     0.81/0.003     0.94/0.028     0.97/0.019     0.96/0.002
+seed (all six + three)         0.87  0.014  0.031   0.06  0.05  0.84      0.63/0.011     0.84/0.012     0.94/0.026     0.97/0.020     0.96/0.000
+  without error bonds          0.90  0.023  0.080   0.02  0.07  0.88      0.76/0.050     0.87/0.018     0.95/0.030     0.97/0.018     0.96/0.001
+  without two memories         0.87  0.013  0.029   0.06  0.05  0.83      0.64/0.011     0.85/0.013     0.94/0.027     0.97/0.016     0.96/0.000
+  without learned prior        0.85  0.012  0.037   0.08  0.05  0.80      0.59/0.004     0.82/0.008     0.94/0.029     0.97/0.020     0.95/0.000
+  without memory agent         0.85  0.011  0.026   0.11  0.02  0.83      0.58/0.005     0.80/0.002     0.94/0.024     0.97/0.021     0.95/0.001
+
+### what the seed learned by itself (one fresh world per scenario)
+
+[cabal (co-evolved)] right 0.66 wrong 0.005
+  observers standing: {'sloppy': 2.59, 'faker': -1.93, 'careful': 3.97, 'lazy': 0.36, 'adv': -0.3, 'stolen': -0.1, 'liar': -2.68}
+  weight on fast memory: {'sloppy': 0.46, 'faker': 0.26, 'careful': 0.42, 'lazy': 0.35, 'adv': 0.45, 'stolen': 0.47, 'liar': 0.24}
+  validators: {'diligent0': 2.7, 'diligent1': 2.28, 'hasty': 2.45, 'bribed': 1.05}  AI 2.07
+  validator bonds (>0.2): {'diligent0': {'sloppy': 0.36, 'faker': 0.41, 'careful': 0.22, 'lazy': 0.38}, 'diligent1': {'sloppy': 0.23, 'faker': 0.29, 'lazy': 0.34, 'liar': 0.26}, 'hasty': {'sloppy': 0.48, 'careful': 0.26, 'liar': 0.41}, 'bribed': {'sloppy': 0.25, 'lazy': 0.3, 'adv': 0.22}}
+  memory agent confusion (exact, near, far): [0.68, 0.25, 0.07]  learned prior: [0.7, 0.19, 0.25]  provenance: (0.94, 0.18)

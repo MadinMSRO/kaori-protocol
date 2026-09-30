@@ -1,0 +1,39 @@
+### phase 2 first: attackers evolving against the 7 Principles
+  gen 0: best attacker fitness 0.087
+  gen 1: best attacker fitness 0.036
+  gen 2: best attacker fitness 0.140
+  gen 3: best attacker fitness 0.105
+  gen 4: best attacker fitness 0.205
+  gen 5: best attacker fitness 0.229
+  gen 6: best attacker fitness 0.242
+  gen 7: best attacker fitness 0.211
+  gen 8: best attacker fitness 0.281
+  gen 9: best attacker fitness 0.287
+  adaptive attacker: 8 ids, out 91% of hours, attacks 71% of those, scatter 74%, sleeps 10% of the run, re-registers every 91 h, steals 2 account(s), true-photo lies 100%
+  adaptive attacker: 8 ids, out 91% of hours, attacks 69% of those, scatter 74%, sleeps 10% of the run, re-registers every 91 h, steals 2 account(s), true-photo lies 99%
+
+### every system, same fresh worlds (5 seeds x 7 scenarios incl. 2 attackers evolved against the 7 Principles)
+                                    right  wrong  worst  stuck   AUC
+today's Flow                         0.72  0.144  0.560   0.04  0.65
+Red Queen co-evolved laws            0.19  0.004  0.010   0.78  0.83
+Jeans collapse (frontier)            0.76  0.013  0.039   0.14  0.85
+bee quorum (frontier)                0.77  0.020  0.051   0.10  0.86
+simplicial complex (hand-picked)     0.64  0.018  0.050   0.35  0.79
+emergent bonds                       0.54  0.013  0.034   0.44  0.77
+all agents, evolved champion         0.84  0.040  0.112   0.08  0.80
+seed, untuned                        0.80  0.081  0.251   0.07  0.70
+7 PRINCIPLES                         0.80  0.077  0.256   0.07  0.63
+
+### right / wrong per scenario
+                                          cabal          ring       sleeper       patient          calm    adaptive A    adaptive B
+today's Flow                         0.36/0.560    0.57/0.302    0.88/0.053    0.93/0.015    0.88/0.004    0.74/0.028    0.68/0.050
+Red Queen co-evolved laws            0.12/0.005    0.17/0.005    0.24/0.010    0.24/0.003    0.25/0.001    0.18/0.002    0.17/0.001
+Jeans collapse (frontier)            0.43/0.008    0.69/0.010    0.92/0.039    0.97/0.013    0.92/0.005    0.72/0.007    0.72/0.010
+bee quorum (frontier)                0.45/0.011    0.70/0.028    0.92/0.051    0.97/0.015    0.94/0.007    0.73/0.011    0.73/0.014
+simplicial complex (hand-picked)     0.29/0.010    0.54/0.003    0.81/0.050    0.92/0.014    0.74/0.001    0.57/0.018    0.57/0.029
+emergent bonds                       0.19/0.025    0.42/0.005    0.72/0.034    0.89/0.014    0.62/0.001    0.46/0.007    0.48/0.008
+all agents, evolved champion         0.62/0.005    0.81/0.004    0.94/0.033    0.97/0.019    0.96/0.002    0.81/0.108    0.80/0.112
+seed, untuned                        0.62/0.010    0.83/0.013    0.94/0.023    0.97/0.020    0.95/0.002    0.64/0.246    0.64/0.251
+7 PRINCIPLES                         0.63/0.013    0.84/0.014    0.94/0.025    0.97/0.023    0.95/0.000    0.62/0.256    0.64/0.212
+
+255s

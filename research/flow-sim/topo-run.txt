@@ -1,0 +1,16 @@
+evolved graph      : a0=4.969, b0=7.320, lam=0.025, tau=0.995, dep=0.125, g=0.546
+evolved bipartite  : a0=3.277, b0=0.623, lam=0.003, tau=0.632, dep=2.456, g=0.614
+evolved hypergraph : a0=0.560, b0=6.467, lam=0.002, tau=0.834, dep=0.797, g=0.742
+evolved simplicial : a0=3.829, b0=7.820, lam=0.004, tau=0.831, dep=2.638, g=0.950
+evolved multiplex  : a0=2.649, b0=4.398, lam=0.000, tau=0.953, dep=2.498, g=0.456
+
+### topologies on fresh worlds (costly identities, full attack suite); laws derived, only structure constants evolved
+topology      right  wrong  worst  stuck   AUC
+graph          0.19  0.062  0.127   0.75  0.53
+bipartite      0.62  0.294  0.590   0.09  0.41
+hypergraph     0.00  0.000  0.000   1.00  0.50
+simplicial     0.55  0.013  0.052   0.43  0.81
+multiplex      0.46  0.059  0.122   0.48  0.60
+
+129s
+exit 0

@@ -1,0 +1,27 @@
+evolved agents, flat values      : a0=0.500, an=1.389, b0=4.267, tau=0.885, kappa=1.000, lam=0.010
+evolved + value space (#3)       : a0=0.601, an=1.735, b0=7.347, tau=0.995, kappa=0.169, lam=0.006
+evolved + provenance agent (#1)  : a0=4.478, an=1.578, b0=0.500, tau=0.930, kappa=0.117, lam=0.002
+evolved + both                   : a0=5.072, an=2.737, b0=0.500, tau=0.916, kappa=0.000, lam=0.003
+
+### fresh worlds, full attack suite (right counts exact 1, band 0.75, two bands 0.5)
+                            right  exact  band  pair  late  wrong  worst  stuck   AUC
+agents, flat values          0.00   0.00  0.00  0.00  0.00  0.000  0.000   1.00  0.53
++ value space (#3)           0.00   0.00  0.00  0.00  0.00  0.000  0.000   1.00  0.46
++ provenance agent (#1)      0.78   0.78  0.00  0.00  0.01  0.013  0.036   0.21  0.83
++ both                       0.80   0.73  0.03  0.08  0.01  0.011  0.034   0.15  0.88
+
+### right / wrong per scenario (mean over test worlds)
+agents, flat values        cabal 0.00/0.000  ring 0.00/0.000  sleeper 0.00/0.000  patient 0.00/0.000  calm 0.00/0.000
++ value space (#3)         cabal 0.00/0.000  ring 0.00/0.000  sleeper 0.00/0.000  patient 0.00/0.000  calm 0.00/0.000
++ provenance agent (#1)    cabal 0.59/0.008  ring 0.79/0.006  sleeper 0.93/0.032  patient 0.96/0.026  calm 0.96/0.004
++ both                     cabal 0.62/0.006  ring 0.82/0.007  sleeper 0.94/0.030  patient 0.97/0.020  calm 0.97/0.000
+
+### standing every agent earned (+ both, one fresh world per scenario; log-odds exact vs far)
+[cabal (co-evolved)] observers {'careful': 4.09, 'liar': -1.58, 'lazy': 0.66, 'sloppy': 2.85, 'adv': -2.66, 'stolen': -2.66, 'faker': -0.94}  validators {'diligent0': 3.29, 'diligent1': 2.96, 'hasty': 2.49, 'bribed': 1.6}  AI 2.56  provenance P(pass|real,fake) (0.95, 0.19)
+[ring] observers {'careful': 4.7, 'lazy': 0.82, 'adv': -2.39, 'sloppy': 3.54, 'faker': -1.19, 'liar': -1.85}  validators {'diligent0': 3.55, 'diligent1': 3.67, 'hasty': 2.61, 'bribed': 2.2}  AI 2.69  provenance P(pass|real,fake) (0.95, 0.23)
+[sleeper + theft] observers {'adv': 3.18, 'careful': 3.86, 'lazy': 0.56, 'sloppy': 2.89, 'liar': -1.98, 'faker': -1.46}  validators {'diligent0': 3.87, 'diligent1': 3.62, 'hasty': 3.43, 'bribed': 4.26}  AI 2.82  provenance P(pass|real,fake) (0.92, 0.51)
+[patient scatterers] observers {'adv': 4.61, 'careful': 4.09, 'lazy': 0.11, 'sloppy': 3.14, 'liar': -2.25, 'faker': -1.4}  validators {'diligent0': 3.42, 'diligent1': 3.42, 'hasty': 4.39, 'bribed': 4.18}  AI 2.65  provenance P(pass|real,fake) (0.94, 0.48)
+[calm] observers {'careful': 4.72, 'lazy': 0.5, 'sloppy': 3.21, 'liar': -1.68, 'faker': -1.79}  validators {'diligent0': 3.82, 'diligent1': 4.12, 'hasty': 3.76, 'bribed': 3.77}  AI 3.12  provenance P(pass|real,fake) (0.95, 0.49)
+
+2751s
+exit 0

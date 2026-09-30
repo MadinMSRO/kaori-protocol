@@ -1,0 +1,110 @@
+diff --git a/packages/kaori-api/src/kaori_api/generalist.py b/packages/kaori-api/src/kaori_api/generalist.py
+index c014a40..5bbe858 100644
+--- a/packages/kaori-api/src/kaori_api/generalist.py
++++ b/packages/kaori-api/src/kaori_api/generalist.py
+@@ -66,6 +66,9 @@ class ValidationVote(BaseModel):
+     confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+     timestamp: datetime
+     signature: str
++    # Per-observation evidence relevance (observation_id -> 0..1), when the ClaimType scores
++    # zero-shot. Observations below the ClaimType threshold are left out of the TruthState.
++    observation_relevance: Optional[Dict[str, float]] = None
+ 
+     @field_validator("timestamp")
+     @classmethod
+@@ -143,6 +146,8 @@ def validation_vote_signing_payload(vote: ValidationVote) -> bytes:
+     }
+     if vote.confidence is not None:
+         payload["confidence"] = vote.confidence
++    if vote.observation_relevance is not None:
++        payload["observation_relevance"] = dict(sorted(vote.observation_relevance.items()))
+     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+ 
+ 
+@@ -330,7 +335,19 @@ class ClipGeneralistValidator:
+                 context=self._package_context(base_context, request, config),
+                 engine=embedding_engine,
+             )
+-        confidence = self._mean_relevance(relevance, len(images))
++        per_observation: Optional[Dict[str, float]] = None
++        if prompts:
++            # Each observation is judged on its own evidence. Failing evidence is left out of the
++            # TruthState rather than dragging every honest report down with it.
++            per_observation = self._relevance_by_observation(request, refs, relevance)
++            passing = [r for r in per_observation.values() if r >= relevance_threshold]
++            confidence = (
++                round(sum(passing) / len(passing), 6)
++                if passing
++                else self._mean_relevance(relevance, len(images))
++            )
++        else:
++            confidence = self._mean_relevance(relevance, len(images))
+         vote: Literal["RATIFY", "REJECT"] = (
+             "RATIFY" if confidence >= relevance_threshold else "REJECT"
+         )
+@@ -344,6 +361,7 @@ class ClipGeneralistValidator:
+             confidence=confidence,
+             timestamp=timestamp or datetime.now(timezone.utc),
+             signature="",
++            observation_relevance=per_observation,
+         )
+         signed = sign_validation_vote(unsigned, self.signing_key)
+         log_validation_vote(signed, source="kaori-generalist")
+@@ -397,6 +415,27 @@ class ClipGeneralistValidator:
+         threshold = float(embedding.get("similarity_threshold"))
+         return context, engine, threshold
+ 
++    @staticmethod
++    def _relevance_by_observation(
++        request: ValidatorRequest,
++        refs: List[EvidenceRef],
++        relevance: Sequence[float],
++    ) -> Dict[str, float]:
++        """Mean relevance of each observation's own evidence."""
++        by_uri: Dict[str, List[float]] = {}
++        for ref, score in zip(refs, relevance):
++            by_uri.setdefault(ref.uri, []).append(float(score))
++        out: Dict[str, float] = {}
++        for observation in request.observations:
++            scores = [s for ref in observation.evidence_refs for s in by_uri.get(ref.uri, [])]
++            if scores:
++                out[str(observation.observation_id)] = round(sum(scores) / len(scores), 6)
++        return out
++
++    @staticmethod
++    def relevance_threshold(config: dict) -> float:
++        return float(((config.get("evidence_similarity") or {}).get("embedding") or {}).get("similarity_threshold"))
++
+     @staticmethod
+     def _labels(config: dict) -> tuple[List[str], List[str]]:
+         """Optional generalist.prompts and generalist.distractors from the ClaimType."""
+diff --git a/packages/kaori-api/src/kaori_api/validation.py b/packages/kaori-api/src/kaori_api/validation.py
+index 377e9ef..a374d6e 100644
+--- a/packages/kaori-api/src/kaori_api/validation.py
++++ b/packages/kaori-api/src/kaori_api/validation.py
+@@ -7,7 +7,7 @@ the compiler. HTTP ingest is POST /v1/validate — not a public map vote.
+ from __future__ import annotations
+ 
+ from datetime import datetime, timezone
+-from typing import Optional
++from typing import Dict, Optional
+ 
+ from kaori_flow import FlowCore
+ from kaori_flow.primitives.agent import AgentType, create_agent_id
+@@ -82,6 +82,7 @@ def record_validation_vote(
+     signature: str,
+     confidence: Optional[float] = None,
+     time: Optional[datetime] = None,
++    observation_relevance: Optional[Dict[str, float]] = None,
+ ) -> Signal:
+     """
+     Emit SignalTypes.VALIDATION_VOTE into the existing SignalStore.
+@@ -107,6 +108,8 @@ def record_validation_vote(
+     }
+     if confidence is not None:
+         payload["confidence"] = float(confidence)
++    if observation_relevance is not None:
++        payload["observation_relevance"] = {str(k): float(v) for k, v in sorted(observation_relevance.items())}
+ 
+     signal = Signal(
+         signal_type=SignalTypes.VALIDATION_VOTE,

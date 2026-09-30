@@ -1,0 +1,140 @@
+60 hours simulated in 88s
+
+ rd place             true sky   n AI           human   status          claim
+  0 Antalya old town  scattered  5 RATIFY 0.99  RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+  0 Antalya beach     scattered  4 RATIFY 0.99  RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+  1 Antalya old town  overcast   3 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/rain   ✗
+  1 Antalya beach     clear      6 REJECT 0.8   RATIFY  INVESTIGATING   clear/dry       ✓
+  2 Hulhumalé         clear      3 RATIFY 0.95  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+  2 Antalya old town  clear      6 REJECT 0.82  REJECT  VERIFIED_FALSE  scattered/dry   
+  3 Malé north        storm      6 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+  3 Antalya expo      overcast   3 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+  4 Antalya beach     overcast   4 REJECT 0.73  REJECT  VERIFIED_FALSE  overcast/dry    ✓
+  4 Malé north        overcast   4 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+  5 Malé north        storm      5 RATIFY 1.0   RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+  5 Antalya expo      clear      3 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✗
+  6 Malé north        clear      5 REJECT 0.76  RATIFY  INVESTIGATING   clear/dry       ✓
+  6 Antalya beach     clear      3 RATIFY 0.95  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+  7 Hulhumalé         storm      3 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+  7 Antalya beach     clear      7 RATIFY 0.98  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+  8 Antalya old town  clear      6 REJECT 0.82  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+  8 Hulhumalé         storm      3 RATIFY 1.0   RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+  9 Antalya old town  storm      6 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 10 Malé north        clear      3 RATIFY 0.99  REJECT  UNDECIDED       clear/dry       ✓
+ 10 Antalya old town  overcast   6 REJECT 0.81  RATIFY  INVESTIGATING   overcast/dry    ✓
+ 11 Hulhumalé         storm      5 RATIFY 1.0   RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 11 Antalya expo      clear      4 REJECT 0.73  RATIFY  INVESTIGATING   clear/dry       ✓
+ 12 Antalya old town  clear      3 RATIFY 0.97  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 12 Antalya expo      scattered  6 REJECT 0.83  RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+ 13 Antalya old town  clear      3 RATIFY 0.97  RATIFY  VERIFIED_TRUE   overcast/dry    ✗
+ 13 Antalya expo      clear      5 RATIFY 0.97  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 14 Antalya old town  scattered  8 RATIFY 0.99  RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+ 15 Malé north        scattered  7 RATIFY 1.0   RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+ 15 Antalya old town  overcast   3 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 16 Antalya old town  clear      5 REJECT 0.77  RATIFY  INVESTIGATING   clear/dry       ✓
+ 16 Antalya beach     overcast   3 RATIFY 1.0   RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 17 Hulhumalé         storm      4 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 17 Antalya old town  scattered  4 RATIFY 0.99  REJECT  UNDECIDED       few/dry         
+ 18 Malé north        storm      6 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 19 Hulhumalé         clear      3 RATIFY 0.98  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 19 Malé north        overcast   5 REJECT 0.78  RATIFY  INVESTIGATING   overcast/dry    ✓
+ 20 Antalya beach     clear      3 RATIFY 0.97  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 20 Antalya old town  overcast   4 REJECT 0.79  RATIFY  INVESTIGATING   overcast/dry    ✓
+ 20 Malé north        scattered  3 RATIFY 1.0   RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+ 21 Antalya beach     overcast   6 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 21 Antalya expo      storm      3 RATIFY 1.0   RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 22 Antalya old town  overcast   6 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 23 Malé north        scattered  4 RATIFY 0.99  RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+ 23 Antalya beach     overcast   5 RATIFY 1.0   RATIFY  VERIFIED_TRUE   broken/dry      ✗
+ 24 Antalya expo      scattered  3 REJECT 0.81  RATIFY  INVESTIGATING   scattered/dry   ✓
+ 24 Malé north        overcast   4 RATIFY 0.97  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 24 Antalya beach     overcast   3 RATIFY 1.0   REJECT  UNDECIDED       overcast/dry    ✓
+ 25 Antalya expo      storm      5 RATIFY 1.0   RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 25 Antalya beach     scattered  4 RATIFY 0.98  RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+ 26 Hulhumalé         scattered  3 RATIFY 1.0   RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+ 26 Antalya expo      scattered  3 RATIFY 0.98  RATIFY  VERIFIED_TRUE   few/dry         ✗
+ 26 Antalya old town  scattered  4 RATIFY 1.0   RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+ 27 Antalya old town  clear      3 REJECT 0.7   RATIFY  INVESTIGATING   clear/dry       ✓
+ 27 Antalya beach     overcast   5 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 28 Malé north        overcast   4 RATIFY 0.88  RATIFY  VERIFIED_TRUE   scattered/rain  ✗
+ 28 Antalya old town  overcast   3 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 28 Hulhumalé         clear      3 RATIFY 0.94  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 29 Antalya beach     scattered  4 RATIFY 0.99  RATIFY  VERIFIED_TRUE   clear/dry       ✗
+ 29 Antalya old town  overcast   4 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 30 Antalya beach     scattered  4 RATIFY 0.99  RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+ 30 Hulhumalé         storm      6 REJECT 0.83  RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 31 Malé north        scattered  3 RATIFY 1.0   RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+ 31 Antalya old town  overcast   6 RATIFY 0.85  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 32 Antalya beach     clear      6 RATIFY 0.97  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 32 Antalya old town  storm      3 RATIFY 1.0   REJECT  UNDECIDED       overcast/rain   ✓
+ 33 Hulhumalé         clear      6 RATIFY 0.89  REJECT  UNDECIDED       few/dry         
+ 34 Hulhumalé         scattered  3 RATIFY 0.99  RATIFY  VERIFIED_TRUE   scattered/dry   ✓
+ 34 Antalya beach     clear      5 RATIFY 0.99  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 35 Antalya beach     overcast   3 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 35 Malé north        scattered  3 RATIFY 0.99  REJECT  UNDECIDED       scattered/dry   ✓
+ 35 Antalya expo      scattered  4 REJECT 0.8   RATIFY  INVESTIGATING   scattered/dry   ✓
+ 36 Malé north        clear      5 RATIFY 0.96  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 36 Hulhumalé         overcast   4 RATIFY 0.97  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 37 Antalya old town  overcast   5 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 37 Antalya beach     clear      3 RATIFY 0.97  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 38 Malé north        storm      6 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 38 Antalya old town  clear      3 RATIFY 0.97  REJECT  UNDECIDED       clear/dry       ✓
+ 39 Antalya beach     overcast   5 RATIFY 0.95  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 39 Antalya old town  scattered  3 RATIFY 0.98  REJECT  UNDECIDED       scattered/dry   ✓
+ 40 Antalya expo      clear      5 RATIFY 0.98  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 40 Malé north        overcast   3 REJECT 0.73  RATIFY  INVESTIGATING   overcast/dry    ✓
+ 41 Malé north        clear      5 RATIFY 0.98  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 41 Hulhumalé         clear      3 RATIFY 0.97  REJECT  UNDECIDED       clear/dry       ✓
+ 42 Antalya old town  clear      4 RATIFY 0.97  REJECT  UNDECIDED       few/dry         
+ 42 Malé north        clear      5 RATIFY 0.99  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 43 Hulhumalé         overcast   7 RATIFY 0.87  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 44 Malé north        overcast   3 RATIFY 1.0   REJECT  UNDECIDED       overcast/dry    ✓
+ 44 Antalya beach     overcast   3 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 44 Hulhumalé         clear      4 RATIFY 0.99  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 45 Antalya old town  overcast   4 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 45 Antalya beach     storm      5 REJECT 0.8   RATIFY  INVESTIGATING   overcast/rain   ✓
+ 46 Malé north        clear      3 RATIFY 0.99  REJECT  UNDECIDED       few/dry         
+ 46 Antalya beach     overcast   4 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 46 Antalya expo      clear      3 RATIFY 0.95  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 47 Antalya old town  overcast   6 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 47 Antalya expo      storm      4 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 48 Antalya beach     scattered  4 REJECT 0.75  RATIFY  INVESTIGATING   scattered/dry   ✓
+ 48 Malé north        storm      4 RATIFY 0.99  REJECT  UNDECIDED       broken/rain     
+ 49 Malé north        storm      4 RATIFY 1.0   RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 49 Antalya old town  overcast   4 RATIFY 0.99  REJECT  UNDECIDED       overcast/dry    ✓
+ 50 Antalya expo      scattered  3 RATIFY 0.99  REJECT  UNDECIDED       scattered/dry   ✓
+ 50 Hulhumalé         overcast   6 REJECT 0.82  RATIFY  INVESTIGATING   overcast/dry    ✓
+ 51 Antalya old town  overcast   7 RATIFY 0.97  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 52 Malé north        scattered  3 RATIFY 0.99  REJECT  UNDECIDED       scattered/dry   ✓
+ 52 Antalya expo      clear      4 RATIFY 0.95  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 52 Hulhumalé         clear      3 RATIFY 0.97  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 53 Antalya beach     storm      3 RATIFY 1.0   RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 53 Hulhumalé         clear      3 RATIFY 0.97  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 53 Antalya old town  clear      4 RATIFY 0.99  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 54 Antalya beach     clear      3 REJECT 0.72  RATIFY  INVESTIGATING   overcast/dry    
+ 54 Malé north        storm      7 RATIFY 1.0   RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 55 Antalya expo      overcast   6 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 56 Antalya expo      storm      3 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/rain   ✓
+ 56 Malé north        overcast   6 RATIFY 0.99  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 57 Malé north        clear      4 RATIFY 0.97  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 57 Antalya expo      clear      5 RATIFY 0.98  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 58 Antalya old town  clear      6 RATIFY 0.86  RATIFY  VERIFIED_TRUE   clear/dry       ✓
+ 58 Hulhumalé         overcast   3 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 59 Antalya expo      overcast   5 RATIFY 0.97  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+ 59 Hulhumalé         overcast   3 RATIFY 0.98  RATIFY  VERIFIED_TRUE   overcast/dry    ✓
+
+outcomes: {'too few reporters': 59, 'VERIFIED_TRUE': 88, 'verified & right': 81, 'verified & WRONG': 7, 'INVESTIGATING': 15, 'VERIFIED_FALSE': 2, 'UNDECIDED': 16}
+
+standing every 5 hours (start 200; AI and validator start 250):
+  care1  careful          228 → 296 → 324 → 351 → 406 → 462 → 489 → 557 → 599 → 654 → 709 → 764
+  care2  careful          206 → 261 → 302 → 329 → 398 → 440 → 494 → 536 → 577 → 618 → 674 → 729
+  care3  careful          255 → 283 → 338 → 393 → 421 → 476 → 518 → 573 → 641 → 669 → 710 → 751
+  slop1  sloppy           206 → 210 → 238 → 265 → 293 → 238 → 242 → 246 → 288 → 265 → 283 → 338
+  slop2  sloppy           219 → 224 → 265 → 279 → 334 → 389 → 394 → 449 → 490 → 532 → 587 → 619
+  liar1  liar             86 → 0 → 0 → 0 → 0 → 0 → 0 → 0 → 0 → 0 → 0 → 0
+  liar2  liar             131 → 16 → 0 → 0 → 0 → 0 → 0 → 0 → 0 → 0 → 0 → 0
+  fake1  faker            110 → 65 → 43 → 0 → 0 → 0 → 0 → 0 → 0 → 0 → 0 → 0
+  coll1  colluder         124 → 70 → 15 → 0 → 0 → 14 → 0 → 0 → 0 → 0 → 0 → 0
+  coll2  colluder         124 → 70 → 15 → 0 → 0 → 14 → 0 → 0 → 0 → 0 → 0 → 0
+  AI     ai generalist    373 → 440 → 480 → 563 → 673 → 825 → 878 → 974 → 1000 → 1000 → 1000 → 1000
+  VAL    human validator  323 → 433 → 515 → 598 → 708 → 860 → 955 → 1000 → 1000 → 1000 → 1000 → 1000
