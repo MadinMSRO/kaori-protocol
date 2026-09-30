@@ -80,6 +80,15 @@ class RelevanceModel(Protocol):
 
     def score(self, images: Sequence[object], *, context: str, engine: str) -> List[float]: ...
 
+    def score_labels(
+        self,
+        images: Sequence[object],
+        *,
+        prompts: Sequence[str],
+        distractors: Sequence[str],
+        engine: str,
+    ) -> List[float]: ...
+
 
 EvidenceLoader = Callable[[EvidenceRef], bytes]
 
@@ -202,6 +211,32 @@ class EvidenceContentLoader:
 class OpenClipGeneralist:
     """Open CLIP on CPU: claim-context evidence versus unrelated imagery."""
 
+    def score_labels(
+        self,
+        images: Sequence[object],
+        *,
+        prompts: Sequence[str],
+        distractors: Sequence[str],
+        engine: str,
+    ) -> List[float]:
+        """Per image, the softmax mass on `prompts` among prompts + distractors."""
+        if engine != "clip_v1":
+            raise ValueError(f"unsupported generalist engine: {engine}")
+        self._load()
+        import torch
+
+        labels = [*prompts, *distractors]
+        image_batch = torch.stack([self._preprocess(image) for image in images])
+        text_batch = self._tokenizer(labels)
+        with torch.inference_mode():
+            image_features = self._model.encode_image(image_batch)
+            text_features = self._model.encode_text(text_batch)
+            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+            logits = self._model.logit_scale.exp() * image_features @ text_features.T
+            mass = logits.softmax(dim=-1)[:, : len(prompts)].sum(dim=-1)
+        return [min(1.0, max(0.0, float(v))) for v in mass.cpu().tolist()]
+
     def __init__(self) -> None:
         self._model = None
         self._preprocess = None
@@ -277,15 +312,24 @@ class ClipGeneralistValidator:
     ) -> ValidationVote:
         config = self._load_claim_type(request.claim_type_id)
         base_context, embedding_engine, relevance_threshold = self._generalist_settings(config)
-        context = self._package_context(base_context, request, config)
-
         refs = request.package_evidence_refs()
         images = [self._load_image(self.evidence_loader(ref)) for ref in refs]
-        relevance = self.model.score(
-            images,
-            context=context,
-            engine=embedding_engine,
-        )
+        prompts, distractors = self._labels(config)
+        if prompts:
+            # Zero-shot: how much of CLIP's belief goes to what this claim's evidence looks like,
+            # against concrete things it must not be mistaken for.
+            relevance = self.model.score_labels(
+                images,
+                prompts=prompts,
+                distractors=distractors,
+                engine=embedding_engine,
+            )
+        else:
+            relevance = self.model.score(
+                images,
+                context=self._package_context(base_context, request, config),
+                engine=embedding_engine,
+            )
         confidence = self._mean_relevance(relevance, len(images))
         vote: Literal["RATIFY", "REJECT"] = (
             "RATIFY" if confidence >= relevance_threshold else "REJECT"
@@ -352,6 +396,16 @@ class ClipGeneralistValidator:
         engine = str(embedding.get("engine") or "")
         threshold = float(embedding.get("similarity_threshold"))
         return context, engine, threshold
+
+    @staticmethod
+    def _labels(config: dict) -> tuple[List[str], List[str]]:
+        """Optional generalist.prompts and generalist.distractors from the ClaimType."""
+        generalist = (config.get("ai_validation_routing") or {}).get("generalist") or {}
+        prompts = [str(p).strip() for p in (generalist.get("prompts") or []) if str(p).strip()]
+        distractors = [str(d).strip() for d in (generalist.get("distractors") or []) if str(d).strip()]
+        if prompts and not distractors:
+            raise ValueError("claim type prompts need distractors")
+        return prompts, distractors
 
     @staticmethod
     def _package_context(base: str, request: ValidatorRequest, config: dict) -> str:

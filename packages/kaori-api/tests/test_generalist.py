@@ -185,6 +185,17 @@ class FakeClipGeneralist:
         )
         return list(self.scores)
 
+    def score_labels(self, images, *, prompts, distractors, engine):
+        self.calls.append(
+            {
+                "count": len(images),
+                "prompts": list(prompts),
+                "distractors": list(distractors),
+                "engine": engine,
+            }
+        )
+        return list(self.scores)
+
 
 def validator(scores) -> ClipGeneralistValidator:
     return ClipGeneralistValidator(
@@ -798,3 +809,52 @@ def test_generalist_client_yaml_timeout_still_records_late_vote(monkeypatch):
         time.sleep(0.02)
     assert late[0].vote == "RATIFY"
     assert late[0].truthkey_id == TRUTHKEY
+
+
+SKY_KEY = "earth:sky_cover:h3:883f6e36d3fffff:surface:2026-10-05T09:00Z"
+
+
+def sky_request() -> ValidatorRequest:
+    observation = Observation(
+        observation_id="00000000-0000-0000-0000-00000000a001",
+        claim_type="earth.sky_cover.v1",
+        reported_at=datetime(2026, 10, 5, 9, 20, tzinfo=timezone.utc),
+        reporter_id="user:sky",
+        reporter_context={"standing": "bronze", "trust_score": 0.2, "source_type": "human"},
+        geo={"lat": 36.8969, "lon": 30.7133},
+        payload={"cover": "few", "raining": False},
+        evidence_refs=[EvidenceRef(uri="gs://kaori-evidence/sky.jpg", sha256="b" * 64)],
+    )
+    return ValidatorRequest(truthkey_id=SKY_KEY, claim_type_id="earth.sky_cover.v1", observations=[observation])
+
+
+def test_claim_types_with_prompts_score_zero_shot_against_distractors():
+    model = FakeClipGeneralist([0.94])
+    generalist = ClipGeneralistValidator(
+        schema_root=str(SCHEMA_ROOT),
+        evidence_loader=lambda _ref: png_bytes(),
+        model=model,
+        signing_key=SIGNING_KEY,
+    )
+    vote = generalist.validate(sky_request())
+    assert vote.vote == "RATIFY"
+    assert vote.confidence == pytest.approx(0.94)
+    call = model.calls[0]
+    assert "a photo of the open sky" in call["prompts"]
+    assert "a completely black photo" in call["distractors"]
+    assert not set(call["prompts"]) & set(call["distractors"])
+
+
+def test_zero_shot_below_the_threshold_rejects():
+    generalist = ClipGeneralistValidator(
+        schema_root=str(SCHEMA_ROOT),
+        evidence_loader=lambda _ref: png_bytes(),
+        model=FakeClipGeneralist([0.4]),
+        signing_key=SIGNING_KEY,
+    )
+    assert generalist.validate(sky_request()).vote == "REJECT"
+
+
+def test_prompts_without_distractors_are_refused():
+    with pytest.raises(ValueError):
+        ClipGeneralistValidator._labels({"ai_validation_routing": {"generalist": {"prompts": ["a photo of the sky"]}}})

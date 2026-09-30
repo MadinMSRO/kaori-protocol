@@ -125,6 +125,26 @@ ai_validation_routing:
     engine: generalist_v1
     timeout: PT2M
     prompt_context: "a photo of the open sky showing how much of it is cloud"
+    # Zero-shot relevance (kaori_api.generalist): the confidence is CLIP's belief in these
+    # prompts against the distractors. Checked on real skies (clear, overcast, storm, sunset,
+    # mostly sky over a roofline or treeline: 0.92-1.00) and non-sky photos (0.001-0.71).
+    prompts:
+      - "a photo of the open sky"
+      - "a photo of clouds in the sky"
+      - "a photo of a clear blue sky"
+      - "a photo of a dark stormy sky"
+      - "a photo of the sky at sunset"
+      - "a photo of the sky above rooftops and trees"
+      - "a photo of the sky with the horizon at the bottom"
+    distractors:
+      - "a close-up photo of a person"
+      - "a photo of an animal"
+      - "a photo of food"
+      - "a photo of the inside of a room"
+      - "a screenshot of an app with text and buttons"
+      - "a photo of a document or text"
+      - "a completely black photo"
+      - "a photo of a floor, pavement or sand up close"
     routes:
       high_confidence: accept       # ai_confidence >= 0.82
       low_confidence: specialist
