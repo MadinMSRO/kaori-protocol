@@ -5,8 +5,13 @@ FLOW_SPEC Rule 2: standing moves when signals align with VERIFIED_TRUE /
 VERIFIED_FALSE, not when a validator first votes. Intermediate statuses
 do not settle.
 
-An Observation is an implicit RATIFY of the claim. A ValidationSignal is
-explicit RATIFY / REJECT / ABSTAIN. ABSTAIN is omitted (safe).
+An Observation is an implicit RATIFY of what it reported. When the claim
+closes VERIFIED_TRUE, an observer is correct only if their categorical
+values (enums and booleans) match the compiled claim; a report that said
+something else is incorrect, so a wrong report costs standing even when the
+truth it joined verifies. Numbers are aggregated (averaged) and not compared.
+A ValidationSignal is explicit RATIFY / REJECT / ABSTAIN. ABSTAIN is omitted
+(safe).
 """
 from __future__ import annotations
 
@@ -119,6 +124,39 @@ def _align_implicit_ratify(status: str) -> str:
     return OUTCOME_UNKNOWN
 
 
+def observation_payloads(observations: Sequence[Any]) -> dict[str, List[dict]]:
+    """Each reporter's payloads, in observation order."""
+    out: dict[str, List[dict]] = {}
+    for observation in observations:
+        reporter_id = getattr(observation, "reporter_id", None)
+        payload = getattr(observation, "payload", None)
+        if isinstance(observation, dict):
+            reporter_id = reporter_id or observation.get("reporter_id")
+            payload = payload if payload is not None else observation.get("payload")
+        if reporter_id and isinstance(payload, dict):
+            out.setdefault(str(reporter_id), []).append(payload)
+    return out
+
+
+def _categorical(value: Any) -> bool:
+    return isinstance(value, (str, bool))
+
+
+def payload_agrees(payload: dict, claim: dict) -> bool:
+    """True when every enum/boolean the reporter gave matches the compiled claim."""
+    for key, value in payload.items():
+        if key in claim and _categorical(value) and _categorical(claim[key]) and value != claim[key]:
+            return False
+    return True
+
+
+def _align_observer(status: str, payloads: List[dict], claim: Optional[dict]) -> str:
+    outcome = _align_implicit_ratify(status)
+    if status == FINAL_TRUE and claim and any(not payload_agrees(p, claim) for p in payloads):
+        return OUTCOME_INCORRECT
+    return outcome
+
+
 def _align_vote(status: str, vote: str) -> Optional[str]:
     if vote == "ABSTAIN":
         return None
@@ -137,9 +175,11 @@ def score_contributors(
     observations: Sequence[Any],
     votes: Optional[Sequence[dict]],
     claim_type_id: str,
+    claim: Optional[dict] = None,
 ) -> List[AgentScore]:
     """
-    Per-agent outcomes for a compiled status.
+    Per-agent outcomes for a compiled status. `claim` is the compiled
+    TruthState.claim; observers are scored against it when given.
 
     Intermediate statuses return an empty list — the caller emits a single
     unknown TRUTHSTATE_EMITTED for audit. Final statuses return one score
@@ -150,6 +190,7 @@ def score_contributors(
         return []
 
     observers = observer_ids(observations)
+    payloads = observation_payloads(observations)
     votes_list = list(votes or [])
     voters = voter_ids(votes_list)
     claimtype_id = claimtype_agent_id(claim_type_id)
@@ -190,7 +231,7 @@ def score_contributors(
             AgentScore(
                 agent_id=agent_id,
                 role=ROLE_OBSERVER,
-                outcome=_align_implicit_ratify(status_value),
+                outcome=_align_observer(status_value, payloads.get(agent_id, []), claim),
             )
         )
         seen.add(agent_id)

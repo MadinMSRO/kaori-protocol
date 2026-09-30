@@ -380,6 +380,7 @@ def emit_compile_truthstate(
         observations=observations,
         votes=votes,
         claim_type_id=claim_type_id,
+        claim=dict(state.claim) if state.claim else None,
     )
     if not scores:
         contributors = participating_agent_ids(

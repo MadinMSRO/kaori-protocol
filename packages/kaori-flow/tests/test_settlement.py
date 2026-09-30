@@ -98,3 +98,45 @@ def test_participating_agent_ids_include_observers_voters_claimtype():
         "claimtype:ocean.coral_bleaching.v1",
         "user:a",
     ]
+
+
+def _said(agent_id: str, **payload) -> dict:
+    return {"reporter_id": agent_id, "payload": payload}
+
+
+def test_verified_true_scores_each_observer_on_what_they_reported():
+    scores = score_contributors(
+        status=FINAL_TRUE,
+        observations=[_said("user:a", cover="clear", raining=False), _said("user:b", cover="clear", raining=False), _said("user:c", cover="overcast", raining=False)],
+        votes=[{"agent_id": "user:v", "vote": "RATIFY", "confidence": 0.9}],
+        claim_type_id="earth.sky_cover.v1",
+        claim={"cover": "clear", "raining": False},
+    )
+    by_id = {item.agent_id: item.outcome for item in scores}
+    assert by_id["user:a"] == OUTCOME_CORRECT
+    assert by_id["user:b"] == OUTCOME_CORRECT
+    assert by_id["user:c"] == OUTCOME_INCORRECT
+    assert by_id["user:v"] == OUTCOME_CORRECT
+
+
+def test_booleans_count_and_numbers_do_not():
+    scores = score_contributors(
+        status=FINAL_TRUE,
+        observations=[_said("user:a", water_present=True, level_cm=30), _said("user:b", water_present=False, level_cm=31)],
+        votes=[],
+        claim_type_id="earth.flood_water.v1",
+        claim={"water_present": True, "level_cm": 30.5},
+    )
+    by_id = {item.agent_id: item.outcome for item in scores}
+    assert by_id["user:a"] == OUTCOME_CORRECT
+    assert by_id["user:b"] == OUTCOME_INCORRECT
+
+
+def test_without_a_claim_observers_keep_the_implicit_ratify():
+    scores = score_contributors(
+        status=FINAL_TRUE,
+        observations=[_said("user:a", cover="overcast")],
+        votes=[],
+        claim_type_id="earth.sky_cover.v1",
+    )
+    assert {item.agent_id: item.outcome for item in scores}["user:a"] == OUTCOME_CORRECT
