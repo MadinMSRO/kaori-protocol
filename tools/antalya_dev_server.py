@@ -37,7 +37,13 @@ def verify(token: str) -> str:
 flow = FlowCore(store=InMemorySignalStore())
 for name in filter(None, os.environ.get("KAORI_DEV_SEEDS", "S").split(",")):
     antalya.seed_member(flow, "user:" + name.strip(), callsign="Seed " + name.strip())
-app = create_app(flow=flow, verify_token=verify, generalist_client=None,
+generalist = None
+if os.environ.get("KAORI_GENERALIST_URL"):
+    # a local generalist (tools: uvicorn kaori_api.generalist_app:app); no Cloud Run IAM locally
+    from kaori_api.generalist_client import GeneralistClient
+
+    generalist = GeneralistClient(os.environ["KAORI_GENERALIST_URL"], token_provider=lambda audience: "local")
+app = create_app(flow=flow, verify_token=verify, generalist_client=generalist,
                  evidence_store=InMemoryEvidenceStore(bucket_name="kaori-observations"),
                  schema_path=os.environ.get("KAORI_SCHEMA_PATH"))
 

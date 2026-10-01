@@ -38,6 +38,8 @@ from fastapi.responses import Response, StreamingResponse
 from kaori_flow import FlowCore
 from kaori_flow.primitives.signal import Signal, SignalTypes
 
+from kaori_api.generalist_client import generalist_timeout_seconds
+
 INVITE_TTL = timedelta(days=7)
 ASSIGNMENT_TTL = timedelta(minutes=30)
 READINGS_PER_PHOTO = 3
@@ -318,7 +320,14 @@ def ai_reader(app: Any) -> Optional[Callable[[str, bytes], dict]]:
     client = getattr(app.state, "generalist_client", None)
     if client is None:
         return None
-    return lambda claim_type_id, image: client.read(claim_type_id=claim_type_id, image=image)
+    def read(claim_type_id: str, image: bytes) -> dict:
+        try:
+            timeout = generalist_timeout_seconds(app.state.orchestrator.get_claim_type(claim_type_id))
+        except Exception:
+            timeout = 120.0
+        return client.read(claim_type_id=claim_type_id, image=image, timeout=timeout)
+
+    return read
 
 
 def ai_read(app: Any, observation: Any, truth_key: str, vote_and_compile: Callable[..., Any]) -> None:
@@ -335,13 +344,17 @@ def ai_read(app: Any, observation: Any, truth_key: str, vote_and_compile: Callab
         "evidence_sha256": sha, "validator": AI_AGENT, "reason": "ai",
         "truthkey": truth_key, "observation_id": str(observation.observation_id), "claim_type_id": observation.claim_type,
     })
-    try:
-        image = blind_image(app.state.evidence_store.read(observation.evidence_refs[0]))
-        result = reader(observation.claim_type, image)
-    except Exception:
-        import logging
+    result = None
+    for attempt in range(2):                      # one retry: a hiccup should not lose the AI's reading
+        try:
+            image = blind_image(app.state.evidence_store.read(observation.evidence_refs[0]))
+            result = reader(observation.claim_type, image)
+            break
+        except Exception:
+            import logging
 
-        logging.getLogger(__name__).exception("AI reading failed for %s", sha)
+            logging.getLogger(__name__).exception("AI reading failed for %s (attempt %d)", sha, attempt + 1)
+    if result is None:
         return
     values = result.get("values") or {}
     relevance = result.get("relevance")

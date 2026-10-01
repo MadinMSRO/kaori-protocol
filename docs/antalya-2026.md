@@ -9,6 +9,7 @@ The IAC sky test runs the same image as `kaori-api`, with one extra environment 
 |---|---|---|
 | `KAORI_ANTALYA` | `1` | Mounts the routes below. `/v1/evidence` and `/v1/compile` accept members only (joined by invite, or seeded) |
 | `KAORI_EXPORT_TOKEN` | a new secret | Bearer token for `GET /v1/export` |
+| `KAORI_GENERALIST_URL` | the `kaori-generalist` service URL | **Required.** The AI reads every photo blind through its `POST /read` |
 | everything else | as in `deployment-runbook.md` | A new `KAORI_SIGNING_KEY` and `KAORI_SIGNING_KEY_ID` for Antalya, its own schema and bucket prefix |
 
 Without `KAORI_ANTALYA` the API is exactly the existing `kaori-api` (the route allow-list test enforces this).
@@ -50,3 +51,23 @@ It is recorded as `PROVENANCE_RECORDED`, with the checks behind the validator's 
 - **Members-only gate** on evidence and compile, so sign-up really is referral-only on this service.
 - **Readings compile only once the key has its reporters.** Before that the vote is recorded and used when the
   third report arrives.
+
+## The AI reads every photo blind
+
+Every accepted photo is also assigned to `ai:generalist_v1`. Kaori sends `kaori-generalist` (`POST /read`) the
+same EXIF-stripped image a person sees. CLIP reads it zero-shot over the ClaimType's `generalist.readings`
+prompts, and says whether it is a sky at all (the ClaimType's relevance threshold). The reading is recorded like
+anyone's (`ASSIGNMENT_ISSUED`, `READING_SUBMITTED` with the probabilities) and becomes a vote. The old key-level AI
+call is skipped on this service. Reads are serialised and the model loads at service start; a failed read is
+retried once.
+
+`sky_cover` uses `verification.rule: weighted_readings`: a reading backs the key when its photo shows the claimed
+value (within one band); each agent counts once per key, weighted by its standing in the frozen TrustSnapshot;
+verified at `finalize_threshold` (15). No AI-only threshold. At starting standing the AI alone (about 5.7) cannot
+verify a key; with two or three people it can.
+
+**Check before deploying:** `kaori-generalist` must be built from this branch (it needs the `/read` route). Its
+image downloads the CLIP weights at build time (Hugging Face), which Cloud Build can reach.
+
+Locally, with real CLIP, the contract passes: the AI read all three photos (2 to 4 s each), voted RATIFY, RATIFY
+and REJECT (one photo showed rain its reporter did not report), and the key verified with 12 votes.

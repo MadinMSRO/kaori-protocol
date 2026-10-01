@@ -895,3 +895,17 @@ def test_blind_read_returns_a_value_per_field_from_the_claim_type_prompts():
     assert set(result["probs"]["cover"]) == {"clear", "few", "scattered", "broken", "overcast"}
     assert result["values"]["raining"] in (True, False)
     assert result["relevance"] == 0.96
+
+
+def test_read_endpoint_accepts_a_json_body():
+    import base64
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from kaori_api.generalist_app import create_generalist_app
+
+    root = str(Path(__file__).resolve().parents[2] / "kaori-spec" / "schemas")
+    app = create_generalist_app(ClipGeneralistValidator(schema_root=root, model=_LabelModel("partly cloudy")))
+    r = TestClient(app).post("/read", json={"claim_type_id": "earth.sky_cover.v1", "image_b64": base64.b64encode(_jpeg()).decode()})
+    assert r.status_code == 200 and r.json()["values"]["cover"] == "scattered" and r.json()["evidence"] is True

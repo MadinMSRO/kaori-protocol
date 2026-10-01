@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import io
+import threading
 import json
 import logging
 import math
@@ -222,6 +223,10 @@ class OpenClipGeneralist:
         """Per image, the softmax mass on `prompts` among prompts + distractors."""
         if engine != "clip_v1":
             raise ValueError(f"unsupported generalist engine: {engine}")
+        with self._lock:
+            return self._score_labels(images, prompts, distractors)
+
+    def _score_labels(self, images: Sequence[object], prompts: Sequence[str], distractors: Sequence[str]) -> List[float]:
         self._load()
         import torch
 
@@ -241,6 +246,15 @@ class OpenClipGeneralist:
         """Per image, CLIP's softmax over `labels` (zero-shot classification)."""
         if engine != "clip_v1":
             raise ValueError(f"unsupported generalist engine: {engine}")
+        with self._lock:
+            return self._label_probs(images, labels)
+
+    def warm(self) -> None:
+        """Load the model now (service start), not on the first photo."""
+        with self._lock:
+            self._load()
+
+    def _label_probs(self, images: Sequence[object], labels: Sequence[str]) -> List[List[float]]:
         self._load()
         import torch
 
@@ -259,6 +273,8 @@ class OpenClipGeneralist:
         self._model = None
         self._preprocess = None
         self._tokenizer = None
+        # one load, one inference at a time: concurrent first requests must not each load the model
+        self._lock = threading.RLock()
 
     def _load(self) -> None:
         if self._model is not None:
