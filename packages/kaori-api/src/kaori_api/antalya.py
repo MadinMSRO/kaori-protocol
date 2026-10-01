@@ -172,7 +172,7 @@ def issue_invite(flow: FlowCore, agent_id: str, callsign: Optional[str] = None) 
     expires_at = _now() + INVITE_TTL
     _emit(flow, SignalTypes.INVITE_ISSUED, agent_id, f"invite:{chash}",
           {"code_hash": chash, "expires_at": expires_at.isoformat(), "callsign": callsign})
-    return {"code": code, "expires_at": expires_at.isoformat(), "qr_payload": f"liminal://invite?code={code}"}
+    return {"code": code, "expires_at": expires_at.isoformat(), "qr_payload": f"liminal://join?code={code}"}
 
 
 def redeem_invite(flow: FlowCore, agent_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
