@@ -46,6 +46,7 @@ Every step is safe to re-run. To run one step: `./deploy/antalya/deploy.sh <step
 | `sql` | The Cloud SQL instance (about 10 minutes the first time), the `kaori` database, and the schema-owner login |
 | `db` | A one-off Cloud Run job that applies the ledger schema and creates the API's login. That login can only add to the ledger: no deletes, no schema changes |
 | `firebase` | Adds Firebase to the project, turns on email and password sign-in, and registers the app |
+| `signing` | Creates the Android signing key in Secret Manager (once; it never changes), lets GitHub Actions in `liminal-mobile` (main and `probe-*` only) read it through Workload Identity Federation, and registers its fingerprints with Firebase. The key never leaves GCP except into a build |
 | `generalist` | Deploys the AI: 2 CPU, 4 GiB, one instance always warm. Lets the API call it |
 | `api` | Deploys the API: one instance, always on, connected to Cloud SQL |
 | `smoke` | Checks the live services (below) |

@@ -7,6 +7,7 @@
 #   ./deploy/antalya/deploy.sh <step>                # one step (see STEPS below)
 #   ./deploy/antalya/deploy.sh seed <email or uid> "<callsign>"
 #   ./deploy/antalya/deploy.sh status
+#   ./deploy/antalya/deploy.sh signing              # only the Android signing key and GitHub's access to it
 #
 # Settings default to msro-kaori-sandbox / asia-southeast1; override in deploy/antalya/antalya.env.
 # Existing services in the project (kaori-api, kaori-generalist, ...) are not touched: everything
@@ -16,7 +17,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 ENV_FILE=${ENV_FILE:-$HERE/antalya.env}
-STEPS="check apis build bucket secrets accounts sql db firebase generalist api smoke status"
+STEPS="check apis build bucket secrets accounts sql db firebase signing generalist api smoke status"
 
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 say() { printf '\n== %s\n' "$*"; }
@@ -45,6 +46,15 @@ SECRET_DB_ADMIN=antalya-db-admin-url    # schema owner; only the db job reads it
 SIGNING_KEY_ID=msro-antalya-1
 FIREBASE_APP_NAME="Liminal Antalya"
 FIREBASE_CONFIG=$HERE/firebase-config.json
+# The Android app's signing key: made once, kept only in Secret Manager. GitHub Actions in
+# MadinMSRO/liminal-mobile (main and probe-* branches only) reads it through Workload Identity Federation.
+ANDROID_PACKAGE=mv.msro.liminal
+APP_REPO=MadinMSRO/liminal-mobile
+SECRET_KEYSTORE=liminal-android-keystore
+SECRET_KEYSTORE_PW=liminal-android-keystore-password
+SIGNER_SA=liminal-apk-signer@$PROJECT_ID.iam.gserviceaccount.com
+WIF_POOL=github
+WIF_PROVIDER=liminal-mobile
 REPO=$REGION-docker.pkg.dev/$PROJECT_ID/kaori
 TAG=${TAG:-$(git -C "$ROOT" rev-parse --short=12 HEAD)}
 API_IMAGE=$REPO/kaori-api:$TAG
@@ -284,6 +294,108 @@ step_firebase() {
   [ "$API_STATUS" = 200 ] || die "could not read the app's Firebase settings ($API_STATUS): $body"
   printf '%s' "$body" > "$FIREBASE_CONFIG"
   echo "  app settings saved to deploy/antalya/firebase-config.json (public values, not secrets)"
+}
+
+step_signing() {
+  say "Android signing key (Secret Manager only) and GitHub's access to it"
+  command -v keytool >/dev/null || die "keytool not found (Cloud Shell has it)"
+  gc services enable secretmanager.googleapis.com iam.googleapis.com iamcredentials.googleapis.com \
+    sts.googleapis.com firebase.googleapis.com
+  local work; work=$(mktemp -d); chmod 700 "$work"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$work'" RETURN
+
+  # 1. The key, once. Never written anywhere but this temporary folder and Secret Manager.
+  if secret_has_version "$SECRET_KEYSTORE"; then
+    echo "  signing key: kept (it must never change: phones only accept updates signed with it)"
+  else
+    local pw; pw=$(openssl rand -hex 24)
+    keytool -genkeypair -storetype PKCS12 -keystore "$work/k.p12" -alias liminal \
+      -keyalg RSA -keysize 4096 -validity 10000 \
+      -dname "CN=Maldives Space Research Organisation, O=MSRO, C=MV" \
+      -storepass "$pw" -keypass "$pw" >/dev/null 2>&1
+    for name in "$SECRET_KEYSTORE" "$SECRET_KEYSTORE_PW"; do
+      gc secrets describe "$name" >/dev/null 2>&1 || gc secrets create "$name" --replication-policy=automatic
+    done
+    gc secrets versions add "$SECRET_KEYSTORE" --data-file="$work/k.p12" >/dev/null
+    printf '%s' "$pw" | gc secrets versions add "$SECRET_KEYSTORE_PW" --data-file=- >/dev/null
+    rm -f "$work/k.p12"
+    echo "  signing key: created in Secret Manager ($SECRET_KEYSTORE)"
+  fi
+
+  # 2. Its fingerprints (public).
+  gc secrets versions access latest --secret="$SECRET_KEYSTORE" --out-file="$work/k.p12"
+  local list sha1 sha256
+  list=$(keytool -list -v -keystore "$work/k.p12" -alias liminal \
+    -storepass "$(gc secrets versions access latest --secret="$SECRET_KEYSTORE_PW")")
+  rm -f "$work/k.p12"
+  sha1=$(printf '%s\n' "$list" | sed -nE 's/^[[:space:]]*SHA1:[[:space:]]*([0-9A-F:]+).*/\1/p' | head -1)
+  sha256=$(printf '%s\n' "$list" | sed -nE 's/^[[:space:]]*SHA256:[[:space:]]*([0-9A-F:]+).*/\1/p' | head -1)
+  [ -n "$sha1" ] && [ -n "$sha256" ] || die "could not read the key's fingerprints"
+
+  # 3. GitHub Actions -> GCP, without any stored GitHub secret. Only builds of $APP_REPO on main or
+  #    probe-* branches get in, and they may only read the two signing secrets.
+  local num; num=$(gc projects describe "$PROJECT_ID" --format='value(projectNumber)')
+  gc iam workload-identity-pools describe "$WIF_POOL" --location=global >/dev/null 2>&1 \
+    || gc iam workload-identity-pools create "$WIF_POOL" --location=global --display-name="GitHub Actions"
+  local cond="assertion.repository=='$APP_REPO' && (assertion.ref=='refs/heads/main' || assertion.ref.startsWith('refs/heads/probe-'))"
+  if gc iam workload-identity-pools providers describe "$WIF_PROVIDER" --location=global \
+       --workload-identity-pool="$WIF_POOL" >/dev/null 2>&1; then
+    gc iam workload-identity-pools providers update-oidc "$WIF_PROVIDER" --location=global \
+      --workload-identity-pool="$WIF_POOL" --attribute-condition="$cond" >/dev/null
+  else
+    gc iam workload-identity-pools providers create-oidc "$WIF_PROVIDER" --location=global \
+      --workload-identity-pool="$WIF_POOL" --display-name="liminal-mobile builds" \
+      --issuer-uri="https://token.actions.githubusercontent.com" \
+      --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
+      --attribute-condition="$cond"
+  fi
+  gc iam service-accounts describe "$SIGNER_SA" >/dev/null 2>&1 \
+    || gc iam service-accounts create liminal-apk-signer --display-name="Liminal APK signing (GitHub Actions)"
+  for name in "$SECRET_KEYSTORE" "$SECRET_KEYSTORE_PW"; do
+    retry gc secrets add-iam-policy-binding "$name" --member="serviceAccount:$SIGNER_SA" \
+      --role=roles/secretmanager.secretAccessor >/dev/null
+  done
+  retry gc iam service-accounts add-iam-policy-binding "$SIGNER_SA" --role=roles/iam.workloadIdentityUser \
+    --member="principalSet://iam.googleapis.com/projects/$num/locations/global/workloadIdentityPools/$WIF_POOL/attribute.repository/$APP_REPO" >/dev/null
+  echo "  GitHub access: $APP_REPO (main, probe-*) may read the signing key, nothing else"
+
+  # 4. The Android app in Firebase, with the key's fingerprints (Google sign-in checks them).
+  api GET "https://firebase.googleapis.com/v1beta1/projects/$PROJECT_ID"
+  [ "$API_STATUS" = 200 ] || die "run the firebase step first"
+  local app_id body
+  api GET "https://firebase.googleapis.com/v1beta1/projects/$PROJECT_ID/androidApps"
+  app_id=$(printf '%s' "$API_BODY" | json "next((a['appId'] for a in d.get('apps', []) if a.get('packageName') == '$ANDROID_PACKAGE' and a.get('state') == 'ACTIVE'), '')")
+  if [ -z "$app_id" ]; then
+    api POST "https://firebase.googleapis.com/v1beta1/projects/$PROJECT_ID/androidApps" \
+      "{\"packageName\":\"$ANDROID_PACKAGE\",\"displayName\":\"Liminal (Android)\"}"; body=$API_BODY
+    [ "$API_STATUS" = 200 ] || die "could not register the Android app ($API_STATUS): $body"
+    wait_op "$(printf '%s' "$body" | json 'd["name"]')"
+    api GET "https://firebase.googleapis.com/v1beta1/projects/$PROJECT_ID/androidApps"
+    app_id=$(printf '%s' "$API_BODY" | json "next((a['appId'] for a in d.get('apps', []) if a.get('packageName') == '$ANDROID_PACKAGE'), '')")
+  fi
+  [ -n "$app_id" ] || die "the Android app was not found after registering it"
+  api GET "https://firebase.googleapis.com/v1beta1/projects/$PROJECT_ID/androidApps/$app_id/sha"
+  local have; have=$(printf '%s' "$API_BODY" | json "' '.join(c['shaHash'].lower() for c in d.get('certificates', []))")
+  local fp type
+  for fp in "SHA_1:$sha1" "SHA_256:$sha256"; do
+    type=${fp%%:*}; fp=$(printf '%s' "${fp#*:}" | tr -d ':' | tr 'A-F' 'a-f')
+    [[ " $have " == *" $fp "* ]] && continue
+    api POST "https://firebase.googleapis.com/v1beta1/projects/$PROJECT_ID/androidApps/$app_id/sha" \
+      "{\"shaHash\":\"$fp\",\"certType\":\"$type\"}"
+    [ "$API_STATUS" = 200 ] || die "could not add the $type fingerprint ($API_STATUS): $API_BODY"
+  done
+  echo "  Firebase Android app $ANDROID_PACKAGE: fingerprints registered"
+
+  say "Signing: public values (safe to share)"
+  echo "  SHA-1     $sha1"
+  echo "  SHA-256   $sha256"
+  echo "  provider  projects/$num/locations/global/workloadIdentityPools/$WIF_POOL/providers/$WIF_PROVIDER"
+  echo "  account   $SIGNER_SA"
+  echo
+  echo "  Offline backup for MSRO's safe (do this once, then delete the file from Cloud Shell):"
+  echo "    gcloud secrets versions access latest --secret=$SECRET_KEYSTORE --project=$PROJECT_ID --out-file=msro-liminal.p12"
+  echo "    gcloud secrets versions access latest --secret=$SECRET_KEYSTORE_PW --project=$PROJECT_ID"
 }
 
 step_generalist() {
