@@ -59,8 +59,8 @@ def attack_once(R, d, m, s, capture):
     sig = []
     h = 0
     lam = d                                    # Poisson honest presence
-    p, u = math.exp(-lam), R.random()
-    while u > p and h < 200: h += 1; p += math.exp(-lam) * lam ** h / math.factorial(h)
+    pmf = math.exp(-lam); p, u = pmf, R.random()
+    while u > p and h < 400: h += 1; pmf *= lam / h; p += pmf
     vid = [0]
     def readers(content, signed):
         out = [("ai", None, read(R, content, 0.8, 0.85))]
