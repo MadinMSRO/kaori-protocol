@@ -460,15 +460,32 @@ def _determine_status(
 
 
 def _human_vote_direction(votes: List[dict]) -> Optional[str]:
-    """Latest human RATIFY/REJECT. ABSTAIN is ignored."""
-    direction = None
+    """
+    Standing-weighted majority of human RATIFY/REJECT (the consensus weight, 1 + log2(1 + standing/10)).
+    ABSTAIN is ignored. Independent of vote order; the latest vote breaks an exact tie.
+    """
+    import math
+
+    score = 0.0
+    latest = None
     for vote in votes:
         if not _is_human_vote(vote):
             continue
         value = _vote_value(vote)
-        if value in ("RATIFY", "REJECT"):
-            direction = value
-    return direction
+        if value not in ("RATIFY", "REJECT"):
+            continue
+        try:
+            standing = float(_vote_field(vote, "voter_standing") or 10.0)
+        except (TypeError, ValueError):
+            standing = 10.0
+        weight = 1.0 + math.log2(1 + max(0.0, standing) / 10.0)
+        score += weight if value == "RATIFY" else -weight
+        latest = value
+    if latest is None:
+        return None
+    if abs(score) < 1e-9:
+        return latest
+    return "RATIFY" if score > 0 else "REJECT"
 
 
 def _compute_confidence(

@@ -262,3 +262,76 @@ def test_export_requires_the_admin_token_and_holds_every_signal_type(env):
     types = {row["signal_type"] for row in rows if row["kind"] == "signal"}
     assert NEW_SIGNALS <= types
     assert any(row["kind"] == "truthstate" and row["truthkey"] == KEY for row in rows)
+
+
+# ------------------------------------------------------------------------------------------- key-level compile
+
+def _read_all(client, validator, choose):
+    for item in client.get("/v1/assignments?limit=5", headers=_h(validator)).json():
+        cover = choose(item)
+        client.post(f"/v1/assignments/{item['assignment_id']}/reading", headers=_h(validator),
+                    json={"cover": cover, "raining": False})
+
+
+def _ai_vote(client, confidence=0.9):
+    """The generalist's vote, as the critical lane records it in production (AI >= 0.82 plus humans)."""
+    from kaori_api.app import record_vote
+    record_vote(client.app, "ai:generalist_v1", KEY, "RATIFY", confidence)
+
+
+def _status(client):
+    return client.get(f"/v1/truth/{KEY}", headers=_h("madin")).json()["status"]
+
+
+def test_per_observation_votes_ratify_the_key(env):
+    client, flow, _ = env
+    for name in ("madin", "amira", "omar", "v1", "v2", "v3"):
+        _join(client, flow, name)
+    for name in ("madin", "amira", "omar"):
+        _report(client, name, cover="overcast")
+    _ai_vote(client)
+    assert _status(client) != "VERIFIED_TRUE"          # no human ratification yet
+    for v in ("v1", "v2", "v3"):
+        _read_all(client, v, lambda item: "overcast")
+    assert _status(client) == "VERIFIED_TRUE"
+
+
+def test_an_unread_observation_does_not_block_its_key(env, monkeypatch):
+    client, flow, _ = env
+    for name in ("madin", "amira", "omar", "v1", "v2", "v3"):
+        _join(client, flow, name)
+    for name in ("madin", "amira", "omar"):
+        _report(client, name, cover="overcast")
+    omar = {p["sha"] for p in antalya._photos(flow, client.app.state.observation_store) if p["reporter"] == "user:omar"}
+    real = antalya._photos
+    monkeypatch.setattr(antalya, "_photos", lambda f, s: [p for p in real(f, s) if p["sha"] not in omar])
+    _ai_vote(client)
+    for v in ("v1", "v2", "v3"):
+        _read_all(client, v, lambda item: "overcast")
+    readings = flow.store.get_by_type(SignalTypes.READING_SUBMITTED)
+    assert len(readings) == 6 and not omar & {r.payload["evidence_sha256"] for r in readings}
+    assert _status(client) == "VERIFIED_TRUE"
+
+
+def test_a_rejected_lie_does_not_flip_the_key_whatever_the_order(env):
+    """Two honest photos and one eye lie: 6 RATIFY and 3 REJECT must verify, even if the REJECTs come last."""
+    client, flow, _ = env
+    for name in ("madin", "amira", "omar", "v1", "v2", "v3"):
+        _join(client, flow, name)
+    _report(client, "madin", cover="overcast")
+    _report(client, "amira", cover="overcast")
+    _report(client, "omar", cover="clear")             # the photo shows overcast; the eye says clear
+    _ai_vote(client)
+    liar = {p["sha"] for p in antalya._photos(flow, client.app.state.observation_store) if p["reporter"] == "user:omar"}
+    later = []
+    for v in ("v1", "v2", "v3"):
+        for item in client.get("/v1/assignments?limit=5", headers=_h(v)).json():
+            sig = flow.store.get_by_type(SignalTypes.ASSIGNMENT_ISSUED)
+            sha = next(s.payload["evidence_sha256"] for s in sig if s.object_id.endswith(item["assignment_id"]))
+            (later if sha in liar else []).append((v, item)) if sha in liar else client.post(
+                f"/v1/assignments/{item['assignment_id']}/reading", headers=_h(v), json={"cover": "overcast", "raining": False})
+    for v, item in later:                               # the lie's REJECTs arrive last
+        client.post(f"/v1/assignments/{item['assignment_id']}/reading", headers=_h(v), json={"cover": "overcast", "raining": False})
+    votes = [s.payload.get("vote") for s in flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) if s.agent_id.startswith("user:")]
+    assert votes.count("RATIFY") == 6 and votes.count("REJECT") == 3 and votes[-1] == "REJECT"
+    assert _status(client) == "VERIFIED_TRUE"
