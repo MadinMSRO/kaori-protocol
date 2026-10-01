@@ -250,7 +250,9 @@ VARIANTS = {
 }
 FAKE_PASS = {"L + in-app capture": 0.0, "L + peer check + in-app capture": 0.0, "L + local provenance + in-app capture": 0.0}   # otherwise the world's 15%
 
-def run(name, world, detail=False):
+def run(name, world, detail=False, transform=None):
+    """transform(N, cell, t, truth, fake) -> cell, if given, rebuilds each new cell before the network sees it (used by
+    tip2.py to assign validators from the observers who have earned standing)."""
     events, POOL = world
     N = Soup(*VARIANTS[name])
     tau = STAKES / (1 + STAKES)
@@ -295,6 +297,7 @@ def run(name, world, detail=False):
                 else: out["stuck"] += 1
             opened = still
         cell = (reps, items)
+        if transform: cell = transform(N, cell, t, truth, fake)
         for aid, kind, *_ in reps: kinds.setdefault(aid, kind)
         N.observe(cell)
         if len(reps) >= 3:
