@@ -44,6 +44,7 @@ from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 from kaori_truth.signing import production_signing_required
 from pydantic import ValidationError
 
+from kaori_api import antalya
 from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
 from kaori_api.evidence_store import (
     EvidenceStorageError,
@@ -430,6 +431,95 @@ def enrich_truth_artifact(stored: Dict[str, Any], truth_store: Any) -> Dict[str,
     return attach_claim_agents(dict(stored), snapshot, state.claim_type, state)
 
 
+def record_vote(app: FastAPI, agent_id: str, truth_key: str, vote: str, confidence: Optional[float] = None) -> List[Observation]:
+    """Sign and record one VALIDATION_VOTE for a TruthKey. Returns its observations."""
+    observations = app.state.observation_store.get_for_truthkey(truth_key)
+    if not observations:
+        stored = app.state.truth_store.get(truth_key)
+        if stored is None:
+            raise HTTPException(status_code=404, detail="Unknown truthkey")
+        raise HTTPException(status_code=409, detail="No observations for truthkey")
+    flow = app.state.flow
+    ensure_agent_registered(flow, agent_id, role="observer")
+    now = datetime.now(timezone.utc)
+    signed = sign_validation_vote(
+        ValidationVote(
+            agent_id=agent_id,
+            truthkey_id=truth_key,
+            window_id=f"window:{truth_key}",
+            vote=vote,
+            confidence=confidence,
+            timestamp=now,
+            signature="pending",
+        )
+    )
+    record_validation_vote(
+        flow,
+        agent_id=agent_id,
+        truthkey_id=truth_key,
+        window_id=signed.window_id,
+        vote=vote,
+        confidence=confidence,
+        time=now,
+        signature=signed.signature,
+    )
+    return observations
+
+
+def compile_recorded(app: FastAPI, agent_id: str, truth_key: str, observations: List[Observation]) -> dict:
+    """Recompile a TruthKey from every recorded vote (the /v1/validate path)."""
+    flow = app.state.flow
+    claim_type_id = observations[0].claim_type
+    recorded = compiler_votes_for_truthkey(flow, truth_key)
+    ai_scores = None
+    ai_confidences = [
+        float(item["confidence"])
+        for item in recorded
+        if item.get("confidence") is not None
+        and not str(item.get("agent_id", "")).startswith(("user:", "human:"))
+    ]
+    if ai_confidences:
+        ai_scores = [sum(ai_confidences) / len(ai_confidences)] * len(observations)
+    try:
+        with app.state.compile_lock.get(truth_key):
+            return compile_after_vote(
+                orchestrator=app.state.orchestrator,
+                truth_store=app.state.truth_store,
+                flow=flow,
+                observations=observations,
+                truth_key=truth_key,
+                claim_type_id=claim_type_id,
+                agent_id=agent_id,
+                votes=recorded,
+                ai_scores=ai_scores,
+            )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except CompilationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def vote_and_compile(app: FastAPI, agent_id: str, truth_key: str, vote: str, confidence: Optional[float] = None) -> dict:
+    observations = record_vote(app, agent_id, truth_key, vote, confidence)
+    return compile_recorded(app, agent_id, truth_key, observations)
+
+
+def reading_vote(app: FastAPI, agent_id: str, truth_key: str, vote: str) -> None:
+    """Antalya adapter: a blind reading becomes a vote; compile only once the key has its reporters."""
+    observations = record_vote(app, agent_id, truth_key, vote)
+    try:
+        claim_type = app.state.orchestrator.get_claim_type(observations[0].claim_type)
+        required = claim_type.minimum_observations()
+    except Exception:
+        return
+    if app.state.observation_store.count_distinct_reporters(truth_key) < required:
+        return
+    try:
+        compile_recorded(app, agent_id, truth_key, observations)
+    except HTTPException as exc:
+        LOGGER.info("compile after blind reading did not finish for %s: %s", truth_key, exc.detail)
+
+
 def create_app(
     *,
     flow: Optional[FlowCore] = None,
@@ -513,6 +603,8 @@ def create_app(
         expected_sha256: Optional[str] = Form(default=None),
         agent_id: str = Depends(require_agent),
     ):
+        if antalya.enabled():
+            antalya.require_member(app.state.flow, agent_id)
         try:
             evidence_ref = app.state.evidence_store.upload(
                 file.file,
@@ -556,11 +648,17 @@ def create_app(
             raise HTTPException(status_code=404, detail="Unknown claim_type_id")
 
         flow_core: FlowCore = request.app.state.flow
+        if antalya.enabled():
+            antalya.require_member(flow_core, agent_id)
         context = reporter_context_from_flow(flow_core, agent_id)
         stamped = []
+        provenance_blocks = []
         for item in raw_observations:
             if not isinstance(item, dict):
                 raise HTTPException(status_code=400, detail="Invalid observation or EvidenceRef")
+            # Capture provenance (EXIF, source, device) travels beside the observation, never inside it
+            provenance_blocks.append(item.get("provenance"))
+            item = {key: value for key, value in item.items() if key != "provenance"}
             stamped.append(stamp_observation(item, agent_id, context))
 
         try:
@@ -587,7 +685,7 @@ def create_app(
 
         received_at = datetime.now(timezone.utc)
         try:
-            for observation in observations:
+            for index, observation in enumerate(observations):
                 inserted = request.app.state.observation_store.append(
                     observation,
                     truthkey=truth_key,
@@ -603,6 +701,14 @@ def create_app(
                         observation_hash=observation.hash(),
                         claim_type_id=claim_type_id,
                     )
+                    if provenance_blocks[index] is not None:
+                        antalya.record_provenance(
+                            flow_core,
+                            reporter_id=agent_id,
+                            observation=observation,
+                            truth_key=truth_key,
+                            provenance=provenance_blocks[index],
+                        )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -781,65 +887,7 @@ def create_app(
             if not 0.0 <= confidence <= 1.0:
                 raise HTTPException(status_code=400, detail="Invalid confidence")
 
-        observations = request.app.state.observation_store.get_for_truthkey(truth_key)
-        if not observations:
-            stored = request.app.state.truth_store.get(truth_key)
-            if stored is None:
-                raise HTTPException(status_code=404, detail="Unknown truthkey")
-            raise HTTPException(status_code=409, detail="No observations for truthkey")
-
-        flow = request.app.state.flow
-        claim_type_id = observations[0].claim_type
-        ensure_agent_registered(flow, agent_id, role="observer")
-        now = datetime.now(timezone.utc)
-        signed = sign_validation_vote(
-            ValidationVote(
-                agent_id=agent_id,
-                truthkey_id=truth_key,
-                window_id=f"window:{truth_key}",
-                vote=vote,
-                confidence=confidence,
-                timestamp=now,
-                signature="pending",
-            )
-        )
-        record_validation_vote(
-            flow,
-            agent_id=agent_id,
-            truthkey_id=truth_key,
-            window_id=signed.window_id,
-            vote=vote,
-            confidence=confidence,
-            time=now,
-            signature=signed.signature,
-        )
-        recorded = compiler_votes_for_truthkey(flow, truth_key)
-        ai_scores = None
-        ai_confidences = [
-            float(item["confidence"])
-            for item in recorded
-            if item.get("confidence") is not None
-            and not str(item.get("agent_id", "")).startswith(("user:", "human:"))
-        ]
-        if ai_confidences:
-            ai_scores = [sum(ai_confidences) / len(ai_confidences)] * len(observations)
-        try:
-            with request.app.state.compile_lock.get(truth_key):
-                artifact = compile_after_vote(
-                    orchestrator=request.app.state.orchestrator,
-                    truth_store=request.app.state.truth_store,
-                    flow=flow,
-                    observations=observations,
-                    truth_key=truth_key,
-                    claim_type_id=claim_type_id,
-                    agent_id=agent_id,
-                    votes=recorded,
-                    ai_scores=ai_scores,
-                )
-        except RuntimeError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except CompilationError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        artifact = vote_and_compile(request.app, agent_id, truth_key, vote, confidence)
         return JSONResponse(status_code=200, content=artifact)
 
     @app.get("/v1/standing/{agent_id}")
@@ -865,6 +913,8 @@ def create_app(
             raise HTTPException(status_code=404, detail="Unknown truthkey")
         return enrich_truth_artifact(stored, request.app.state.truth_store)
 
+    if antalya.enabled():
+        antalya.add_routes(app, require_agent, reading_vote)
     return app
 
 

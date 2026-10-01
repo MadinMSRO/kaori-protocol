@@ -111,3 +111,12 @@ class SignalTypes:
     
     # Policy
     POLICY_REGISTERED = "POLICY_REGISTERED"
+
+    # Membership by referral (Antalya MVP)
+    INVITE_ISSUED = "INVITE_ISSUED"
+    REFERRAL_REDEEMED = "REFERRAL_REDEEMED"
+
+    # Evidence provenance and blind readings (Antalya MVP)
+    PROVENANCE_RECORDED = "PROVENANCE_RECORDED"
+    ASSIGNMENT_ISSUED = "ASSIGNMENT_ISSUED"
+    READING_SUBMITTED = "READING_SUBMITTED"

@@ -85,6 +85,13 @@ class InMemoryEvidenceStore:
             bytes_size=size,
         )
 
+    def read(self, evidence: EvidenceRef) -> bytes:
+        """Stored bytes for an evidence ref (blind validation serves them re-encoded)."""
+        object_name = urlparse(evidence.uri).path.lstrip("/")
+        if object_name not in self.objects:
+            raise EvidenceStorageError("evidence object does not exist")
+        return self.objects[object_name]
+
     def verify(self, evidence: EvidenceRef, *, reporter_id: str) -> None:
         """Tests may inject protocol-valid external refs without object bytes."""
         if not evidence.uri.startswith("gs://") or not evidence.sha256:
@@ -158,6 +165,19 @@ class GcsEvidenceStore:
         finally:
             stream.seek(0)
         return evidence
+
+    def read(self, evidence: EvidenceRef) -> bytes:
+        """Stored bytes for an evidence ref, checked against its content hash."""
+        parsed = urlparse(evidence.uri)
+        if parsed.scheme != "gs" or parsed.netloc != self.bucket_name:
+            raise EvidenceStorageError("evidence URI is outside this bucket")
+        blob = self.client.bucket(self.bucket_name).get_blob(parsed.path.lstrip("/"))
+        if blob is None:
+            raise EvidenceStorageError("evidence object does not exist")
+        data = blob.download_as_bytes()
+        if evidence.sha256 and hashlib.sha256(data).hexdigest() != evidence.sha256.lower():
+            raise EvidenceStorageError("evidence hash does not match stored object bytes")
+        return data
 
     def verify(self, evidence: EvidenceRef, *, reporter_id: str) -> None:
         parsed = urlparse(evidence.uri)
