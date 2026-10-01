@@ -44,7 +44,7 @@ from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 from kaori_truth.signing import production_signing_required
 from pydantic import ValidationError
 
-from kaori_api import antalya, devices
+from kaori_api import admin, antalya, devices
 from kaori_api.auth import (
     AuthError,
     FirebaseCerts,
@@ -949,6 +949,7 @@ def create_app(
 
     if antalya.enabled():
         antalya.add_routes(app, require_agent, reading_vote)
+        admin.add_routes(app)
     return app
 
 

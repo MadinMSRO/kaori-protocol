@@ -14,7 +14,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from typing import Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.parse import urljoin
 
 
@@ -124,6 +124,11 @@ def _fetch_firebase_certs() -> Tuple[Dict[str, str], float]:
 
 def agent_id_from_firebase_token(token: str, project_id: str, certs: FirebaseCerts) -> str:
     """Verify a Firebase ID token for this project. Anything wrong → AuthError (HTTP 401)."""
+    return agent_id_from_user_id(firebase_claims(token, project_id, certs)["sub"])
+
+
+def firebase_claims(token: str, project_id: str, certs: FirebaseCerts) -> Dict[str, Any]:
+    """The verified claims of a Firebase ID token for this project (sub, email, email_verified, ...)."""
     from google.auth import exceptions as google_exceptions
     from google.auth import jwt as google_jwt
 
@@ -148,4 +153,4 @@ def agent_id_from_firebase_token(token: str, project_id: str, certs: FirebaseCer
     auth_time = claims.get("auth_time")
     if not isinstance(auth_time, (int, float)) or auth_time > time.time() + 10:
         raise AuthError("Invalid Bearer token")
-    return agent_id_from_user_id(uid)
+    return claims

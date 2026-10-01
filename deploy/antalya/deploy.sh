@@ -29,6 +29,9 @@ REGION=${REGION:-asia-southeast1}
 SQL_TIER=${SQL_TIER:-db-g1-small}
 # Reports and readings need a phone linked by hardware attestation (set REQUIRE_DEVICE=0 to only record it)
 REQUIRE_DEVICE=${REQUIRE_DEVICE:-1}
+# Who may use the admin panel (verified Firebase emails, comma-separated), and the web addresses it runs at
+ADMIN_EMAILS=${ADMIN_EMAILS:-madin.maseeh@gmail.com}
+ADMIN_ORIGINS=${ADMIN_ORIGINS:-https://kind-keepsake-kingdom.lovable.app,https://id-preview--3edd781a-00a9-4e58-88be-c21405c611ee.lovable.app,https://3edd781a-00a9-4e58-88be-c21405c611ee.lovableproject.com}
 
 API_SERVICE=kaori-api-antalya
 GEN_SERVICE=kaori-generalist-antalya
@@ -282,6 +285,18 @@ step_firebase() {
   Sign-in method -> Email/Password -> Enable. Then re-run this step."
   echo "  email and password sign-in: on"
 
+  # the admin panel signs in from its own web addresses: Firebase allows pop-ups only from listed domains
+  api GET "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/config"
+  local domains
+  domains=$(printf '%s' "$API_BODY" | ORIGINS="$ADMIN_ORIGINS" python3 -c "
+import json, os, sys
+have = json.load(sys.stdin).get('authorizedDomains', [])
+want = [o.split('://', 1)[-1].strip('/') for o in os.environ['ORIGINS'].split(',') if o.strip()]
+print(json.dumps({'authorizedDomains': have + [d for d in want if d not in have]}))")
+  api PATCH "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/config?updateMask=authorizedDomains" "$domains"
+  [ "$API_STATUS" = 200 ] && echo "  admin panel domains allowed to sign in" \
+    || echo "  note: could not add the admin panel's domains ($API_STATUS); add them under Authentication -> Settings -> Authorized domains"
+
   local apps app_id
   api GET "https://firebase.googleapis.com/v1beta1/projects/$PROJECT_ID/webApps"; apps=$API_BODY
   app_id=$(printf '%s' "$apps" | json "next((a['appId'] for a in d.get('apps', []) if a.get('displayName') == '$FIREBASE_APP_NAME' and a.get('state') == 'ACTIVE'), '')")
@@ -474,7 +489,7 @@ step_api() {
     --service-account="$API_SA" --allow-unauthenticated --set-cloudsql-instances="$SQL_CONN" \
     --cpu=1 --memory=1Gi --min-instances=1 --max-instances=1 --concurrency=40 --timeout=120 \
     --no-cpu-throttling --cpu-boost \
-    --set-env-vars="KAORI_ANTALYA=1,KAORI_ENVIRONMENT=production,KAORI_SIGNING_KEY_ID=$SIGNING_KEY_ID,KAORI_OBSERVATIONS_BUCKET=$BUCKET,KAORI_GENERALIST_URL=$gen_url,FIREBASE_PROJECT_ID=$PROJECT_ID,KAORI_ANDROID_PACKAGE=$ANDROID_PACKAGE,KAORI_ANDROID_CERT_SHA256=$app_cert,KAORI_REQUIRE_DEVICE=$REQUIRE_DEVICE" \
+    --set-env-vars="^|^KAORI_ANTALYA=1|KAORI_ENVIRONMENT=production|KAORI_SIGNING_KEY_ID=$SIGNING_KEY_ID|KAORI_OBSERVATIONS_BUCKET=$BUCKET|KAORI_GENERALIST_URL=$gen_url|FIREBASE_PROJECT_ID=$PROJECT_ID|KAORI_ANDROID_PACKAGE=$ANDROID_PACKAGE|KAORI_ANDROID_CERT_SHA256=$app_cert|KAORI_REQUIRE_DEVICE=$REQUIRE_DEVICE|KAORI_ADMIN_EMAILS=$ADMIN_EMAILS|KAORI_CORS_ORIGINS=$ADMIN_ORIGINS" \
     --set-secrets="KAORI_SIGNING_KEY=$SECRET_SIGNING:latest,KAORI_VALIDATOR_SIGNING_KEY=$SECRET_VALIDATOR:latest,KAORI_EXPORT_TOKEN=$SECRET_EXPORT:latest,DATABASE_URL=$SECRET_DB:latest"
   local url; url=$(service_url "$API_SERVICE")
   # Some organisations forbid public (allUsers) access; Cloud Run can skip its own check instead.

@@ -104,3 +104,24 @@ image downloads the CLIP weights at build time (Hugging Face), which Cloud Build
 
 Locally, with real CLIP, the contract passes: the AI read all three photos (2 to 4 s each), voted RATIFY, RATIFY
 and REJECT (one photo showed rain its reporter did not report), and the key verified with 12 votes.
+
+## Admin API (the admin panel's contract)
+
+For MSRO's team. Admins sign in with Firebase (Google) in the same project; Kaori verifies the ID token and
+requires a verified email listed in `KAORI_ADMIN_EMAILS`. Otherwise 401 (no or bad token) or 403 (not an admin).
+The panel's web addresses must be in `KAORI_CORS_ORIGINS` and in Firebase's authorized domains (deploy.sh sets
+both from `ADMIN_ORIGINS`).
+
+| Route | Returns |
+|---|---|
+| `GET /v1/admin/me` | `{email, agent_id}` |
+| `GET /v1/admin/overview` | `{members, seeds, invites_issued, invites_redeemed, phones_linked, phones_refused, reports, reports_device_signed, readings, ai_readings, truthkeys, truths_by_status: {STATUS: n}, per_hour: [{hour, reports, readings}], device_required}` |
+| `GET /v1/admin/members` | `[{agent_id, callsign, seed, referrer, referrer_callsign, relationship, known_for, joined_at, device: {device_id, linked_at, security_level} \| null, reports, readings, invites_issued, standing}]` |
+| `GET /v1/admin/truths` | `[{truthkey, claim_type_id, reporters, device_signed, readings, ai_readings, status, confidence, claim, first_report_at}]`, newest first. `status` is `PENDING` until the key compiles |
+| `GET /v1/admin/devices` | `{linked: [{device_id, agent_id, callsign, linked_at, security_level, verified_boot_state, os_patch_level, app_cert_ok}], refused: [{agent_id, callsign, at, reasons, security_level}]}` |
+| `POST /v1/admin/seeds` | body `{agent_id: "user:<firebase uid>", callsign?}` → `{agent_id, seeded_at, by}`. Adds a member without an invite (REFERRAL_REDEEMED from `seed:msro`). Idempotent |
+| `POST /v1/admin/devices/{device_id}/unlink` | `{device_id, unlinked: true}`. DEVICE_UNLINKED, reason `admin`; the person links a phone again |
+| `GET /v1/admin/export` | The NDJSON export (every Signal, then every TruthState), as a download |
+
+Callsigns come from the ledger: a seed's, or the one on the latest invite a member issued. Kaori holds no
+emails for members; a member is `user:<firebase uid>`.
