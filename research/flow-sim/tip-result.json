@@ -1,0 +1,590 @@
+{
+ "G: flow, graded + provenance|1|0": {
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.5305146563550058,
+  "right": 0.8683730868621096,
+  "stuck": 0.016839760555371622
+ },
+ "G: flow, graded + provenance|1|8": {
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.5295815565667308,
+  "right": 0.8612571339929882,
+  "stuck": 0.023566217954474764
+ },
+ "G: flow, graded + provenance|1|16": {
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.5162198149776295,
+  "right": 0.8490252135102028,
+  "stuck": 0.03038449026067657
+ },
+ "G: flow, graded + provenance|1|24": {
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.483520360913553,
+  "right": 0.8362474529583623,
+  "stuck": 0.03971625826217616
+ },
+ "G: flow, graded + provenance|2|0": {
+  "wrong_att": 0.0033614299918647743,
+  "wrong_min": 0.0,
+  "ratio": 0.5000074576669014,
+  "right": 0.8169945907792017,
+  "stuck": 0.0644146684183153
+ },
+ "G: flow, graded + provenance|2|8": {
+  "wrong_att": 0.0027901198864233884,
+  "wrong_min": 0.0,
+  "ratio": 0.5328113042678426,
+  "right": 0.7932730646857832,
+  "stuck": 0.08153502657011458
+ },
+ "G: flow, graded + provenance|2|16": {
+  "wrong_att": 0.010014592905310288,
+  "wrong_min": 0.0,
+  "ratio": 0.5661607764875523,
+  "right": 0.7997143773978584,
+  "stuck": 0.06581092103026166
+ },
+ "G: flow, graded + provenance|2|24": {
+  "wrong_att": 0.009597381141773236,
+  "wrong_min": 0.0,
+  "ratio": 0.5726545044593359,
+  "right": 0.7859412970072169,
+  "stuck": 0.0758317142372406
+ },
+ "G: flow, graded + provenance|4|0": {
+  "wrong_att": 0.04745978499303964,
+  "wrong_min": 0.0,
+  "ratio": 0.57352010091062,
+  "right": 0.7950458285854713,
+  "stuck": 0.07916315532273882
+ },
+ "G: flow, graded + provenance|4|8": {
+  "wrong_att": 0.042565359477124184,
+  "wrong_min": 0.0,
+  "ratio": 0.5550837306860762,
+  "right": 0.7319042571386776,
+  "stuck": 0.12481196999918799
+ },
+ "G: flow, graded + provenance|4|16": {
+  "wrong_att": 0.06800525684246614,
+  "wrong_min": 0.0,
+  "ratio": 0.6807645237529591,
+  "right": 0.7406312378891686,
+  "stuck": 0.10507223797390652
+ },
+ "G: flow, graded + provenance|4|24": {
+  "wrong_att": 0.10986066774591327,
+  "wrong_min": 0.0,
+  "ratio": 0.7069552282185041,
+  "right": 0.7229520564676551,
+  "stuck": 0.1051383447210193
+ },
+ "G: flow, graded + provenance|7|0": {
+  "wrong_att": 0.04225481810013561,
+  "wrong_min": 0.0,
+  "ratio": 0.4261455592692173,
+  "right": 0.7282325385505286,
+  "stuck": 0.13585566168948932
+ },
+ "G: flow, graded + provenance|7|8": {
+  "wrong_att": 0.08378672243680882,
+  "wrong_min": 0.0,
+  "ratio": 0.6250084603228545,
+  "right": 0.7517377542761472,
+  "stuck": 0.09092322711558415
+ },
+ "G: flow, graded + provenance|7|16": {
+  "wrong_att": 0.12778806688535577,
+  "wrong_min": 0.0,
+  "ratio": 0.7485964785034418,
+  "right": 0.700352294560906,
+  "stuck": 0.12556381481300452
+ },
+ "G: flow, graded + provenance|7|24": {
+  "wrong_att": 0.1608840904461365,
+  "wrong_min": 0.0,
+  "ratio": 0.8785324667520289,
+  "right": 0.7001849775061393,
+  "stuck": 0.106443024577022
+ },
+ "G: flow, graded + provenance|10|0": {
+  "wrong_att": 0.10318211613322104,
+  "wrong_min": 0.0,
+  "ratio": 0.8165191947535557,
+  "right": 0.8158732371048258,
+  "stuck": 0.03736049860498605
+ },
+ "G: flow, graded + provenance|10|8": {
+  "wrong_att": 0.13333144879698694,
+  "wrong_min": 0.0,
+  "ratio": 0.9180869683023787,
+  "right": 0.7606681398756862,
+  "stuck": 0.06698047905252807
+ },
+ "G: flow, graded + provenance|10|16": {
+  "wrong_att": 0.21615969879796296,
+  "wrong_min": 0.0,
+  "ratio": 1.073297716597877,
+  "right": 0.7208038576779998,
+  "stuck": 0.05986346709479538
+ },
+ "G: flow, graded + provenance|10|24": {
+  "wrong_att": 0.24522481110990826,
+  "wrong_min": 0.0,
+  "ratio": 1.1581546577839137,
+  "right": 0.728601120976566,
+  "stuck": 0.03505156159451866
+ },
+ "G: flow, graded + provenance|14|0": {
+  "wrong_att": 0.13265325818061618,
+  "wrong_min": 0.0,
+  "ratio": 0.9636695353195909,
+  "right": 0.796837122814425,
+  "stuck": 0.045053300244212245
+ },
+ "G: flow, graded + provenance|14|8": {
+  "wrong_att": 0.15772068573993714,
+  "wrong_min": 0.0,
+  "ratio": 1.0267437185097625,
+  "right": 0.7719770834586739,
+  "stuck": 0.049031516442187936
+ },
+ "G: flow, graded + provenance|14|16": {
+  "wrong_att": 0.22622018737440536,
+  "wrong_min": 0.0,
+  "ratio": 1.1448474811297327,
+  "right": 0.760903482933053,
+  "stuck": 0.015356655761318488
+ },
+ "G: flow, graded + provenance|14|24": {
+  "wrong_att": 0.18264292058658826,
+  "wrong_min": 0.0,
+  "ratio": 1.1591420329849593,
+  "right": 0.7156065355721332,
+  "stuck": 0.07340960884705679
+ },
+ "G: flow, graded + provenance|21|0": {
+  "wrong_att": 0.1132018471426862,
+  "wrong_min": 0.0,
+  "ratio": 0.7847664975027887,
+  "right": 0.799049023794855,
+  "stuck": 0.04412333929920529
+ },
+ "G: flow, graded + provenance|21|8": {
+  "wrong_att": 0.15237736971510124,
+  "wrong_min": 0.0,
+  "ratio": 1.057709622753418,
+  "right": 0.7795152789994112,
+  "stuck": 0.03722768675523672
+ },
+ "G: flow, graded + provenance|21|16": {
+  "wrong_att": 0.16130204104275325,
+  "wrong_min": 0.0,
+  "ratio": 0.9358038323411179,
+  "right": 0.7569778020658002,
+  "stuck": 0.05217070533907653
+ },
+ "G: flow, graded + provenance|21|24": {
+  "wrong_att": 0.18641034954916172,
+  "wrong_min": 0.0,
+  "ratio": 1.1101103039920137,
+  "right": 0.7525371611279759,
+  "stuck": 0.044192313160236
+ },
+ "T1: grow only from own evidence|1|0": {
+  "wrong_att": 0.0014204545454545455,
+  "wrong_min": 0.0014204545454545455,
+  "ratio": 0.6706463029404911,
+  "right": 0.9561956684927682,
+  "stuck": 0.0005605381165919282
+ },
+ "T1: grow only from own evidence|1|8": {
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.7194665475121601,
+  "right": 0.9546418321204719,
+  "stuck": 0.000501002004008016
+ },
+ "T1: grow only from own evidence|1|16": {
+  "wrong_att": 0.0014124293785310734,
+  "wrong_min": 0.0014124293785310734,
+  "ratio": 0.7834556053441213,
+  "right": 0.9492989632042275,
+  "stuck": 0.0016047547633899146
+ },
+ "T1: grow only from own evidence|1|24": {
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.8554746083354193,
+  "right": 0.9476515798254267,
+  "stuck": 0.0021230802411998885
+ },
+ "T1: grow only from own evidence|2|0": {
+  "wrong_att": 0.008783480320104523,
+  "wrong_min": 0.0,
+  "ratio": 0.6629665855284748,
+  "right": 0.9143172580257332,
+  "stuck": 0.014739876366635842
+ },
+ "T1: grow only from own evidence|2|8": {
+  "wrong_att": 0.006380380584105017,
+  "wrong_min": 0.0,
+  "ratio": 0.7282651356500139,
+  "right": 0.9076922351161096,
+  "stuck": 0.0164423566733527
+ },
+ "T1: grow only from own evidence|2|16": {
+  "wrong_att": 0.016781345311268115,
+  "wrong_min": 0.0014124293785310734,
+  "ratio": 0.8026863428267312,
+  "right": 0.8957122240904598,
+  "stuck": 0.013907872455700169
+ },
+ "T1: grow only from own evidence|2|24": {
+  "wrong_att": 0.031076952241309973,
+  "wrong_min": 0.004442732408834103,
+  "ratio": 0.8177264669215992,
+  "right": 0.8828109183417869,
+  "stuck": 0.01646184559138693
+ },
+ "T1: grow only from own evidence|4|0": {
+  "wrong_att": 0.051116452217780384,
+  "wrong_min": 0.0,
+  "ratio": 0.700259928105322,
+  "right": 0.8634739072496429,
+  "stuck": 0.04049347639260827
+ },
+ "T1: grow only from own evidence|4|8": {
+  "wrong_att": 0.04660016652914137,
+  "wrong_min": 0.0,
+  "ratio": 0.6978771348955681,
+  "right": 0.8403655893915787,
+  "stuck": 0.048239964606679286
+ },
+ "T1: grow only from own evidence|4|16": {
+  "wrong_att": 0.08112012257612727,
+  "wrong_min": 0.0,
+  "ratio": 0.7835133068181985,
+  "right": 0.8238095078969188,
+  "stuck": 0.04477276411273353
+ },
+ "T1: grow only from own evidence|4|24": {
+  "wrong_att": 0.12254145125986016,
+  "wrong_min": 0.0,
+  "ratio": 0.8186893666181051,
+  "right": 0.8037539251946328,
+  "stuck": 0.04293540550258593
+ },
+ "T1: grow only from own evidence|7|0": {
+  "wrong_att": 0.038647585073343135,
+  "wrong_min": 0.0,
+  "ratio": 0.5520280639703888,
+  "right": 0.8220422528542667,
+  "stuck": 0.07281538896824526
+ },
+ "T1: grow only from own evidence|7|8": {
+  "wrong_att": 0.08068054433253999,
+  "wrong_min": 0.0,
+  "ratio": 0.6659529658324586,
+  "right": 0.8183840850428983,
+  "stuck": 0.053366306135802545
+ },
+ "T1: grow only from own evidence|7|16": {
+  "wrong_att": 0.12361846945673027,
+  "wrong_min": 0.0,
+  "ratio": 0.7551259651313249,
+  "right": 0.7977778496270734,
+  "stuck": 0.053006202503369425
+ },
+ "T1: grow only from own evidence|7|24": {
+  "wrong_att": 0.15131063419044874,
+  "wrong_min": 0.0,
+  "ratio": 0.8273837450584323,
+  "right": 0.784684003839046,
+  "stuck": 0.04783024429398812
+ },
+ "T1: grow only from own evidence|10|0": {
+  "wrong_att": 0.09612100803508905,
+  "wrong_min": 0.0,
+  "ratio": 0.6785276759302525,
+  "right": 0.8632184145476918,
+  "stuck": 0.019007440074400743
+ },
+ "T1: grow only from own evidence|10|8": {
+  "wrong_att": 0.12576738976088675,
+  "wrong_min": 0.0,
+  "ratio": 0.7267384221965751,
+  "right": 0.8195204731759563,
+  "stuck": 0.027269967375861542
+ },
+ "T1: grow only from own evidence|10|16": {
+  "wrong_att": 0.19991770257998498,
+  "wrong_min": 0.0,
+  "ratio": 0.8040071284964663,
+  "right": 0.7815672403135937,
+  "stuck": 0.027161357445022415
+ },
+ "T1: grow only from own evidence|10|24": {
+  "wrong_att": 0.23235597067882904,
+  "wrong_min": 0.0,
+  "ratio": 0.8823873703539139,
+  "right": 0.770668443967033,
+  "stuck": 0.013744518030587547
+ },
+ "T1: grow only from own evidence|14|0": {
+  "wrong_att": 0.11017177685488617,
+  "wrong_min": 0.0,
+  "ratio": 0.7533237149407106,
+  "right": 0.8537631918926957,
+  "stuck": 0.0193750586726997
+ },
+ "T1: grow only from own evidence|14|8": {
+  "wrong_att": 0.15386388270056245,
+  "wrong_min": 0.0,
+  "ratio": 0.8072004707524855,
+  "right": 0.8219092105223156,
+  "stuck": 0.02207988231254575
+ },
+ "T1: grow only from own evidence|14|16": {
+  "wrong_att": 0.2129793993039191,
+  "wrong_min": 0.0,
+  "ratio": 0.8587094067820121,
+  "right": 0.7978935418960478,
+  "stuck": 0.007019232622459935
+ },
+ "T1: grow only from own evidence|14|24": {
+  "wrong_att": 0.1762523769543909,
+  "wrong_min": 0.0,
+  "ratio": 0.8967192519553498,
+  "right": 0.7803832750394,
+  "stuck": 0.03200146929608698
+ },
+ "T1: grow only from own evidence|21|0": {
+  "wrong_att": 0.0964809354245092,
+  "wrong_min": 0.0,
+  "ratio": 0.667956624882187,
+  "right": 0.8400466206960289,
+  "stuck": 0.03018604324943469
+ },
+ "T1: grow only from own evidence|21|8": {
+  "wrong_att": 0.14300225950719417,
+  "wrong_min": 0.0,
+  "ratio": 0.7991957148981323,
+  "right": 0.8184451573444409,
+  "stuck": 0.022239185526291446
+ },
+ "T1: grow only from own evidence|21|16": {
+  "wrong_att": 0.16275009853105477,
+  "wrong_min": 0.0,
+  "ratio": 0.7777843121668547,
+  "right": 0.7925454394183987,
+  "stuck": 0.03078789854831287
+ },
+ "T1: grow only from own evidence|21|24": {
+  "wrong_att": 0.1853090221055391,
+  "wrong_min": 0.0,
+  "ratio": 0.9096032383391602,
+  "right": 0.7876269924350869,
+  "stuck": 0.02416040898575869
+ },
+ "T2: own evidence + together counts once|1|0": {
+  "wrong_att": 0.0014285714285714286,
+  "wrong_min": 0.0014285714285714286,
+  "ratio": 0.6706463029404911,
+  "right": 0.9518096034772403,
+  "stuck": 0.0011210762331838565
+ },
+ "T2: own evidence + together counts once|1|8": {
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.7194665475121601,
+  "right": 0.9499584485842769,
+  "stuck": 0.000501002004008016
+ },
+ "T2: own evidence + together counts once|1|16": {
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.7834556053441213,
+  "right": 0.9446370040142649,
+  "stuck": 0.0016047547633899146
+ },
+ "T2: own evidence + together counts once|1|24": {
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.8554746083354193,
+  "right": 0.941445975380611,
+  "stuck": 0.0021230802411998885
+ },
+ "T2: own evidence + together counts once|2|0": {
+  "wrong_att": 0.004784798534798535,
+  "wrong_min": 0.0,
+  "ratio": 0.6629665855284748,
+  "right": 0.9095734316285166,
+  "stuck": 0.015610570806560052
+ },
+ "T2: own evidence + together counts once|2|8": {
+  "wrong_att": 0.0039811347633196305,
+  "wrong_min": 0.0,
+  "ratio": 0.7282651356500139,
+  "right": 0.9029697114502263,
+  "stuck": 0.0160283493800254
+ },
+ "T2: own evidence + together counts once|2|16": {
+  "wrong_att": 0.0103946268612485,
+  "wrong_min": 0.0014124293785310734,
+  "ratio": 0.8026863428267312,
+  "right": 0.8926882368460233,
+  "stuck": 0.014333756843848706
+ },
+ "T2: own evidence + together counts once|2|24": {
+  "wrong_att": 0.018363105238698357,
+  "wrong_min": 0.0029184534749166157,
+  "ratio": 0.8177264669215992,
+  "right": 0.881191432585866,
+  "stuck": 0.016887729979535467
+ },
+ "T2: own evidence + together counts once|4|0": {
+  "wrong_att": 0.04863077156550997,
+  "wrong_min": 0.0,
+  "ratio": 0.700259928105322,
+  "right": 0.8591424375080823,
+  "stuck": 0.04342001220491451
+ },
+ "T2: own evidence + together counts once|4|8": {
+  "wrong_att": 0.039026989896152504,
+  "wrong_min": 0.0,
+  "ratio": 0.6978771348955681,
+  "right": 0.8365752921150058,
+  "stuck": 0.0537160602118903
+ },
+ "T2: own evidence + together counts once|4|16": {
+  "wrong_att": 0.05927121052761776,
+  "wrong_min": 0.0,
+  "ratio": 0.7835133068181985,
+  "right": 0.8247770281560018,
+  "stuck": 0.0498781166053327
+ },
+ "T2: own evidence + together counts once|4|24": {
+  "wrong_att": 0.09591567521269628,
+  "wrong_min": 0.0,
+  "ratio": 0.8186893666181051,
+  "right": 0.8031172364175889,
+  "stuck": 0.05239432109744717
+ },
+ "T2: own evidence + together counts once|7|0": {
+  "wrong_att": 0.037040958740792496,
+  "wrong_min": 0.0,
+  "ratio": 0.5520280639703888,
+  "right": 0.8138093371352006,
+  "stuck": 0.07745388279496704
+ },
+ "T2: own evidence + together counts once|7|8": {
+  "wrong_att": 0.061925669416292885,
+  "wrong_min": 0.0,
+  "ratio": 0.6659529658324586,
+  "right": 0.821870577850624,
+  "stuck": 0.05634414538456965
+ },
+ "T2: own evidence + together counts once|7|16": {
+  "wrong_att": 0.09765919564188853,
+  "wrong_min": 0.0,
+  "ratio": 0.7551259651313249,
+  "right": 0.8003505886414048,
+  "stuck": 0.0563500389417949
+ },
+ "T2: own evidence + together counts once|7|24": {
+  "wrong_att": 0.135835905572239,
+  "wrong_min": 0.0,
+  "ratio": 0.8273837450584323,
+  "right": 0.7825457954865154,
+  "stuck": 0.05451775800125432
+ },
+ "T2: own evidence + together counts once|10|0": {
+  "wrong_att": 0.09584883975816735,
+  "wrong_min": 0.0,
+  "ratio": 0.6785276759302525,
+  "right": 0.8605894967320713,
+  "stuck": 0.020849833498334983
+ },
+ "T2: own evidence + together counts once|10|8": {
+  "wrong_att": 0.09096696458380216,
+  "wrong_min": 0.0,
+  "ratio": 0.7267384221965751,
+  "right": 0.8408198582480735,
+  "stuck": 0.03095127642452895
+ },
+ "T2: own evidence + together counts once|10|16": {
+  "wrong_att": 0.14490668068161947,
+  "wrong_min": 0.0,
+  "ratio": 0.8040071284964663,
+  "right": 0.8067241588086836,
+  "stuck": 0.029908823904415516
+ },
+ "T2: own evidence + together counts once|10|24": {
+  "wrong_att": 0.2134229421812204,
+  "wrong_min": 0.0,
+  "ratio": 0.8823873703539139,
+  "right": 0.7753862553207687,
+  "stuck": 0.020153721121487233
+ },
+ "T2: own evidence + together counts once|14|0": {
+  "wrong_att": 0.10596663043115456,
+  "wrong_min": 0.0,
+  "ratio": 0.7533237149407106,
+  "right": 0.8596928509328206,
+  "stuck": 0.021014256395942246
+ },
+ "T2: own evidence + together counts once|14|8": {
+  "wrong_att": 0.10184293229315813,
+  "wrong_min": 0.0,
+  "ratio": 0.8072004707524855,
+  "right": 0.8563936165732638,
+  "stuck": 0.020375755911670443
+ },
+ "T2: own evidence + together counts once|14|16": {
+  "wrong_att": 0.1625901787579652,
+  "wrong_min": 0.0,
+  "ratio": 0.8587094067820121,
+  "right": 0.8260091063952584,
+  "stuck": 0.009299641352901917
+ },
+ "T2: own evidence + together counts once|14|24": {
+  "wrong_att": 0.168049821051553,
+  "wrong_min": 0.0,
+  "ratio": 0.8967192519553498,
+  "right": 0.772412724725487,
+  "stuck": 0.040948054692025754
+ },
+ "T2: own evidence + together counts once|21|0": {
+  "wrong_att": 0.07968580847281927,
+  "wrong_min": 0.0,
+  "ratio": 0.667956624882187,
+  "right": 0.8488758857898454,
+  "stuck": 0.034911734170634236
+ },
+ "T2: own evidence + together counts once|21|8": {
+  "wrong_att": 0.08258781173718832,
+  "wrong_min": 0.0,
+  "ratio": 0.7991957148981323,
+  "right": 0.8571205045416304,
+  "stuck": 0.025447771883564417
+ },
+ "T2: own evidence + together counts once|21|16": {
+  "wrong_att": 0.11745717705244196,
+  "wrong_min": 0.0,
+  "ratio": 0.7777843121668547,
+  "right": 0.8077261115933487,
+  "stuck": 0.04253544466068483
+ },
+ "T2: own evidence + together counts once|21|24": {
+  "wrong_att": 0.18040780375146265,
+  "wrong_min": 0.0,
+  "ratio": 0.9096032383391602,
+  "right": 0.7753797726530024,
+  "stuck": 0.03125056477264512
+ }
+}
