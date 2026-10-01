@@ -45,7 +45,13 @@ from kaori_truth.signing import production_signing_required
 from pydantic import ValidationError
 
 from kaori_api import antalya
-from kaori_api.auth import AuthError, agent_id_from_token, parse_bearer
+from kaori_api.auth import (
+    AuthError,
+    FirebaseCerts,
+    agent_id_from_firebase_token,
+    agent_id_from_token,
+    parse_bearer,
+)
 from kaori_api.evidence_store import (
     EvidenceStorageError,
     GcsEvidenceStore,
@@ -535,7 +541,8 @@ def create_app(
 ) -> FastAPI:
     """
     Build the sidecar. Tests inject FlowCore + verify_token + truth_store.
-    Production: GET {SUPABASE_URL}/auth/v1/user with SUPABASE_PUBLISHABLE_KEY.
+    Production: Firebase ID tokens when FIREBASE_PROJECT_ID is set, otherwise
+    GET {SUPABASE_URL}/auth/v1/user with SUPABASE_PUBLISHABLE_KEY.
     DATABASE_URL is optional (in-memory stores when unset); when set it is Cloud SQL
     and requires a dedicated production TruthState signing key plus a pre-applied
     schema. The API runtime never applies migrations.
@@ -558,7 +565,13 @@ def create_app(
             truth_store = InMemoryTruthArtifactStore()
     url = supabase_url if supabase_url is not None else os.environ.get("SUPABASE_URL") or ""
     key = publishable_key if publishable_key is not None else os.environ.get("SUPABASE_PUBLISHABLE_KEY") or ""
-    if verify_token is None:
+    firebase_project = os.environ.get("FIREBASE_PROJECT_ID", "").strip()
+    if verify_token is None and firebase_project:
+        firebase_certs = FirebaseCerts()
+
+        def verify_token(token: str) -> str:
+            return agent_id_from_firebase_token(token, firebase_project, firebase_certs)
+    elif verify_token is None:
         def verify_token(token: str) -> str:
             return agent_id_from_token(token, url, key)
     orchestrator = TruthOrchestrator(

@@ -1,96 +1,92 @@
 # Deploying Antalya
 
-A fresh deployment: one GCP project, one Supabase project. About an hour, most of it waiting for the
-first image build.
+Everything runs in one GCP project, `msro-kaori-sandbox` (`asia-southeast1`), and one script deploys it.
+Budget about an hour; most of it is waiting for the first image build and for Cloud SQL to start.
 
 | Piece | Where |
 |---|---|
-| Sign-in (email and password) | Supabase Auth |
-| Ledger (Signals, observations, TruthStates) | Supabase Postgres, schema `kaori` (not exposed through Supabase's API) |
-| Kaori API, `kaori-api-antalya` | Cloud Run, public (Kaori checks each Supabase sign-in itself) |
+| Sign-in (email and password) | Firebase Auth |
+| Ledger (Signals, observations, TruthStates) | Cloud SQL Postgres 16 `kaori-antalya`, database `kaori`. Daily backups (14 kept), point-in-time recovery, deletion protection |
+| Kaori API, `kaori-api-antalya` | Cloud Run, public. Kaori checks every Firebase sign-in itself |
 | AI reader, `kaori-generalist-antalya` | Cloud Run, private: only the API's service account may call it |
-| Photos | Private bucket `<project>-kaori-antalya` |
-| Keys | Secret Manager: `antalya-signing-key`, `antalya-validator-key`, `antalya-export-token`, `antalya-database-url` |
+| Photos | Private bucket `msro-kaori-sandbox-kaori-antalya` |
+| Keys | Secret Manager: signing key, validator key, export token, and the two database logins |
 
-## Before you start
-
-**Supabase** (supabase.com, new project):
-1. Region **Southeast Asia (Singapore)**, Pro plan (free projects pause after a week idle).
-2. Keep the database password you set; the script asks for it once.
-3. Authentication -> Sign In / Providers -> Email: on. Turn **Confirm email off**. The app has no
-   web page to land on after the confirmation link, and joining is already invite-only.
-4. Note, for `antalya.env`: the project URL and publishable key (Project Settings -> API), and the
-   **Session pooler** host (Connect button -> Session pooler; for example
-   `aws-0-ap-southeast-1.pooler.supabase.com`).
-
-**GCP**: the project id, billing on, and an Owner who can open Cloud Shell.
+Services that already exist in the project (`kaori-api`, `kaori-generalist`, and others) are not touched.
+Everything this script creates is named `*-antalya`.
 
 ## Run it
 
-In Cloud Shell:
+You need an Owner on `msro-kaori-sandbox`, in Cloud Shell (console.cloud.google.com, the `>_` button):
 
 ```bash
 git clone -b iac/antalya-2026 https://github.com/MadinMSRO/kaori-protocol.git
 cd kaori-protocol
-cp deploy/antalya/antalya.env.example deploy/antalya/antalya.env
-nano deploy/antalya/antalya.env       # fill in the four values
 ./deploy/antalya/deploy.sh
 ```
 
-The repository is private, so the clone asks for a GitHub user name and a personal access token
-(read access to this repo is enough).
+The repository is private, so `git clone` asks for a GitHub user name and a personal access token with
+read access to this repository.
 
-It runs these steps in order, and every step is safe to re-run:
+The script asks nothing else: every password and key is generated and goes straight into Secret Manager.
+When it finishes, it prints the values for the app.
+
+## What it does
+
+Every step is safe to re-run. To run one step: `./deploy/antalya/deploy.sh <step>`.
 
 | Step | Does |
 |---|---|
 | `check` | gcloud is signed in and can see the project |
-| `apis` | Turns on Cloud Run, Cloud Build, Artifact Registry, Secret Manager, Storage, IAM |
-| `build` | Builds both images (tagged with the git commit). The AI image takes 10-20 min the first time |
+| `apis` | Turns on Cloud Run, Cloud Build, Artifact Registry, Secret Manager, Storage, IAM, Cloud SQL, Firebase, Identity Toolkit |
+| `build` | Builds both images, tagged with the git commit. The AI image takes 10–20 minutes the first time |
 | `bucket` | The private photo bucket |
-| `secrets` | Generates the signing key, validator key and export token. Existing ones are kept |
-| `accounts` | Two service accounts, each with only its own secrets (the API also gets the bucket) |
-| `db` | Asks for the Supabase password, applies the ledger schema, creates the API's own login (append-only, no DDL) and stores its URL as a secret |
+| `secrets` | Generates the signing key, the validator key, the export token and both database logins. Existing ones are kept |
+| `accounts` | Three service accounts, each with only what it needs: the API, the AI, and database setup |
+| `sql` | The Cloud SQL instance (about 10 minutes the first time), the `kaori` database, and the schema-owner login |
+| `db` | A one-off Cloud Run job that applies the ledger schema and creates the API's login. That login can only add to the ledger: no deletes, no schema changes |
+| `firebase` | Adds Firebase to the project, turns on email and password sign-in, and registers the app |
 | `generalist` | Deploys the AI: 2 CPU, 4 GiB, one instance always warm. Lets the API call it |
-| `api` | Deploys the API: one instance, always on |
+| `api` | Deploys the API: one instance, always on, connected to Cloud SQL |
 | `smoke` | Checks the live services (below) |
-| `status` | Prints the URLs and the values for the app |
+| `status` | Prints the URLs and the app's settings |
 
-Run one step with `./deploy/antalya/deploy.sh <step>`.
-
-The API runs as exactly one instance on purpose. Compile locks and the AI's background reads live in
-the process, so they must not be split across instances, and the CPU must stay on after a response.
-About 100 people fit easily.
+The API runs as exactly one instance on purpose. Compile locks and the AI's background reads live in the
+process, so they must not be split across instances, and the CPU must stay on after a response. About
+100 people fit easily.
 
 ## Smoke test
 
 `./deploy/antalya/deploy.sh smoke` checks:
 - the API is up and answers an invite lookup;
-- compile refuses a caller who isn't signed in;
-- Supabase rejects a fake token;
-- the export works with its token (so the ledger is reachable) and refuses a wrong one;
-- the AI refuses outside callers;
-- the AI reads a photo.
+- compile refuses a caller who isn't signed in, and a fake token is refused;
+- the export works with its token (so Cloud SQL is reachable) and refuses a wrong one;
+- **Firebase sign-in works end to end:**
+  - it creates a throwaway Firebase account;
+  - Kaori accepts that account's token and turns it away as a non-member;
+  - the account is deleted. Nothing is written to the ledger;
+- the AI refuses outside callers and reads a photo.
 
-The full loop (invite -> photo -> blind readings -> VERIFIED_TRUE) is not run against the live service,
-because it would write test truths into the real ledger. It is proven locally by
-`npm run antalya-contract` in `liminal-mobile`, and on the live service by the Malé dry run with real phones.
+The full loop (invite → photo → blind readings → VERIFIED_TRUE) is not run against the live service, because
+it would write test truths into the real ledger. It is proven locally by `npm run antalya-contract` in
+`liminal-mobile`, and on the live service by the Malé dry run with real phones.
 
 ## Seeds
 
-Seeds are members without an invite. Each one first creates an account in the app. Then copy their UID
-from Supabase -> Authentication -> Users, and run:
+Seeds are members without an invite. Each one creates an account in the app first, then:
 
 ```bash
-./deploy/antalya/deploy.sh seed <uid> "<callsign>"
+./deploy/antalya/deploy.sh seed name@example.com "<callsign>"
 ```
 
-This runs a one-off Cloud Run job with the API's own login.
+This looks up their Firebase account by email and runs a one-off Cloud Run job that adds them to the
+ledger. A Firebase uid works in place of the email.
 
 ## The app
 
-`./deploy/antalya/deploy.sh status` prints the four values for `liminal-mobile/mobile/.env`. Commit them
-on a `probe-antalya` branch; GitHub Actions builds the APK and publishes it as a pre-release.
+`./deploy/antalya/deploy.sh status` prints the six values for `liminal-mobile/mobile/.env`. Commit them on
+a `probe-antalya` branch, and GitHub Actions builds the APK and publishes it as a pre-release. The
+Firebase values are public by design; they identify the project and grant nothing.
 
 ## Getting the data out
 
@@ -99,14 +95,31 @@ curl -H "Authorization: Bearer $(gcloud secrets versions access latest --secret=
   "$(gcloud run services describe kaori-api-antalya --region=asia-southeast1 --format='value(status.url)')/v1/export" > antalya.ndjson
 ```
 
+## Cost (rough estimate)
+
+| Item | Per month |
+|---|---|
+| AI kept warm (2 CPU, 4 GiB) | $40–60 |
+| API always on (1 CPU, 1 GiB) | about $50 |
+| Cloud SQL `db-g1-small` with backups | $25–35 |
+| Photos, secrets, builds, Firebase email sign-in | a few dollars |
+
+Roughly $120–150 a month while it is live. After the event, set both services to `--min-instances=0`.
+
 ## If something goes wrong
 
+- **The `firebase` step stops:** it prints the one console action to take (adding Firebase to the project,
+  or turning on Email/Password under Authentication). Do it, then run `./deploy/antalya/deploy.sh firebase`
+  again. If the project has never used Firebase Auth, this step starts it through Identity Platform; email
+  sign-in is free well beyond Antalya's numbers.
+- **Cloud SQL creation fails with a public-IP policy error:** the organisation forbids public IPs on Cloud
+  SQL (`constraints/sql.restrictPublicIp`). The instance has no authorised networks either way (only the
+  Cloud Run connector can reach it), so ask an organisation admin for an exception on this project.
 - **Build fails pushing the image:** Cloud Build's account lacks access. The `build` step grants
   `artifactregistry.writer`, `logging.logWriter` and `storage.objectViewer` to the default compute
   account. Check that account exists (it appears once Compute Engine is on).
 - **The API returns 403 to everyone:** an organisation policy blocks public services. The `api` step
-  detects this and turns off Cloud Run's invoker check instead (Kaori still requires a Supabase sign-in).
+  detects this and turns off Cloud Run's invoker check instead. Kaori still requires a Firebase sign-in.
 - **The API won't start:** check its logs in Cloud Run. `Kaori schema is incomplete` means the `db` step
-  hasn't run. `password authentication failed` means the login was re-keyed without redeploying: run `api`.
-- **New database password for the API:** `REKEY=1 ./deploy/antalya/deploy.sh db`, then
-  `./deploy/antalya/deploy.sh api`.
+  hasn't run.
+- **Logs of the one-off jobs:** Cloud Run → Jobs → `kaori-antalya-db` or `kaori-antalya-seed`.

@@ -77,3 +77,4 @@ terraform/.terraform.lock.hcl
 
 # Antalya deploy settings (filled in per deployment)
 deploy/antalya/antalya.env
+deploy/antalya/firebase-config.json

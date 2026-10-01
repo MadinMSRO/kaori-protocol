@@ -25,6 +25,8 @@ RUN pip install --no-cache-dir \
         "pyyaml>=6.0" \
         "psycopg2-binary>=2.9.0" \
         "google-cloud-storage" \
+        "google-auth>=2.30.0" \
+        "cryptography>=42.0.0" \
         "python-multipart" \
         "Pillow>=12.3.0" \
         "h3>=4.0.0" \
@@ -35,7 +37,7 @@ ENV PYTHONPATH=/app
 ENV KAORI_SCHEMA_PATH=/app/packages/kaori-spec/schemas
 ENV PYTHONUNBUFFERED=1
 
-# Runtime: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, DATABASE_URL (Cloud SQL
+# Runtime: FIREBASE_PROJECT_ID (or SUPABASE_URL + SUPABASE_PUBLISHABLE_KEY), DATABASE_URL (Cloud SQL
 # as kaori_runtime — schema must already be migrated), KAORI_SIGNING_KEY /
 # KAORI_SIGNING_KEY_ID (production TruthState HMAC, not the validator key),
 # and KAORI_OBSERVATIONS_BUCKET (private GCS).
