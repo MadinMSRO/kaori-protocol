@@ -26,6 +26,8 @@ RUN pip install --no-cache-dir \
         "psycopg2-binary>=2.9.0" \
         "google-cloud-storage" \
         "python-multipart" \
+        "Pillow>=12.3.0" \
+        "h3>=4.0.0" \
     && useradd --create-home --uid 10001 kaori \
     && chown -R kaori:kaori /app
 

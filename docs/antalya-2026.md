@@ -10,7 +10,12 @@ The IAC sky test runs the same image as `kaori-api`, with one extra environment 
 | `KAORI_ANTALYA` | `1` | Mounts the routes below. `/v1/evidence` and `/v1/compile` accept members only (joined by invite, or seeded) |
 | `KAORI_EXPORT_TOKEN` | a new secret | Bearer token for `GET /v1/export` |
 | `KAORI_GENERALIST_URL` | the `kaori-generalist` service URL | **Required.** The AI reads every photo blind through its `POST /read` |
-| everything else | as in `deployment-runbook.md` | A new `KAORI_SIGNING_KEY` and `KAORI_SIGNING_KEY_ID` for Antalya, its own schema and bucket prefix |
+| everything else | set by `deploy/antalya/deploy.sh` | Supabase sign-in, the ledger in Supabase Postgres, a private bucket, new signing keys |
+
+**Deploying:** `deploy/antalya/README.md`. It is a fresh deployment (one GCP project, one Supabase project) and
+differs from `deployment-runbook.md` in one way: the ledger lives in Supabase Postgres, not Cloud SQL. The schema,
+the roles and the API's append-only login are the same. `DATABASE_URL` must name its driver
+(`postgresql+psycopg2://`): SQLAlchemy 2.1 otherwise picks psycopg 3, which the image doesn't have.
 
 Without `KAORI_ANTALYA` the API is exactly the existing `kaori-api` (the route allow-list test enforces this).
 
@@ -20,7 +25,8 @@ existing `signals` table:
 
 ## Seeds
 
-Seeds join without an invite. Run this with the service's `DATABASE_URL`:
+Seeds join without an invite. On the deployed service: `./deploy/antalya/deploy.sh seed <supabase-user-uuid> "<callsign>"`. Directly, with the
+service's `DATABASE_URL`:
 
 ```bash
 python -m kaori_api.antalya seed user:<supabase-user-uuid> "<callsign>"

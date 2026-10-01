@@ -362,3 +362,10 @@ def test_an_ai_that_sees_no_sky_backs_nothing(env):
     assert r.payload["value"] is None
     [v] = [v for v in flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) if v.agent_id == antalya.AI_AGENT]
     assert v.payload["vote"] == "REJECT"
+
+
+def test_seed_command_needs_only_the_ledger(monkeypatch, capsys):
+    # the seed job runs with DATABASE_URL alone (no bucket, no Supabase), so it must not build the API
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    assert antalya.main(["seed", "user:someone"]) == 2
+    assert "DATABASE_URL is required" in capsys.readouterr().out

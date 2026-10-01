@@ -10,6 +10,11 @@ COPY packages/kaori-spec/schemas /app/packages/kaori-spec/schemas
 
 ENV KAORI_CLIP_CACHE=/app/.cache/open_clip
 
+# CPU-only torch: the default PyPI wheels bundle CUDA (gigabytes this service never uses)
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+        "torch>=2.13.0" \
+        "torchvision>=0.28.0"
+
 RUN pip install --no-cache-dir \
         "fastapi>=0.100.0" \
         "uvicorn[standard]>=0.22.0" \

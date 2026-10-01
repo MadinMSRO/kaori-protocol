@@ -592,9 +592,16 @@ def main(argv: List[str]) -> int:
     if len(argv) < 2 or argv[0] != "seed":
         print(main.__doc__)
         return 2
-    from kaori_api.app import create_stores
+    # the ledger only: importing kaori_api.app would build the whole API (bucket, auth)
+    from kaori_db import PostgresSignalStore
+    from kaori_db.store import require_kaori_schema
 
-    signal_store, _, _ = create_stores()
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        print("DATABASE_URL is required")
+        return 2
+    signal_store = PostgresSignalStore(url)
+    require_kaori_schema(signal_store.engine)
     flow = FlowCore(store=signal_store)
     signal = seed_member(flow, argv[1], argv[2] if len(argv) > 2 else None)
     print(f"seeded {argv[1]} ({signal.signal_id[:12]})")

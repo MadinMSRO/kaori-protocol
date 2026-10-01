@@ -74,3 +74,6 @@ terraform/*.tfstate.*
 terraform/.terraform.lock.hcl
 
 *.log
+
+# Antalya deploy settings (filled in per deployment)
+deploy/antalya/antalya.env
