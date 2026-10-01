@@ -37,16 +37,25 @@ from agents import VALS, D, WORTH, HOSTILE, form
 C0, ETA, THIN, STAKES = 0.1, 0.05, S.SLOW, 10.0
 
 class Soup:
-    def __init__(self, law, entangle, provenance, grounded=False, graded=False, local=False, thin=THIN):
-        self.law, self.entangle, self.provenance = law, entangle, provenance
-        self.grounded, self.graded, self.local, self.thin = grounded, graded, local, thin
+    def __init__(self, law, entangle, provenance, grounded=False, graded=False, local=False, thin=THIN, peers=0,
+                 local_prov=False):
+        self.law, self.entangle, self.provenance, self.local_prov = law, entangle, provenance, local_prov
+        self.grounded, self.graded, self.local, self.thin, self.peers = grounded, graded, local, thin, peers
         self.c = defaultdict(lambda: C0)
         self.ne = defaultdict(float); self.se = defaultdict(float); self.mij = defaultdict(float); self.wij = defaultdict(float)
         self._ac = {}
         self.pv = defaultdict(lambda: [0.0, 0.0]); self._rho = None
     # ---- the provenance agent (only in the last variant)
     rho = A.Complex.rho
-    realness = S.Seed.realness
+    def realness(self, aid, passed):
+        """The provenance agent. Default (as in seed.py): a photo is judged partly by its owner's pass record.
+        Local (Rule 4): judged by its own provenance Signal only; the pass rates of real and fake captures are still
+        learned from the whole population."""
+        if not self.local_prov: return S.Seed.realness(self, aid, passed)
+        rr, rf, n_obs = self.rho()
+        if n_obs < 4 or rr - rf < 0.05: return 1.0
+        lr, lf = (rr, rf) if passed else (1 - rr, 1 - rf)
+        return lr / (lr + lf)
     # ---- entanglement: shared dissent beyond chance
     def a(self, i, j):
         if i == j: return 1.0
@@ -68,7 +77,16 @@ class Soup:
         for n, (aid, said, passed, sky, reads) in enumerate(items):
             w = self.realness(aid, passed) * (1.0 if sky else 0.05) if self.provenance else 1.0
             rend = [(aid, said)] + [(r, x) for r, x in reads if x is not None]
+            nrend = len(rend)
+            if self.peers:
+                # blind peer check: other observers at this key, chosen at random, say whether the photo matches the
+                # sky they see; they render what they see (their own eye). They shape this photo's local fit only;
+                # their own eye already counts once at the key through their own item.
+                others = [(r[0], r[2]) for r in reps if r[0] != aid]
+                R = random.Random(hash((aid, n, len(reps), said)) & 0xFFFFFFFF)
+                rend += R.sample(others, min(self.peers, len(others)))
             for j, (e, x) in enumerate(rend):
+                if j >= nrend: break
                 fit = 1.0
                 if self.local:
                     num = den = 0.0
@@ -179,7 +197,16 @@ VARIANTS = {
     "L: flow, local trust, graded + provenance": (True, False, True, True, True, True),
     "D: flow, graded + provenance, decay 14 d": (True, False, True, True, True, False, math.log(2) / (14 * 24)),
     "D: flow, graded + provenance, decay 7 d": (True, False, True, True, True, False, math.log(2) / (7 * 24)),
+    # fourth round: the reality channels. In-app capture (forged photos cannot pass provenance) and blind peer checks
+    "L + in-app capture": (True, False, True, True, True, True),
+    "L + peer check (2 blind peers)": (True, False, True, True, True, True, THIN, 2),
+    "L + peer check + in-app capture": (True, False, True, True, True, True, THIN, 2),
+    # fifth round: provenance made local (a photo judged by its own provenance Signal, not its owner's record)
+    "L + local provenance": (True, False, True, True, True, True, THIN, 0, True),
+    "L + local provenance + peer check": (True, False, True, True, True, True, THIN, 2, True),
+    "L + local provenance + in-app capture": (True, False, True, True, True, True, THIN, 0, True),
 }
+FAKE_PASS = {"L + in-app capture": 0.0, "L + peer check + in-app capture": 0.0, "L + local provenance + in-app capture": 0.0}   # otherwise the world's 15%
 
 def run(name, world, detail=False):
     events, POOL = world

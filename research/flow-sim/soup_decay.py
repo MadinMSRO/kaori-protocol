@@ -11,12 +11,12 @@ from multiprocessing import Pool
 import captcha as K, trust as T, soup as SP
 
 ARMS = ["G: flow, graded + provenance", "L: flow, local trust, graded + provenance",
-        "D: flow, graded + provenance, decay 14 d", "D: flow, graded + provenance, decay 7 d",
+        "L + in-app capture", "L + peer check (2 blind peers)", "L + local provenance + in-app capture",
         "G: none (no law), graded + provenance"]
 
 def job(args):
     name, s, i, a = args
-    return name, i, SP.run(name, K.make(s, a, "critical"))
+    return name, i, SP.run(name, K.make(s, a, "critical", fake_pass=SP.FAKE_PASS.get(name, 0.15)))
 
 def half_life(q):
     if q[0] <= 0: return "-"

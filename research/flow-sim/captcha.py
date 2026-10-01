@@ -39,7 +39,7 @@ def v_read(R, vid, content, signed, fake):
     if vid.startswith("v:lazy"): return read(R, content, 0.5, 0.6)
     return read(R, content, 0.9, 0.9)
 
-def make(seed, att, lane="critical", audit=0.0):
+def make(seed, att, lane="critical", audit=0.0, fake_pass=0.15):
     farm = int(round(att.get("farm", 0))); signed_rate = att.get("signed", 1.0)
     events = coevo.make_world(seed, att)
     R = random.Random(seed ^ 0xCA97)
@@ -49,7 +49,7 @@ def make(seed, att, lane="critical", audit=0.0):
         items = []
         for aid, kind, said, shows, rel in reps:
             content = None if shows == "junk" else (truth if shows == "truth" else fake)
-            passed = R.random() < (0.9 if content is None else 0.95 if shows == "truth" else 0.15)
+            passed = R.random() < (0.9 if content is None else 0.95 if shows == "truth" else fake_pass)
             attack = kind in ("adv", "stolen") and said == fake
             signed = attack and R.random() < signed_rate
             reads = []
