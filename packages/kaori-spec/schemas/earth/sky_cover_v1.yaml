@@ -137,16 +137,18 @@ ai_validation_routing:
       - "a photo of the sky above rooftops and trees"
       - "a photo of the sky with the horizon at the bottom"
     # Blind readings (Antalya): the AI reads each photo like a human validator, zero-shot over these prompts.
+    # One prompt per band keeps the bands unbiased. On 8 local sky photos: cover 6/8 exact, 8/8 within one
+    # band; rain 7/8. Antalya measures it properly against the airport METAR.
     readings:
       cover:
-        clear: ["a photo of a clear blue sky with no clouds"]
-        few: ["a photo of a blue sky with a few small clouds"]
-        scattered: ["a photo of a partly cloudy sky, about half covered with clouds"]
-        broken: ["a photo of a mostly cloudy sky with small patches of blue"]
-        overcast: ["a photo of a completely overcast grey sky with no blue", "a photo of a dark stormy sky full of clouds"]
+        clear: ["clear sky"]
+        few: ["mostly clear sky"]
+        scattered: ["partly cloudy sky"]
+        broken: ["mostly cloudy sky"]
+        overcast: ["overcast sky"]
       raining:
-        "true": ["a photo taken in the rain, with rain falling and wet surfaces"]
-        "false": ["a photo taken outdoors on a dry day"]
+        "true": ["rain falling from a dark sky", "raindrops and a wet rainy day"]
+        "false": ["a dry day with no rain", "a cloudy but dry day"]
     distractors:
       - "a close-up photo of a person"
       - "a photo of an animal"

@@ -889,7 +889,7 @@ def test_blind_read_returns_a_value_per_field_from_the_claim_type_prompts():
     from pathlib import Path
 
     root = str(Path(__file__).resolve().parents[2] / "kaori-spec" / "schemas")
-    validator = ClipGeneralistValidator(schema_root=root, model=_LabelModel("overcast grey"))
+    validator = ClipGeneralistValidator(schema_root=root, model=_LabelModel("overcast"))
     result = validator.read("earth.sky_cover.v1", _jpeg())
     assert result["values"]["cover"] == "overcast"
     assert set(result["probs"]["cover"]) == {"clear", "few", "scattered", "broken", "overcast"}

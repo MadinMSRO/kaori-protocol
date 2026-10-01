@@ -345,7 +345,7 @@ def ai_read(app: Any, observation: Any, truth_key: str, vote_and_compile: Callab
         return
     values = result.get("values") or {}
     relevance = result.get("relevance")
-    is_evidence = relevance is None or relevance >= 0.5
+    is_evidence = bool(result.get("evidence", relevance is None or relevance >= 0.5))
     value = {"cover": values.get("cover"), "raining": bool(values.get("raining"))} if is_evidence else None
     now = _now()
     _emit(flow, SignalTypes.READING_SUBMITTED, AI_AGENT, assignment.object_id, {

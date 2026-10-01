@@ -422,7 +422,7 @@ class ClipGeneralistValidator:
         claim's evidence at all (the claim's prompts against its distractors).
         """
         config = self._load_claim_type(claim_type_id)
-        _, engine, _ = self._generalist_settings(config)
+        _, engine, relevance_threshold = self._generalist_settings(config)
         readings = ((config.get("ai_validation_routing") or {}).get("generalist") or {}).get("readings") or {}
         if not isinstance(readings, dict) or not readings:
             raise ValueError("claim type has no generalist.readings")
@@ -437,9 +437,13 @@ class ClipGeneralistValidator:
                     labels.append(str(prompt))
                     owners.append(str(option))
             row = self.model.label_probs([image], labels=labels, engine=engine)[0]
-            mass: Dict[str, float] = {}
+            # each option's mean over its prompts, so an option with more prompts is not favoured
+            groups: Dict[str, List[float]] = {}
             for owner, p in zip(owners, row):
-                mass[owner] = mass.get(owner, 0.0) + p
+                groups.setdefault(owner, []).append(p)
+            mass = {k: sum(v) / len(v) for k, v in groups.items()}
+            total = sum(mass.values()) or 1.0
+            mass = {k: v / total for k, v in mass.items()}
             best = max(mass, key=mass.get)
             values[field] = {"true": True, "false": False}.get(best.lower(), best) if isinstance(best, str) else best
             probs[field] = {k: round(v, 4) for k, v in mass.items()}
@@ -449,7 +453,13 @@ class ClipGeneralistValidator:
             if prompts
             else None
         )
-        return {"values": values, "probs": probs, "relevance": None if sky is None else round(float(sky), 4)}
+        return {
+            "values": values,
+            "probs": probs,
+            "relevance": None if sky is None else round(float(sky), 4),
+            # is this the claim's kind of evidence at all (the ClaimType's calibrated relevance threshold)
+            "evidence": True if sky is None else float(sky) >= relevance_threshold,
+        }
 
     @staticmethod
     def _labels(config: dict) -> tuple[List[str], List[str]]:
