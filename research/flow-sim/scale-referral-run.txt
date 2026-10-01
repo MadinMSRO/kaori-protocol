@@ -1,0 +1,20 @@
+referral-only sign-up; validators drawn by identity; fakes unlimited (5 per user); lineage bond within an attack edge 0.9
+ users N honest/key | real members to corrupt for a 50% chance of one false truth | capture half of
+          (typical) |  quiet (x0.1)   typical  hotspot (x10)                      | independent checking
+     100       0.03 |             4         4              4                      |          1
+     300       0.08 |             4         4              7                      |          1
+   1,000       0.28 |             4         4             26                      |          1
+   3,000       0.83 |             4         7            992                      |          1
+  10,000       2.78 |             4        26              -                      |          1
+  30,000       8.33 |             7       992              -                      |          1
+ 100,000      27.78 |            26         -              -                      |          1
+referral-only sign-up; validators drawn by lineage; fakes unlimited (5 per user); lineage bond within an attack edge 0.9
+ users N honest/key | real members to corrupt for a 50% chance of one false truth | capture half of
+          (typical) |  quiet (x0.1)   typical  hotspot (x10)                      | independent checking
+     100       0.03 |            92        92            100                      |         80
+     300       0.08 |           264       264            336                      |        240
+   1,000       0.28 |           864       960          1,600                      |        800
+   3,000       0.83 |         2,560     2,944              -                      |      2,400
+  10,000       2.78 |         9,728    14,848              -                      |      8,000
+  30,000       8.33 |        29,696         -              -                      |     24,000
+ 100,000      27.78 |       151,552         -              -                      |     80,000

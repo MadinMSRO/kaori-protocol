@@ -1,0 +1,65 @@
+{
+ "rows": [
+  {
+   "N": 100,
+   "density": 0.027777777777777773,
+   "quiet": 92,
+   "typical": 92,
+   "hotspot": 100,
+   "total": 80
+  },
+  {
+   "N": 300,
+   "density": 0.08333333333333333,
+   "quiet": 264,
+   "typical": 264,
+   "hotspot": 336,
+   "total": 240
+  },
+  {
+   "N": 1000,
+   "density": 0.27777777777777773,
+   "quiet": 864,
+   "typical": 960,
+   "hotspot": 1600,
+   "total": 800
+  },
+  {
+   "N": 3000,
+   "density": 0.8333333333333334,
+   "quiet": 2560,
+   "typical": 2944,
+   "hotspot": null,
+   "total": 2400
+  },
+  {
+   "N": 10000,
+   "density": 2.7777777777777777,
+   "quiet": 9728,
+   "typical": 14848,
+   "hotspot": null,
+   "total": 8000
+  },
+  {
+   "N": 30000,
+   "density": 8.333333333333334,
+   "quiet": 29696,
+   "typical": null,
+   "hotspot": null,
+   "total": 24000
+  },
+  {
+   "N": 100000,
+   "density": 27.777777777777775,
+   "quiet": 151552,
+   "typical": null,
+   "hotspot": null,
+   "total": 80000
+  }
+ ],
+ "assumptions": {
+  "B_IN": 0.9,
+  "FAKES_PER_USER": 5.0,
+  "TRIALS": 300
+ }
+}
