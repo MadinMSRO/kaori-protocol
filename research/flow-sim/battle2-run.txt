@@ -1,0 +1,43 @@
+### an attacker evolved against each one-number version (same budget as battle.py)
+  vs DS, one number (counted)           best attacker fitness 0.105  8 ids, out 86% of hours, attacks 5% of those, scatter 57%, sleeps 8% of the run, re-registers every 123 h, steals 2 account(s), true-photo lies 55%, farm 6, signed 70%
+  vs DS, one number (stepped)           best attacker fitness 0.132  8 ids, out 78% of hours, attacks 16% of those, scatter 60%, sleeps 61% of the run, re-registers every 200 h, steals 2 account(s), true-photo lies 0%, farm 8, signed 40%
+
+### 5 versions x 21 attacks x 6 worlds (the battle.py test worlds)
+
+                                      right  wrong  worst contest   AUC   wrong vs the two new attackers
+Dawid-Skene, no observer gate          0.96  0.008  0.032    0.01  0.80   0.002  0.006
+DS, one number (counted)               0.95  0.008  0.029    0.01  0.71   0.002  0.005
+DS, one number (stepped)               0.95  0.009  0.031    0.01  0.73   0.002  0.006
+3 laws + bonds, validators always      0.95  0.032  0.132    0.02  0.60   0.009  0.023
+trust.py (current)                     0.93  0.032  0.128    0.03  0.60   0.010  0.023
+
+### wrong per attack
+  [ 0] cabal (co-evolved)
+  [ 1] ring
+  [ 2] sleeper + theft
+  [ 3] patient scatterers
+  [ 4] calm
+  [ 5] farm + signed real photos
+  [ 6] wash every 48 h
+  [ 7] hall of fame: trust adaptive
+  [ 8] hall of fame: captcha adaptive
+  [ 9] evolved vs trust.py (current)
+  [10] evolved vs trust.py, no implicit consensus
+  [11] evolved vs 3 laws + bonds (presence+error)
+  [12] evolved vs 3 laws + presence-only bonds
+  [13] evolved vs 3 laws + tuned flock (mu=2.75)
+  [14] evolved vs 3 laws + GLS screening (derived)
+  [15] evolved vs 3 laws, no screening
+  [16] evolved vs 3 laws + bonds, validators always
+  [17] evolved vs Dawid-Skene + observer gate
+  [18] evolved vs Dawid-Skene, no observer gate
+  [19] evolved vs DS, one number (counted)
+  [20] evolved vs DS, one number (stepped)
+                                         0     1     2     3     4     5     6     7     8     9    10    11    12    13    14    15    16    17    18    19    20
+Dawid-Skene, no observer gate         .032  .011  .010  .003  .000  .000  .001  .010  .025  .011  .004  .007  .022  .006  .003  .008  .005  .001  .007  .002  .006
+DS, one number (counted)              .029  .012  .011  .003  .000  .000  .000  .010  .027  .010  .004  .007  .021  .007  .003  .008  .004  .002  .007  .002  .005
+DS, one number (stepped)              .031  .012  .010  .003  .000  .000  .000  .009  .027  .012  .004  .009  .021  .007  .004  .007  .004  .001  .008  .002  .006
+3 laws + bonds, validators always     .007  .003  .045  .013  .000  .000  .001  .076  .132  .030  .026  .045  .117  .034  .020  .050  .016  .004  .011  .009  .023
+trust.py (current)                    .008  .003  .045  .013  .002  .001  .001  .076  .128  .033  .026  .044  .119  .035  .021  .050  .015  .005  .012  .010  .023
+
+587s
