@@ -208,7 +208,7 @@ def run(name, world, detail=False):
         for aid, kind, *_ in reps: kinds.setdefault(aid, kind)
         N.observe(cell)
         if len(reps) >= 3:
-            out["eligible"] += 1
+            out["eligible"] += 1; out["eq%d" % min(3, 4 * t // Tn)] += 1
             if not resolve(cell, t, truth): opened.append((t, cell, truth))
     out["stuck"] += len(opened)
     E = max(1, out["eligible"])
@@ -220,6 +220,7 @@ def run(name, world, detail=False):
     res = {"right": out["right"] / E, "wrong": out["wrong"] / E, "stuck": out["stuck"] / E, "sep": sep, "auc": auc,
            "snap_q": [sum(s for q, s, _ in snaps if q == i) / max(1, sum(1 for q, *_ in snaps if q == i)) for i in range(4)],
            "snap_right": sum(rs) / max(1, len(rs)), "snap_wrong": sum(ws) / max(1, len(ws))}
+    res["wrong_q"] = [sum(1 for q, _, ok in snaps if q == i and not ok) / max(1, out["eq%d" % i]) for i in range(4)]
     if detail:
         tiers = defaultdict(list)
         for a, k in kinds.items(): tiers[k].append(N.c[a])
