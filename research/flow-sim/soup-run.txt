@@ -1,10 +1,14 @@
-### 4 variants x 21 attacks x 6 worlds (the battle test worlds)
+### 8 variants x 21 attacks x 6 worlds (the battle test worlds)
 
                                     right  wrong  worst  stuck | trust of true of false   sep | kind AUC | trust by quarter
 none (no law)                        0.39  0.023  0.173   0.34 |          0.77     0.77  0.09 |     0.50 | 0.78 -> 0.78 -> 0.78 -> 0.78
 flow                                 0.44  0.025  0.203   0.26 |          1.00     0.84  0.08 |     0.67 | 0.99 -> 1.00 -> 1.00 -> 1.00
 flow + entanglement                  0.47  0.039  0.403   0.23 |          0.99     0.84  0.11 |     0.65 | 0.99 -> 1.00 -> 1.00 -> 1.00
 flow + entanglement + provenance     0.54  0.020  0.121   0.17 |          0.96     0.67  0.57 |     0.78 | 0.90 -> 0.97 -> 0.97 -> 0.95
+G: none (no law), graded + provenance   0.34  0.021  0.130   0.46 |          0.09     0.06  0.77 |     0.50 | 0.09 -> 0.09 -> 0.09 -> 0.09
+G: flow, graded + provenance         0.87  0.037  0.131   0.03 |          0.43     0.35  0.55 |     0.73 | 0.22 -> 0.43 -> 0.53 -> 0.57
+G: flow + grounded entanglement, graded   0.84  0.084  0.554   0.01 |          0.46     0.46  0.45 |     0.61 | 0.24 -> 0.48 -> 0.56 -> 0.59
+G: flow + grounded entanglement, graded + provenance   0.81  0.031  0.132   0.07 |          0.45     0.40  0.48 |     0.75 | 0.23 -> 0.45 -> 0.54 -> 0.58
 
 ### wrong per attack
   [ 0] cabal (co-evolved)
@@ -33,19 +37,39 @@ none (no law)                       .173  .059  .012  .003  .000  .000  .000  .0
 flow                                .203  .058  .012  .003  .000  .000  .000  .024  .055  .029  .008  .018  .049  .010  .006  .014  .007  .001  .019  .003  .011
 flow + entanglement                 .403  .057  .012  .004  .000  .000  .000  .033  .087  .031  .010  .023  .074  .016  .007  .016  .007  .002  .027  .003  .013
 flow + entanglement + provenance    .121  .056  .012  .004  .000  .000  .000  .021  .051  .028  .008  .014  .042  .010  .005  .015  .006  .002  .015  .003  .009
+G: none (no law), graded + provenance  .001  .000  .016  .010  .000  .000  .000  .045  .130  .006  .017  .023  .074  .025  .012  .042  .008  .004  .003  .008  .017
+G: flow, graded + provenance        .002  .000  .048  .018  .000  .004  .000  .087  .131  .048  .027  .042  .121  .039  .022  .113  .016  .004  .014  .012  .023
+G: flow + grounded entanglement, graded  .554  .300  .049  .015  .000  .002  .001  .082  .146  .125  .027  .057  .162  .036  .021  .054  .021  .006  .069  .011  .023
+G: flow + grounded entanglement, graded + provenance  .001  .000  .048  .013  .000  .000  .000  .075  .132  .037  .024  .046  .123  .033  .020  .048  .015  .004  .009  .009  .023
 
 ### conduit thickness each hidden kind ended with (one world per attack, first test seed)
   [cabal (co-evolved)    ] flow                               {'careful': 0.84, 'liar': 0.27, 'sloppy': 0.84, 'lazy': 0.71, 'faker': 0.42, 'adv': 0.96, 'stolen': 0.96, 'v:dil': 0.93, 'v:lazy': 0.91, 'ai': 0.95}
   [cabal (co-evolved)    ] flow + entanglement                {'careful': 0.62, 'liar': 0.39, 'sloppy': 0.66, 'lazy': 0.63, 'faker': 0.45, 'adv': 0.99, 'stolen': 0.99, 'v:dil': 0.86, 'v:lazy': 0.76, 'ai': 0.84}
   [cabal (co-evolved)    ] flow + entanglement + provenance   {'careful': 0.92, 'liar': 0.6, 'sloppy': 0.91, 'lazy': 0.88, 'faker': 0.09, 'adv': 0.09, 'stolen': 0.1, 'v:dil': 0.83, 'v:lazy': 0.75, 'ai': 0.83}
+  [cabal (co-evolved)    ] G: none (no law), graded + provenance {'careful': 0.1, 'liar': 0.1, 'sloppy': 0.1, 'lazy': 0.1, 'faker': 0.1, 'adv': 0.1, 'stolen': 0.1, 'v:dil': 0.1, 'v:lazy': 0.1, 'ai': 0.1}
+  [cabal (co-evolved)    ] G: flow, graded + provenance       {'careful': 0.69, 'liar': 0.18, 'sloppy': 0.6, 'lazy': 0.44, 'faker': 0.09, 'adv': 0.08, 'stolen': 0.08, 'v:dil': 0.6, 'v:lazy': 0.49, 'ai': 0.81}
+  [cabal (co-evolved)    ] G: flow + grounded entanglement, graded {'careful': 0.59, 'liar': 0.3, 'sloppy': 0.6, 'lazy': 0.49, 'faker': 0.31, 'adv': 0.98, 'stolen': 0.98, 'v:dil': 0.83, 'v:lazy': 0.69, 'ai': 0.74}
+  [cabal (co-evolved)    ] G: flow + grounded entanglement, graded + provenance {'careful': 0.47, 'liar': 0.16, 'sloppy': 0.43, 'lazy': 0.34, 'faker': 0.08, 'adv': 0.08, 'stolen': 0.08, 'v:dil': 0.4, 'v:lazy': 0.4, 'ai': 0.86}
   [ring                  ] flow                               {'careful': 0.93, 'liar': 0.39, 'lazy': 0.75, 'adv': 0.69, 'sloppy': 0.93, 'faker': 0.46, 'v:dil': 0.92, 'v:lazy': 0.87, 'ai': 0.96}
   [ring                  ] flow + entanglement                {'careful': 0.93, 'liar': 0.38, 'lazy': 0.75, 'adv': 0.69, 'sloppy': 0.93, 'faker': 0.42, 'v:dil': 0.92, 'v:lazy': 0.88, 'ai': 0.96}
   [ring                  ] flow + entanglement + provenance   {'careful': 0.93, 'liar': 0.62, 'lazy': 0.89, 'adv': 0.08, 'sloppy': 0.95, 'faker': 0.1, 'v:dil': 0.9, 'v:lazy': 0.8, 'ai': 0.95}
+  [ring                  ] G: none (no law), graded + provenance {'careful': 0.1, 'liar': 0.1, 'lazy': 0.1, 'adv': 0.1, 'sloppy': 0.1, 'faker': 0.1, 'v:dil': 0.1, 'v:lazy': 0.1, 'ai': 0.1}
+  [ring                  ] G: flow, graded + provenance       {'careful': 0.78, 'liar': 0.16, 'lazy': 0.43, 'adv': 0.08, 'sloppy': 0.69, 'faker': 0.1, 'v:dil': 0.72, 'v:lazy': 0.54, 'ai': 0.84}
+  [ring                  ] G: flow + grounded entanglement, graded {'careful': 0.68, 'liar': 0.15, 'lazy': 0.42, 'adv': 0.85, 'sloppy': 0.62, 'faker': 0.27, 'v:dil': 0.71, 'v:lazy': 0.55, 'ai': 0.76}
+  [ring                  ] G: flow + grounded entanglement, graded + provenance {'careful': 0.76, 'liar': 0.2, 'lazy': 0.5, 'adv': 0.08, 'sloppy': 0.71, 'faker': 0.1, 'v:dil': 0.7, 'v:lazy': 0.58, 'ai': 0.88}
   [farm + signed real pho] flow                               {'adv': 0.92, 'careful': 0.86, 'liar': 0.37, 'lazy': 0.69, 'sloppy': 0.9, 'faker': 0.33, 'v:dil': 0.93, 'v:lazy': 0.88, 'v:farm': 0.93, 'ai': 0.92}
   [farm + signed real pho] flow + entanglement                {'adv': 0.92, 'careful': 0.86, 'liar': 0.36, 'lazy': 0.68, 'sloppy': 0.9, 'faker': 0.31, 'v:dil': 0.92, 'v:lazy': 0.9, 'v:farm': 0.93, 'ai': 0.91}
   [farm + signed real pho] flow + entanglement + provenance   {'adv': 0.92, 'careful': 0.86, 'liar': 0.38, 'lazy': 0.73, 'sloppy': 0.92, 'faker': 0.09, 'v:dil': 0.92, 'v:lazy': 0.87, 'v:farm': 0.94, 'ai': 0.89}
+  [farm + signed real pho] G: none (no law), graded + provenance {'adv': 0.1, 'careful': 0.1, 'liar': 0.1, 'lazy': 0.1, 'sloppy': 0.1, 'faker': 0.1, 'v:dil': 0.1, 'v:lazy': 0.1, 'v:farm': 0.1, 'ai': 0.1}
+  [farm + signed real pho] G: flow, graded + provenance       {'adv': 0.22, 'careful': 0.71, 'liar': 0.13, 'lazy': 0.5, 'sloppy': 0.73, 'faker': 0.08, 'v:dil': 0.86, 'v:lazy': 0.58, 'v:farm': 0.47, 'ai': 0.76}
+  [farm + signed real pho] G: flow + grounded entanglement, graded {'adv': 0.16, 'careful': 0.72, 'liar': 0.14, 'lazy': 0.52, 'sloppy': 0.76, 'faker': 0.15, 'v:dil': 0.86, 'v:lazy': 0.58, 'v:farm': 0.4, 'ai': 0.76}
+  [farm + signed real pho] G: flow + grounded entanglement, graded + provenance {'adv': 0.17, 'careful': 0.72, 'liar': 0.15, 'lazy': 0.51, 'sloppy': 0.75, 'faker': 0.08, 'v:dil': 0.87, 'v:lazy': 0.6, 'v:farm': 0.42, 'ai': 0.78}
   [hall of fame: captcha ] flow                               {'careful': 0.88, 'liar': 0.31, 'lazy': 0.7, 'adv': 0.92, 'sloppy': 0.85, 'faker': 0.5, 'v:dil': 0.92, 'v:lazy': 0.87, 'ai': 0.85}
   [hall of fame: captcha ] flow + entanglement                {'careful': 0.88, 'liar': 0.34, 'lazy': 0.69, 'adv': 0.95, 'sloppy': 0.79, 'faker': 0.53, 'v:dil': 0.91, 'v:lazy': 0.84, 'ai': 0.82}
   [hall of fame: captcha ] flow + entanglement + provenance   {'careful': 0.86, 'liar': 0.29, 'lazy': 0.75, 'adv': 0.89, 'sloppy': 0.87, 'faker': 0.1, 'v:dil': 0.91, 'v:lazy': 0.82, 'ai': 0.87}
+  [hall of fame: captcha ] G: none (no law), graded + provenance {'careful': 0.1, 'liar': 0.1, 'lazy': 0.1, 'adv': 0.1, 'sloppy': 0.1, 'faker': 0.1, 'v:dil': 0.1, 'v:lazy': 0.1, 'ai': 0.1}
+  [hall of fame: captcha ] G: flow, graded + provenance       {'careful': 0.58, 'liar': 0.15, 'lazy': 0.48, 'adv': 0.2, 'sloppy': 0.67, 'faker': 0.08, 'v:dil': 0.86, 'v:lazy': 0.58, 'ai': 0.75}
+  [hall of fame: captcha ] G: flow + grounded entanglement, graded {'careful': 0.61, 'liar': 0.21, 'lazy': 0.54, 'adv': 0.27, 'sloppy': 0.69, 'faker': 0.33, 'v:dil': 0.88, 'v:lazy': 0.67, 'ai': 0.76}
+  [hall of fame: captcha ] G: flow + grounded entanglement, graded + provenance {'careful': 0.61, 'liar': 0.2, 'lazy': 0.52, 'adv': 0.21, 'sloppy': 0.71, 'faker': 0.08, 'v:dil': 0.88, 'v:lazy': 0.67, 'ai': 0.79}
 
-251s
+541s
