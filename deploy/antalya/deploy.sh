@@ -17,7 +17,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 ENV_FILE=${ENV_FILE:-$HERE/antalya.env}
-STEPS="check apis build bucket secrets accounts sql db firebase signing downloads generalist api smoke status"
+STEPS="check apis build bucket secrets accounts sql db firebase signing downloads google generalist api smoke status"
 
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 say() { printf '\n== %s\n' "$*"; }
@@ -48,6 +48,7 @@ SECRET_DB_ADMIN=antalya-db-admin-url    # schema owner; only the db job reads it
 SIGNING_KEY_ID=msro-antalya-1
 FIREBASE_APP_NAME="Liminal Antalya"
 FIREBASE_CONFIG=$HERE/firebase-config.json
+GOOGLE_CLIENT_FILE=$HERE/google-web-client-id.txt
 # The Android app's signing key: made once, kept only in Secret Manager. GitHub Actions in
 # MadinMSRO/liminal-mobile (main and probe-* branches only) reads it through Workload Identity Federation.
 ANDROID_PACKAGE=mv.msro.liminal
@@ -425,6 +426,27 @@ step_downloads() {
   echo "  builds of probe-antalya publish to https://storage.googleapis.com/$DL_BUCKET/channels/probe-antalya/index.html"
 }
 
+step_google() {
+  say "Sign in with Google (Firebase)"
+  # Turning the provider on creates its OAuth web client and consent screen, which only the console
+  # does; so this step checks, and says exactly what to click when it is off.
+  api GET "https://identitytoolkit.googleapis.com/admin/v2/projects/$PROJECT_ID/defaultSupportedIdpConfigs/google.com"
+  local enabled client
+  enabled=$(printf '%s' "$API_BODY" | json 'd.get("enabled", False)' 2>/dev/null || echo False)
+  client=$(printf '%s' "$API_BODY" | json 'd.get("clientId", "")' 2>/dev/null || true)
+  if [ "$API_STATUS" != 200 ] || [ "$enabled" != True ] || [ -z "$client" ]; then
+    echo "  Google sign-in is not on yet. Once, in the console:"
+    echo "    console.firebase.google.com -> $PROJECT_ID -> Authentication -> Sign-in method"
+    echo "    -> Add new provider -> Google -> Enable, pick a support email -> Save"
+    echo "  then: ./deploy/antalya/deploy.sh google"
+    echo "  (email sign-in keeps working without it; the app shows Google only when it has the client id)"
+    return 0
+  fi
+  printf '%s' "$client" > "$GOOGLE_CLIENT_FILE"
+  echo "  on; web client id $client"
+  echo "  The Android app's SHA-1 is registered by the signing step, so Google accepts MSRO-signed builds."
+}
+
 step_generalist() {
   say "AI reader: $GEN_SERVICE (private; only the API may call it)"
   retry gc run deploy "$GEN_SERVICE" --image="$GEN_IMAGE" --region="$REGION" \
@@ -548,6 +570,7 @@ step_status() {
   echo "    EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=$(fbv authDomain)"
   echo "    EXPO_PUBLIC_FIREBASE_PROJECT_ID=$(fbv projectId)"
   echo "    EXPO_PUBLIC_FIREBASE_APP_ID=$(fbv appId)"
+  echo "    EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$(cat "$GOOGLE_CLIENT_FILE" 2>/dev/null || echo '<run the google step>')"
   echo "    EXPO_PUBLIC_KAORI_URL=${api_url:-<API url>}"
   echo "    EXPO_PUBLIC_ANTALYA=1"
 }

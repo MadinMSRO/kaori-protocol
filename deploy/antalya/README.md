@@ -48,6 +48,7 @@ Every step is safe to re-run. To run one step: `./deploy/antalya/deploy.sh <step
 | `firebase` | Adds Firebase to the project, turns on email and password sign-in, and registers the app |
 | `signing` | Creates the Android signing key in Secret Manager (once; it never changes), lets GitHub Actions in `liminal-mobile` (main and `probe-*` only) read it through Workload Identity Federation, and registers its fingerprints with Firebase. The key never leaves GCP except into a build |
 | `downloads` | A public bucket that only CI writes to: the signed APK, its install page and `latest.json` for in-app updates |
+| `google` | Checks that Sign in with Google is on in Firebase and reads its web client id for the app. Turning it on is one console click (the step prints it); email sign-in works without it |
 | `generalist` | Deploys the AI: 2 CPU, 4 GiB, one instance always warm. Lets the API call it |
 | `api` | Deploys the API: one instance, always on, connected to Cloud SQL. Phones must link by hardware attestation and run MSRO's signed app (`REQUIRE_DEVICE=0` in `antalya.env` only records it) |
 | `smoke` | Checks the live services (below) |
@@ -122,6 +123,10 @@ Roughly $120–150 a month while it is live. After the event, set both services 
   account. Check that account exists (it appears once Compute Engine is on).
 - **The API returns 403 to everyone:** an organisation policy blocks public services. The `api` step
   detects this and turns off Cloud Run's invoker check instead. Kaori still requires a Firebase sign-in.
+- **Google sign-in fails on the phone with "DEVELOPER_ERROR" (code 10):** Google does not recognise the app's
+  signing key. Run the `signing` step again (it registers the SHA-1 with Firebase), check the APK was signed with
+  MSRO's key (the build log says which), then turn Google off and on again in Firebase so it refreshes the
+  Android OAuth client.
 - **The API won't start:** check its logs in Cloud Run. `Kaori schema is incomplete` means the `db` step
   hasn't run.
 - **Logs of the one-off jobs:** Cloud Run → Jobs → `kaori-antalya-db` or `kaori-antalya-seed`.
