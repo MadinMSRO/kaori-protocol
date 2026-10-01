@@ -1,0 +1,28 @@
+validators earned through observation (threshold 0.6, 3 per photo, never the owner or anyone present)
+
+                                            team (share)  right wrong@att wrong@min att:careful  attacker share of validator reads
+G: flow, graded + provenance                 1 (  7%)     0.00      0.0%      0.0%       1.00                                0.0%
+G: flow, graded + provenance                 2 ( 12%)     0.00      0.0%      0.0%       1.00                                0.0%
+G: flow, graded + provenance                 4 ( 22%)     0.00      0.0%      0.0%       1.00                                0.0%
+G: flow, graded + provenance                 7 ( 33%)     0.09      5.6%      0.0%       1.03*                              12.8%
+G: flow, graded + provenance                10 ( 42%)     0.53     24.9%      0.0%       1.37*                              49.2%
+G: flow, graded + provenance                14 ( 50%)     0.59     26.6%      0.0%       1.85*                              77.5%
+G: flow, graded + provenance                21 ( 60%)     0.52     25.3%      0.0%       1.67*                              63.4%
+
+T1: grow only from own evidence              1 (  7%)     0.88      0.0%      0.0%       0.96                                6.9%
+T1: grow only from own evidence              2 ( 12%)     0.83      0.5%      0.0%       0.87                                6.5%
+T1: grow only from own evidence              4 ( 22%)     0.77      5.8%      0.0%       0.87                               13.0%
+T1: grow only from own evidence              7 ( 33%)     0.69      6.2%      0.0%       0.64                                9.4%
+T1: grow only from own evidence             10 ( 42%)     0.72     17.5%      0.0%       0.92                               19.7%
+T1: grow only from own evidence             14 ( 50%)     0.71     22.1%      0.0%       0.98                               23.7%
+T1: grow only from own evidence             21 ( 60%)     0.70     17.7%      0.0%       0.84                               23.3%
+
+T2: own evidence + together counts once      1 (  7%)     0.80      0.0%      0.0%       0.96                                6.9%
+T2: own evidence + together counts once      2 ( 12%)     0.71      0.2%      0.0%       0.87                                6.5%
+T2: own evidence + together counts once      4 ( 22%)     0.65      2.8%      0.0%       0.87                               13.0%
+T2: own evidence + together counts once      7 ( 33%)     0.55      2.5%      0.0%       0.64                                9.4%
+T2: own evidence + together counts once     10 ( 42%)     0.65      8.4%      0.0%       0.92                               19.7%
+T2: own evidence + together counts once     14 ( 50%)     0.65     10.5%      0.0%       0.98                               23.7%
+T2: own evidence + together counts once     21 ( 60%)     0.55      8.2%      0.0%       0.84                               23.3%
+
+51s

@@ -1,0 +1,149 @@
+{
+ "G: flow, graded + provenance|1": {
+  "right": 0.0,
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.9995415642231661,
+  "attacker_reads": 0.0
+ },
+ "G: flow, graded + provenance|2": {
+  "right": 0.0,
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.9994998645572944,
+  "attacker_reads": 0.0
+ },
+ "G: flow, graded + provenance|4": {
+  "right": 0.0,
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.9995415642231661,
+  "attacker_reads": 0.0
+ },
+ "G: flow, graded + provenance|7": {
+  "right": 0.093711467324291,
+  "wrong_att": 0.05634920634920635,
+  "wrong_min": 0.0,
+  "ratio": 1.0339788656402569,
+  "attacker_reads": 0.12760960334029228
+ },
+ "G: flow, graded + provenance|10": {
+  "right": 0.534172399372113,
+  "wrong_att": 0.249412878867953,
+  "wrong_min": 0.0,
+  "ratio": 1.3715173546137962,
+  "attacker_reads": 0.4917546484333766
+ },
+ "G: flow, graded + provenance|14": {
+  "right": 0.5850931965059635,
+  "wrong_att": 0.2662027478696573,
+  "wrong_min": 0.0,
+  "ratio": 1.8521829331860986,
+  "attacker_reads": 0.7754343069469818
+ },
+ "G: flow, graded + provenance|21": {
+  "right": 0.5206242687128628,
+  "wrong_att": 0.25343085176197905,
+  "wrong_min": 0.0,
+  "ratio": 1.6683379544437058,
+  "attacker_reads": 0.6341090010998749
+ },
+ "T1: grow only from own evidence|1": {
+  "right": 0.8827708383287725,
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.9584040199577458,
+  "attacker_reads": 0.06904680620082498
+ },
+ "T1: grow only from own evidence|2": {
+  "right": 0.8257312177390517,
+  "wrong_att": 0.0050456621004566216,
+  "wrong_min": 0.0,
+  "ratio": 0.8657781070780063,
+  "attacker_reads": 0.06530753370056416
+ },
+ "T1: grow only from own evidence|4": {
+  "right": 0.7700523243990813,
+  "wrong_att": 0.05807823366247279,
+  "wrong_min": 0.0,
+  "ratio": 0.8683940547045335,
+  "attacker_reads": 0.12967183083663714
+ },
+ "T1: grow only from own evidence|7": {
+  "right": 0.6914985326625195,
+  "wrong_att": 0.062133959914773856,
+  "wrong_min": 0.0,
+  "ratio": 0.635760941400277,
+  "attacker_reads": 0.0938070034835596
+ },
+ "T1: grow only from own evidence|10": {
+  "right": 0.724331391406745,
+  "wrong_att": 0.1754449165616212,
+  "wrong_min": 0.0,
+  "ratio": 0.9188336258668428,
+  "attacker_reads": 0.1974119650948809
+ },
+ "T1: grow only from own evidence|14": {
+  "right": 0.7134600847594412,
+  "wrong_att": 0.22078058186960248,
+  "wrong_min": 0.0,
+  "ratio": 0.9761359991238978,
+  "attacker_reads": 0.2368109144092554
+ },
+ "T1: grow only from own evidence|21": {
+  "right": 0.7031838944163932,
+  "wrong_att": 0.17675580408758643,
+  "wrong_min": 0.0,
+  "ratio": 0.8438103516739622,
+  "attacker_reads": 0.23260567767294765
+ },
+ "T2: own evidence + together counts once|1": {
+  "right": 0.7973857049223523,
+  "wrong_att": 0.0,
+  "wrong_min": 0.0,
+  "ratio": 0.9584040199577458,
+  "attacker_reads": 0.06904680620082498
+ },
+ "T2: own evidence + together counts once|2": {
+  "right": 0.7119664930382102,
+  "wrong_att": 0.0017331491048900637,
+  "wrong_min": 0.0,
+  "ratio": 0.8657781070780063,
+  "attacker_reads": 0.06530753370056416
+ },
+ "T2: own evidence + together counts once|4": {
+  "right": 0.6498682251647804,
+  "wrong_att": 0.028367440853229387,
+  "wrong_min": 0.0,
+  "ratio": 0.8683940547045335,
+  "attacker_reads": 0.12967183083663714
+ },
+ "T2: own evidence + together counts once|7": {
+  "right": 0.5470540914461037,
+  "wrong_att": 0.024921652372688365,
+  "wrong_min": 0.0,
+  "ratio": 0.635760941400277,
+  "attacker_reads": 0.0938070034835596
+ },
+ "T2: own evidence + together counts once|10": {
+  "right": 0.6453642781973634,
+  "wrong_att": 0.08404925956137974,
+  "wrong_min": 0.0,
+  "ratio": 0.9188336258668428,
+  "attacker_reads": 0.1974119650948809
+ },
+ "T2: own evidence + together counts once|14": {
+  "right": 0.6539200512768529,
+  "wrong_att": 0.10461260058470806,
+  "wrong_min": 0.0,
+  "ratio": 0.9761359991238978,
+  "attacker_reads": 0.2368109144092554
+ },
+ "T2: own evidence + together counts once|21": {
+  "right": 0.5474106171040583,
+  "wrong_att": 0.08244322893387526,
+  "wrong_min": 0.0,
+  "ratio": 0.8438103516739622,
+  "attacker_reads": 0.23260567767294765
+ }
+}
