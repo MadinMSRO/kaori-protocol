@@ -1,0 +1,51 @@
+### 4 variants x 21 attacks x 6 worlds (the battle test worlds)
+
+                                    right  wrong  worst  stuck | trust of true of false   sep | kind AUC | trust by quarter
+none (no law)                        0.39  0.023  0.173   0.34 |          0.77     0.77  0.09 |     0.50 | 0.78 -> 0.78 -> 0.78 -> 0.78
+flow                                 0.44  0.025  0.203   0.26 |          1.00     0.84  0.08 |     0.67 | 0.99 -> 1.00 -> 1.00 -> 1.00
+flow + entanglement                  0.47  0.039  0.403   0.23 |          0.99     0.84  0.11 |     0.65 | 0.99 -> 1.00 -> 1.00 -> 1.00
+flow + entanglement + provenance     0.54  0.020  0.121   0.17 |          0.96     0.67  0.57 |     0.78 | 0.90 -> 0.97 -> 0.97 -> 0.95
+
+### wrong per attack
+  [ 0] cabal (co-evolved)
+  [ 1] ring
+  [ 2] sleeper + theft
+  [ 3] patient scatterers
+  [ 4] calm
+  [ 5] farm + signed real photos
+  [ 6] wash every 48 h
+  [ 7] hall of fame: trust adaptive
+  [ 8] hall of fame: captcha adaptive
+  [ 9] evolved vs trust.py (current)
+  [10] evolved vs trust.py, no implicit consensus
+  [11] evolved vs 3 laws + bonds (presence+error)
+  [12] evolved vs 3 laws + presence-only bonds
+  [13] evolved vs 3 laws + tuned flock (mu=2.75)
+  [14] evolved vs 3 laws + GLS screening (derived)
+  [15] evolved vs 3 laws, no screening
+  [16] evolved vs 3 laws + bonds, validators always
+  [17] evolved vs Dawid-Skene + observer gate
+  [18] evolved vs Dawid-Skene, no observer gate
+  [19] evolved vs DS, one number (counted)
+  [20] evolved vs DS, one number (stepped)
+                                       0     1     2     3     4     5     6     7     8     9    10    11    12    13    14    15    16    17    18    19    20
+none (no law)                       .173  .059  .012  .003  .000  .000  .000  .022  .052  .030  .009  .017  .046  .010  .006  .014  .006  .002  .018  .003  .011
+flow                                .203  .058  .012  .003  .000  .000  .000  .024  .055  .029  .008  .018  .049  .010  .006  .014  .007  .001  .019  .003  .011
+flow + entanglement                 .403  .057  .012  .004  .000  .000  .000  .033  .087  .031  .010  .023  .074  .016  .007  .016  .007  .002  .027  .003  .013
+flow + entanglement + provenance    .121  .056  .012  .004  .000  .000  .000  .021  .051  .028  .008  .014  .042  .010  .005  .015  .006  .002  .015  .003  .009
+
+### conduit thickness each hidden kind ended with (one world per attack, first test seed)
+  [cabal (co-evolved)    ] flow                               {'careful': 0.84, 'liar': 0.27, 'sloppy': 0.84, 'lazy': 0.71, 'faker': 0.42, 'adv': 0.96, 'stolen': 0.96, 'v:dil': 0.93, 'v:lazy': 0.91, 'ai': 0.95}
+  [cabal (co-evolved)    ] flow + entanglement                {'careful': 0.62, 'liar': 0.39, 'sloppy': 0.66, 'lazy': 0.63, 'faker': 0.45, 'adv': 0.99, 'stolen': 0.99, 'v:dil': 0.86, 'v:lazy': 0.76, 'ai': 0.84}
+  [cabal (co-evolved)    ] flow + entanglement + provenance   {'careful': 0.92, 'liar': 0.6, 'sloppy': 0.91, 'lazy': 0.88, 'faker': 0.09, 'adv': 0.09, 'stolen': 0.1, 'v:dil': 0.83, 'v:lazy': 0.75, 'ai': 0.83}
+  [ring                  ] flow                               {'careful': 0.93, 'liar': 0.39, 'lazy': 0.75, 'adv': 0.69, 'sloppy': 0.93, 'faker': 0.46, 'v:dil': 0.92, 'v:lazy': 0.87, 'ai': 0.96}
+  [ring                  ] flow + entanglement                {'careful': 0.93, 'liar': 0.38, 'lazy': 0.75, 'adv': 0.69, 'sloppy': 0.93, 'faker': 0.42, 'v:dil': 0.92, 'v:lazy': 0.88, 'ai': 0.96}
+  [ring                  ] flow + entanglement + provenance   {'careful': 0.93, 'liar': 0.62, 'lazy': 0.89, 'adv': 0.08, 'sloppy': 0.95, 'faker': 0.1, 'v:dil': 0.9, 'v:lazy': 0.8, 'ai': 0.95}
+  [farm + signed real pho] flow                               {'adv': 0.92, 'careful': 0.86, 'liar': 0.37, 'lazy': 0.69, 'sloppy': 0.9, 'faker': 0.33, 'v:dil': 0.93, 'v:lazy': 0.88, 'v:farm': 0.93, 'ai': 0.92}
+  [farm + signed real pho] flow + entanglement                {'adv': 0.92, 'careful': 0.86, 'liar': 0.36, 'lazy': 0.68, 'sloppy': 0.9, 'faker': 0.31, 'v:dil': 0.92, 'v:lazy': 0.9, 'v:farm': 0.93, 'ai': 0.91}
+  [farm + signed real pho] flow + entanglement + provenance   {'adv': 0.92, 'careful': 0.86, 'liar': 0.38, 'lazy': 0.73, 'sloppy': 0.92, 'faker': 0.09, 'v:dil': 0.92, 'v:lazy': 0.87, 'v:farm': 0.94, 'ai': 0.89}
+  [hall of fame: captcha ] flow                               {'careful': 0.88, 'liar': 0.31, 'lazy': 0.7, 'adv': 0.92, 'sloppy': 0.85, 'faker': 0.5, 'v:dil': 0.92, 'v:lazy': 0.87, 'ai': 0.85}
+  [hall of fame: captcha ] flow + entanglement                {'careful': 0.88, 'liar': 0.34, 'lazy': 0.69, 'adv': 0.95, 'sloppy': 0.79, 'faker': 0.53, 'v:dil': 0.91, 'v:lazy': 0.84, 'ai': 0.82}
+  [hall of fame: captcha ] flow + entanglement + provenance   {'careful': 0.86, 'liar': 0.29, 'lazy': 0.75, 'adv': 0.89, 'sloppy': 0.87, 'faker': 0.1, 'v:dil': 0.91, 'v:lazy': 0.82, 'ai': 0.87}
+
+251s
