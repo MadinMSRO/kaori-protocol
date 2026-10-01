@@ -17,7 +17,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 ENV_FILE=${ENV_FILE:-$HERE/antalya.env}
-STEPS="check apis build bucket secrets accounts sql db firebase signing generalist api smoke status"
+STEPS="check apis build bucket secrets accounts sql db firebase signing downloads generalist api smoke status"
 
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 say() { printf '\n== %s\n' "$*"; }
@@ -53,6 +53,7 @@ APP_REPO=MadinMSRO/liminal-mobile
 SECRET_KEYSTORE=liminal-android-keystore
 SECRET_KEYSTORE_PW=liminal-android-keystore-password
 SIGNER_SA=liminal-apk-signer@$PROJECT_ID.iam.gserviceaccount.com
+DL_BUCKET=$PROJECT_ID-liminal-downloads   # public: the signed APK, its install page, latest.json
 WIF_POOL=github
 WIF_PROVIDER=liminal-mobile
 REPO=$REGION-docker.pkg.dev/$PROJECT_ID/kaori
@@ -398,6 +399,22 @@ step_signing() {
   echo "    gcloud secrets versions access latest --secret=$SECRET_KEYSTORE_PW --project=$PROJECT_ID"
 }
 
+step_downloads() {
+  say "Public downloads: the signed APK and its install page (gs://$DL_BUCKET)"
+  gc storage buckets describe "gs://$DL_BUCKET" >/dev/null 2>&1 \
+    || gc storage buckets create "gs://$DL_BUCKET" --location="$REGION" --uniform-bucket-level-access
+  # Only what CI puts here is public: APKs, the install page and latest.json. No source, no data.
+  if ! gc storage buckets add-iam-policy-binding "gs://$DL_BUCKET" --member=allUsers \
+       --role=roles/storage.objectViewer >/dev/null 2>&1; then
+    die "the organisation blocks public buckets (iam.allowedPolicyMemberDomains or public access prevention).
+  Ask an organisation admin to allow public read on gs://$DL_BUCKET only, then re-run this step."
+  fi
+  gc iam service-accounts describe "$SIGNER_SA" >/dev/null 2>&1 || die "run the signing step first"
+  retry gc storage buckets add-iam-policy-binding "gs://$DL_BUCKET" --member="serviceAccount:$SIGNER_SA" \
+    --role=roles/storage.objectAdmin >/dev/null
+  echo "  builds of probe-antalya publish to https://storage.googleapis.com/$DL_BUCKET/channels/probe-antalya/index.html"
+}
+
 step_generalist() {
   say "AI reader: $GEN_SERVICE (private; only the API may call it)"
   retry gc run deploy "$GEN_SERVICE" --image="$GEN_IMAGE" --region="$REGION" \
@@ -510,6 +527,7 @@ step_status() {
   echo "  AI        $(service_url "$GEN_SERVICE" 2>/dev/null || echo 'not deployed')"
   echo "  ledger    Cloud SQL $SQL_CONN, database kaori"
   echo "  photos    gs://$BUCKET"
+  echo "  app       https://storage.googleapis.com/$DL_BUCKET/channels/probe-antalya/index.html (install page)"
   echo "  export    curl -H \"Authorization: Bearer \$(gcloud secrets versions access latest --secret=$SECRET_EXPORT --project=$PROJECT_ID)\" $api_url/v1/export"
   echo
   echo "  For the app (liminal-mobile mobile/.env, branch probe-antalya):"
