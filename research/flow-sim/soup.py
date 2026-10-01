@@ -20,6 +20,11 @@ Trust    a value's trust at an object is the conduit flow reaching it through in
 Variants (what is given): none (no law: every conduit stays at 0.1) | flow | flow + entanglement |
 flow + entanglement + provenance (the provenance agent's realness reading weights each item).
 
+Second round (G:): dissent is grounded in the evidence (each emitter against the readings of the other items at its
+key, never against a formed truth), rendering is graded (one step off half-supports; a thin conduit is uninformed,
+not anti-informative), and the trust snapshot is the thickness-weighted share of independent support behind the
+truth (bounded). The AI and blind validators were emitters from the start; their readings are now the anchor.
+
 Measured from outside only (the network never sees it): right / wrong / stuck; whether trust snapshots separate
 true truths from false ones; how trust grows (an attractor); the conduit thickness each hidden kind ends with.
 """
@@ -32,8 +37,9 @@ from agents import VALS, D, WORTH, HOSTILE, form
 C0, ETA, THIN, STAKES = 0.1, 0.05, S.SLOW, 10.0
 
 class Soup:
-    def __init__(self, law, entangle, provenance):
+    def __init__(self, law, entangle, provenance, grounded=False, graded=False):
         self.law, self.entangle, self.provenance = law, entangle, provenance
+        self.grounded, self.graded = grounded, graded
         self.c = defaultdict(lambda: C0)
         self.ne = defaultdict(float); self.se = defaultdict(float); self.mij = defaultdict(float); self.wij = defaultdict(float)
         self._ac = {}
@@ -71,12 +77,66 @@ class Soup:
         tv = defaultdict(float)
         for e, x, w in sig: tv[x] += self.c[e] * w / (mass[e] * k[e])
         return tv
+    def posterior(self, sig):
+        """Graded rendering: a signal supports its value, half-supports one step off; a thin conduit is uninformed."""
+        em = list({e for e, _, _ in sig})
+        mass = {e: sum(self.a(e, f) for f in em) for e in em}
+        k = Counter(e for e, _, _ in sig)
+        L = {v: 0.0 for v in VALS}
+        for e, x, w in sig:
+            r = self.c[e] * w
+            g = {v: 1.0 if D[(x, v)] == 0 else 0.5 if D[(x, v)] == 1 else 0.0 for v in VALS}
+            z = sum(g.values())
+            for v in VALS: L[v] += math.log((1 - r) + r * len(VALS) * g[v] / z) / (mass[e] * k[e])
+        m = max(L.values()); Z = sum(math.exp(x - m) for x in L.values())
+        return {v: math.exp(L[v] - m) / Z for v in VALS}, mass, k
+    def snapshot(self, sig, Sset, mass, k):
+        """Trust snapshot: the independent support behind the truth, weighted by conduit thickness, as a share of all
+        independent support present (bounded in [0, 1])."""
+        sup = tot = 0.0
+        for e, x, w in sig:
+            u = w / (mass[e] * k[e]); tot += u
+            if x in Sset: sup += self.c[e] * u
+        return sup / tot if tot > 0 else 0.0
+    def ground(self, cell):
+        """Grounded dissent: each emitter against the readings of OTHER items at this key (never its own item, never
+        a formed truth), weighted by the readers' thickness and the items' realness. Feeds entanglement."""
+        reps, items = cell
+        if len(items) < 2: return
+        reads = []                                   # (item index, reader, value, weight)
+        for n, (aid, said, passed, sky, rs) in enumerate(items):
+            w = self.realness(aid, passed) * (1.0 if sky else 0.05) if self.provenance else 1.0
+            for r, x in rs:
+                if x is not None: reads.append((n, r, x, self.c[r] * w))
+        sig = [(n, aid, said) for n, (aid, said, *_ ) in enumerate(items)] + [(n, r, x) for n, r, x, _ in reads]
+        dis = {}
+        for n, e, x in sig:
+            p = defaultdict(float); tot = 0.0
+            for m, r, y, w in reads:
+                if m == n or r == e: continue
+                p[y] += w; tot += w
+            if tot <= 0: continue
+            agree = sum(q * (1.0 if D[(x, y)] == 0 else 0.5 if D[(x, y)] == 1 else 0.0) for y, q in p.items()) / tot
+            dis[e] = max(dis.get(e, 0.0), 1.0 - agree)
+        if len(dis) < 2: return
+        # what the rendered reality explains: the key's own ambiguity (everyone's mean dissent here). Only dissent
+        # beyond it is the emitter's own, and only shared excess dissent is entanglement.
+        mean = sum(dis.values()) / len(dis)
+        res = {e: max(0.0, d - mean) for e, d in dis.items()}
+        for e, d in res.items(): self.ne[e] += 1; self.se[e] += d
+        ks = list(res)
+        for x in range(len(ks)):
+            for y in range(x + 1, len(ks)):
+                key = (ks[x], ks[y]) if ks[x] < ks[y] else (ks[y], ks[x])
+                self.mij[key] += 1; self.wij[key] += res[ks[x]] * res[ks[y]]
+        self._ac = {}
     def settle(self, sig, Sset, snap):
         err = {}
         for e, x, w in sig:
             o = 1.0 if x in Sset else 0.5 if min(D[(x, v)] for v in Sset) == 1 else 0.0
             if self.law: self.c[e] += ETA * snap * w * (o - self.c[e])
             err[e] = max(err.get(e, 0.0), 1.0 - o)
+        if self.grounded: return
         for e, d in err.items(): self.ne[e] += 1; self.se[e] += d
         ks = list(err)
         for x in range(len(ks)):
@@ -88,6 +148,7 @@ class Soup:
         reps, items = cell
         for aid, said, passed, sky, reads in items: self.pv[aid][0] += passed; self.pv[aid][1] += 1
         self._rho = None
+        if self.grounded and self.entangle: self.ground(cell)
     def fade(self):
         if self.law:
             for e in self.c: self.c[e] *= 1 - THIN
@@ -100,6 +161,11 @@ VARIANTS = {
     "flow": (True, False, False),
     "flow + entanglement": (True, True, False),
     "flow + entanglement + provenance": (True, True, True),
+    # second round: entanglement grounded in the evidence, graded rendering, bounded snapshot
+    "G: none (no law), graded + provenance": (False, False, True, True, True),
+    "G: flow, graded + provenance": (True, False, True, True, True),
+    "G: flow + grounded entanglement, graded": (True, True, False, True, True),
+    "G: flow + grounded entanglement, graded + provenance": (True, True, True, True, True),
 }
 
 def run(name, world, detail=False):
@@ -111,14 +177,17 @@ def run(name, world, detail=False):
     Tn = events[-1][0] + 1 if events else 1
     def resolve(cell, t, truth):
         sig = N.signals(cell)
-        tv = N.trust(sig)
-        tot = sum(tv.values())
-        if tot <= 0: return False
-        share = {v: tv.get(v, 0.0) / tot for v in VALS}
+        if N.graded:
+            share, mass, kk = N.posterior(sig)
+        else:
+            tv = N.trust(sig)
+            tot = sum(tv.values())
+            if tot <= 0: return False
+            share = {v: tv.get(v, 0.0) / tot for v in VALS}
         f = form(share, tau, True)
         if not f: return False
         grain, Sset = f
-        snap = 1 - math.exp(-sum(tv.get(v, 0.0) for v in Sset))
+        snap = N.snapshot(sig, Sset, mass, kk) if N.graded else 1 - math.exp(-sum(tv.get(v, 0.0) for v in Sset))
         ok = truth in Sset
         if ok: out["right"] += WORTH[grain]
         else: out["wrong"] += 1
