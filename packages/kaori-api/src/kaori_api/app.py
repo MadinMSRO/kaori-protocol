@@ -44,7 +44,7 @@ from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 from kaori_truth.signing import production_signing_required
 from pydantic import ValidationError
 
-from kaori_api import antalya
+from kaori_api import antalya, devices
 from kaori_api.auth import (
     AuthError,
     FirebaseCerts,
@@ -619,6 +619,7 @@ def create_app(
     ):
         if antalya.enabled():
             antalya.require_member(app.state.flow, agent_id)
+            devices.require_device(app.state.flow, agent_id)
         try:
             evidence_ref = app.state.evidence_store.upload(
                 file.file,
@@ -664,15 +665,18 @@ def create_app(
         flow_core: FlowCore = request.app.state.flow
         if antalya.enabled():
             antalya.require_member(flow_core, agent_id)
+            devices.require_device(flow_core, agent_id)
         context = reporter_context_from_flow(flow_core, agent_id)
         stamped = []
         provenance_blocks = []
+        proof_blocks = []
         for item in raw_observations:
             if not isinstance(item, dict):
                 raise HTTPException(status_code=400, detail="Invalid observation or EvidenceRef")
             # Capture provenance (EXIF, source, device) travels beside the observation, never inside it
             provenance_blocks.append(item.get("provenance"))
-            item = {key: value for key, value in item.items() if key != "provenance"}
+            proof_blocks.append(item.get("device_proof"))
+            item = {key: value for key, value in item.items() if key not in ("provenance", "device_proof")}
             stamped.append(stamp_observation(item, agent_id, context))
 
         try:
@@ -697,6 +701,15 @@ def create_app(
         except EvidenceStorageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+        # Antalya: each report signed at capture by the reporter's linked phone (devices.py)
+        proofs = [None] * len(observations)
+        if antalya.enabled():
+            proofs = [devices.check_proof(flow_core, agent_id, proof_blocks[i], truth_key=truth_key, observation=obs)
+                      for i, obs in enumerate(observations)]
+            unsigned = [p["reason"] for p in proofs if not p["verified"]]
+            if devices.required() and unsigned:
+                raise HTTPException(status_code=403, detail="Report not signed by this phone: " + unsigned[0])
+
         received_at = datetime.now(timezone.utc)
         try:
             for index, observation in enumerate(observations):
@@ -715,13 +728,16 @@ def create_app(
                         observation_hash=observation.hash(),
                         claim_type_id=claim_type_id,
                     )
-                    if provenance_blocks[index] is not None:
+                    # Antalya records every report's provenance, even an empty one: no EXIF and no
+                    # device signature is itself what validators should see
+                    if provenance_blocks[index] is not None or antalya.enabled():
                         antalya.record_provenance(
                             flow_core,
                             reporter_id=agent_id,
                             observation=observation,
                             truth_key=truth_key,
                             provenance=provenance_blocks[index],
+                            device_proof=proofs[index],
                         )
                     if antalya.enabled():
                         antalya.start_ai_read(request.app, observation, truth_key,

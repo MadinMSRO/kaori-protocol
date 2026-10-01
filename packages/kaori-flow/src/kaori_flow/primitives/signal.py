@@ -120,3 +120,8 @@ class SignalTypes:
     PROVENANCE_RECORDED = "PROVENANCE_RECORDED"
     ASSIGNMENT_ISSUED = "ASSIGNMENT_ISSUED"
     READING_SUBMITTED = "READING_SUBMITTED"
+
+    # A phone as its own agent, vouched for by its secure hardware (Android Key Attestation)
+    DEVICE_LINKED = "DEVICE_LINKED"
+    DEVICE_UNLINKED = "DEVICE_UNLINKED"
+    DEVICE_LINK_REFUSED = "DEVICE_LINK_REFUSED"

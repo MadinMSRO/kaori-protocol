@@ -38,6 +38,7 @@ from fastapi.responses import Response, StreamingResponse
 from kaori_flow import FlowCore
 from kaori_flow.primitives.signal import Signal, SignalTypes
 
+from kaori_api import devices
 from kaori_api.generalist_client import generalist_timeout_seconds
 
 INVITE_TTL = timedelta(days=7)
@@ -263,7 +264,7 @@ def provenance_checks(provenance: Dict[str, Any], reported_at: datetime, geo: Di
 
 
 def record_provenance(flow: FlowCore, *, reporter_id: str, observation: Any, truth_key: str,
-                      provenance: Optional[Dict[str, Any]]) -> Optional[Signal]:
+                      provenance: Optional[Dict[str, Any]], device_proof: Optional[Dict[str, Any]] = None) -> Optional[Signal]:
     if not observation.evidence_refs:
         return None
     provenance = provenance if isinstance(provenance, dict) else {}
@@ -278,7 +279,9 @@ def record_provenance(flow: FlowCore, *, reporter_id: str, observation: Any, tru
         "exif": {k: exif.get(k) for k in ("datetime_original", "offset_time", "tz_offset_min", "gps") if k in exif},
         "capture_source": provenance.get("capture_source"),
         "device": {k: device.get(k) for k in ("platform", "model", "app_version") if k in device},
-        "checks": provenance_checks(provenance, observation.reported_at, observation.geo),
+        "checks": {**provenance_checks(provenance, observation.reported_at, observation.geo),
+                   "device_signed": bool(device_proof and device_proof.get("verified"))},
+        "device_proof": device_proof or {"device_id": None, "verified": False, "reason": "unsigned"},
     })
 
 
@@ -286,8 +289,8 @@ def provenance_badge(flow: FlowCore, sha: str) -> Dict[str, Any]:
     for signal in flow.store.get_by_type(SignalTypes.PROVENANCE_RECORDED):
         if signal.payload.get("evidence_sha256") == sha:
             checks = signal.payload.get("checks") or {}
-            return {k: checks.get(k) for k in ("in_app_capture", "time_matches", "place_matches")}
-    return {"in_app_capture": None, "time_matches": None, "place_matches": None}
+            return {k: checks.get(k) for k in ("in_app_capture", "time_matches", "place_matches", "device_signed")}
+    return {"in_app_capture": None, "time_matches": None, "place_matches": None, "device_signed": None}
 
 
 # --------------------------------------------------------------------------------------------- assignments
@@ -481,6 +484,9 @@ def vote_for(reading: Dict[str, Any], eye: Dict[str, Any]) -> str:
 
 def submit_reading(flow: FlowCore, observation_store: Any, agent_id: str, assignment_id: str,
                    body: Dict[str, Any], vote_and_compile: Callable[[str, str, str], Any]) -> Dict[str, Any]:
+    from kaori_api.devices import require_device
+
+    require_device(flow, agent_id)
     signal = _own_assignment(flow, agent_id, assignment_id)
     if f"assignment:{assignment_id}" in _readings(flow):
         raise HTTPException(status_code=409, detail="Already answered")
@@ -577,6 +583,23 @@ def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[...
         with lock:
             return submit_reading(app.state.flow, app.state.observation_store, agent_id, assignment_id, body,
                                   lambda a, k, v, r=None: vote_and_compile(app, a, k, v, r))
+
+    @app.get("/v1/me")
+    def whoami(agent_id: str = Depends(require_agent)):
+        return devices.me(app.state.flow, agent_id)
+
+    @app.post("/v1/devices/challenge")
+    def device_challenge(agent_id: str = Depends(require_agent)):
+        require_member(app.state.flow, agent_id)
+        return {"challenge": devices.new_challenge(agent_id), "package": devices.policy().package,
+                "expires_in": devices.CHALLENGE_TTL_SECONDS}
+
+    @app.post("/v1/devices/link")
+    async def device_link(request: Request, agent_id: str = Depends(require_agent)):
+        body = await _json(request)
+        require_member(app.state.flow, agent_id)
+        with lock:
+            return devices.link(app.state.flow, agent_id, body)
 
     @app.get("/v1/export")
     def export(request: Request):

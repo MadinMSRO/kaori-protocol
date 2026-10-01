@@ -100,6 +100,7 @@ def test_routes_mount_only_on_the_antalya_service(monkeypatch):
     assert live - plain == {
         "/v1/invites", "/v1/invites/{code}", "/v1/invites/redeem", "/v1/assignments",
         "/v1/assignments/{assignment_id}/image", "/v1/assignments/{assignment_id}/reading", "/v1/export",
+        "/v1/me", "/v1/devices/challenge", "/v1/devices/link",
     }
 
 
@@ -164,7 +165,8 @@ def test_provenance_is_recorded_with_its_checks(env):
     [signal] = flow.store.get_by_type(SignalTypes.PROVENANCE_RECORDED)
     assert signal.payload["capture_source"] == "camera"
     assert signal.payload["device"] == {"platform": "android", "model": "Pixel 8", "app_version": "0.9.0"}
-    assert signal.payload["checks"] == {"in_app_capture": True, "time_matches": True, "place_matches": True}
+    assert signal.payload["checks"] == {"in_app_capture": True, "time_matches": True, "place_matches": True,
+                                        "device_signed": False}
 
 
 def test_provenance_checks_catch_wrong_time_and_place():
@@ -196,7 +198,7 @@ def test_assignments_are_blind_and_never_your_own(env):
     assert len(got) == 3
     for item in got:
         assert set(item) == {"assignment_id", "image_url", "provenance_badge", "claim_type_id", "options", "expires_at"}
-        assert set(item["provenance_badge"]) == {"in_app_capture", "time_matches", "place_matches"}
+        assert set(item["provenance_badge"]) == {"in_app_capture", "time_matches", "place_matches", "device_signed"}
         assert KEY not in json.dumps(item) and "user:" not in json.dumps(item)
     again = client.get("/v1/assignments?limit=5", headers=_h("val")).json()
     assert sorted(a["assignment_id"] for a in again) == sorted(a["assignment_id"] for a in got)

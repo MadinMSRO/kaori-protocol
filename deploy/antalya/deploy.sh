@@ -27,6 +27,8 @@ say() { printf '\n== %s\n' "$*"; }
 PROJECT_ID=${PROJECT_ID:-msro-kaori-sandbox}
 REGION=${REGION:-asia-southeast1}
 SQL_TIER=${SQL_TIER:-db-g1-small}
+# Reports and readings need a phone linked by hardware attestation (set REQUIRE_DEVICE=0 to only record it)
+REQUIRE_DEVICE=${REQUIRE_DEVICE:-1}
 
 API_SERVICE=kaori-api-antalya
 GEN_SERVICE=kaori-generalist-antalya
@@ -297,6 +299,18 @@ step_firebase() {
   echo "  app settings saved to deploy/antalya/firebase-config.json (public values, not secrets)"
 }
 
+# The Android app signing certificate's fingerprint (SHA1 or SHA256, colon-separated), read from Secret Manager.
+app_cert_fingerprint() {
+  command -v keytool >/dev/null || return 0
+  secret_has_version "$SECRET_KEYSTORE" || return 0
+  local work; work=$(mktemp -d); chmod 700 "$work"
+  gc secrets versions access latest --secret="$SECRET_KEYSTORE" --out-file="$work/k.p12"
+  keytool -list -v -keystore "$work/k.p12" -alias liminal \
+      -storepass "$(gc secrets versions access latest --secret="$SECRET_KEYSTORE_PW")" 2>/dev/null \
+    | sed -nE "s/^[[:space:]]*$1:[[:space:]]*([0-9A-F:]+).*/\\1/p" | head -1
+  rm -rf "$work"
+}
+
 step_signing() {
   say "Android signing key (Secret Manager only) and GitHub's access to it"
   command -v keytool >/dev/null || die "keytool not found (Cloud Shell has it)"
@@ -325,13 +339,9 @@ step_signing() {
   fi
 
   # 2. Its fingerprints (public).
-  gc secrets versions access latest --secret="$SECRET_KEYSTORE" --out-file="$work/k.p12"
-  local list sha1 sha256
-  list=$(keytool -list -v -keystore "$work/k.p12" -alias liminal \
-    -storepass "$(gc secrets versions access latest --secret="$SECRET_KEYSTORE_PW")")
-  rm -f "$work/k.p12"
-  sha1=$(printf '%s\n' "$list" | sed -nE 's/^[[:space:]]*SHA1:[[:space:]]*([0-9A-F:]+).*/\1/p' | head -1)
-  sha256=$(printf '%s\n' "$list" | sed -nE 's/^[[:space:]]*SHA256:[[:space:]]*([0-9A-F:]+).*/\1/p' | head -1)
+  local sha1 sha256
+  sha1=$(app_cert_fingerprint SHA1)
+  sha256=$(app_cert_fingerprint SHA256)
   [ -n "$sha1" ] && [ -n "$sha256" ] || die "could not read the key's fingerprints"
 
   # 3. GitHub Actions -> GCP, without any stored GitHub secret. Only builds of $APP_REPO on main or
@@ -432,6 +442,9 @@ step_api() {
   say "Kaori API: $API_SERVICE"
   local gen_url; gen_url=$(service_url "$GEN_SERVICE")
   [ -n "$gen_url" ] || die "deploy the generalist first"
+  # Linked phones must run MSRO's app: its signing certificate, as hardware attestation reports it
+  local app_cert; app_cert=$(app_cert_fingerprint SHA256 | tr -d ':' | tr 'A-F' 'a-f')
+  [ -n "$app_cert" ] || die "run the signing step first (phones are checked against the app's signing key)"
   # One instance: compile locks and the AI's background reads live in the process, so it must not
   # be split across instances, and its CPU must stay on after a response (--no-cpu-throttling).
   # Antalya's ~100 people fit easily.
@@ -439,7 +452,7 @@ step_api() {
     --service-account="$API_SA" --allow-unauthenticated --set-cloudsql-instances="$SQL_CONN" \
     --cpu=1 --memory=1Gi --min-instances=1 --max-instances=1 --concurrency=40 --timeout=120 \
     --no-cpu-throttling --cpu-boost \
-    --set-env-vars="KAORI_ANTALYA=1,KAORI_ENVIRONMENT=production,KAORI_SIGNING_KEY_ID=$SIGNING_KEY_ID,KAORI_OBSERVATIONS_BUCKET=$BUCKET,KAORI_GENERALIST_URL=$gen_url,FIREBASE_PROJECT_ID=$PROJECT_ID" \
+    --set-env-vars="KAORI_ANTALYA=1,KAORI_ENVIRONMENT=production,KAORI_SIGNING_KEY_ID=$SIGNING_KEY_ID,KAORI_OBSERVATIONS_BUCKET=$BUCKET,KAORI_GENERALIST_URL=$gen_url,FIREBASE_PROJECT_ID=$PROJECT_ID,KAORI_ANDROID_PACKAGE=$ANDROID_PACKAGE,KAORI_ANDROID_CERT_SHA256=$app_cert,KAORI_REQUIRE_DEVICE=$REQUIRE_DEVICE" \
     --set-secrets="KAORI_SIGNING_KEY=$SECRET_SIGNING:latest,KAORI_VALIDATOR_SIGNING_KEY=$SECRET_VALIDATOR:latest,KAORI_EXPORT_TOKEN=$SECRET_EXPORT:latest,DATABASE_URL=$SECRET_DB:latest"
   local url; url=$(service_url "$API_SERVICE")
   # Some organisations forbid public (allUsers) access; Cloud Run can skip its own check instead.

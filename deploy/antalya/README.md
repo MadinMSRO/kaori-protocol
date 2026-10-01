@@ -47,8 +47,9 @@ Every step is safe to re-run. To run one step: `./deploy/antalya/deploy.sh <step
 | `db` | A one-off Cloud Run job that applies the ledger schema and creates the API's login. That login can only add to the ledger: no deletes, no schema changes |
 | `firebase` | Adds Firebase to the project, turns on email and password sign-in, and registers the app |
 | `signing` | Creates the Android signing key in Secret Manager (once; it never changes), lets GitHub Actions in `liminal-mobile` (main and `probe-*` only) read it through Workload Identity Federation, and registers its fingerprints with Firebase. The key never leaves GCP except into a build |
+| `downloads` | A public bucket that only CI writes to: the signed APK, its install page and `latest.json` for in-app updates |
 | `generalist` | Deploys the AI: 2 CPU, 4 GiB, one instance always warm. Lets the API call it |
-| `api` | Deploys the API: one instance, always on, connected to Cloud SQL |
+| `api` | Deploys the API: one instance, always on, connected to Cloud SQL. Phones must link by hardware attestation and run MSRO's signed app (`REQUIRE_DEVICE=0` in `antalya.env` only records it) |
 | `smoke` | Checks the live services (below) |
 | `status` | Prints the URLs and the app's settings |
 

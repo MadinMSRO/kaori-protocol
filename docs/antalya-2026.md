@@ -45,6 +45,9 @@ python -m kaori_api.antalya seed user:<firebase-uid> "<callsign>"
 | `GET /v1/assignments/{id}/image` | the assigned member | The photo, re-encoded as JPEG **without EXIF** (EXIF would reveal place and time) |
 | `POST /v1/assignments/{id}/reading` | the assigned member | `{cover, raining}` → `{ok}`. One reading per assignment. Records a vote on the key (plan §3.4) |
 | `GET /v1/export` | `Bearer $KAORI_EXPORT_TOKEN` | NDJSON: every Signal, then every TruthState |
+| `GET /v1/me` | signed in | `{agent_id, member, device, device_required}` |
+| `POST /v1/devices/challenge` | member | `{challenge, package, expires_in}`: single use, ten minutes, bound to the caller |
+| `POST /v1/devices/link` | member | `{challenge, chain: [base64 DER, leaf first]}` → `{device_id: "sensor:android-…", security_level, verified_boot_state, …}` or 403 with `reasons` |
 
 `/v1/compile` observations may carry a `provenance` block beside the observation:
 `{exif:{datetime_original, offset_time?, tz_offset_min?, gps:{lat,lon}}, capture_source:"camera", device:{platform, model, app_version}}`.
@@ -59,6 +62,28 @@ It is recorded as `PROVENANCE_RECORDED`, with the checks behind the validator's 
 - **Members-only gate** on evidence and compile, so sign-up really is referral-only on this service.
 - **Readings compile only once the key has its reporters.** Before that the vote is recorded and used when the
   third report arrives.
+
+## Linked phones (hardware attestation)
+
+A member links their phone once, after signing up. The phone's Android Keystore makes a signing key for a
+Kaori challenge, and Kaori checks the key's attestation chain (`attestation.py`). The checks:
+
+- the chain ends at one of Google's hardware attestation roots and nothing in it is revoked;
+- the key is in secure hardware (TEE or StrongBox);
+- the phone booted verified software with a locked bootloader;
+- the key was made by `mv.msro.liminal`, signed with MSRO's certificate (`KAORI_ANDROID_CERT_SHA256`).
+
+The phone becomes an agent, `sensor:android-…` (`DEVICE_LINKED`). Each person has one linked phone: a new one
+unlinks the old (`DEVICE_UNLINKED`). Refusals are recorded with their reasons (`DEVICE_LINK_REFUSED`). Each report
+carries a `device_proof`: the phone signs, at capture time, a JSON text of the truth key, claim type, capture time,
+place, readings and photo hash. Kaori checks the signature against the linked key and that the text matches the
+report. The result is recorded in `PROVENANCE_RECORDED` and shown to validators as a `device_signed` tick. With
+`KAORI_REQUIRE_DEVICE=1`, the deploy default, evidence, reports and readings need a linked phone, and a report
+whose signature does not check out is refused.
+
+Certificates are read with Kaori's own DER reader, not a strict X.509 parser: some phones emit attestation
+certificates with harmless encoding quirks. It is tested on Google's real sample chains
+(`tests/data/attestation`).
 
 ## The AI reads every photo blind
 
