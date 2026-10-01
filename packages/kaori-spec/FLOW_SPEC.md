@@ -1,6 +1,6 @@
-# Kaori Flow — Engineering Specification (v4.0)
+# Kaori Flow — Engineering Specification (v5.0 draft)
 
-> **Status:** v4.0 (The 7 Rules of Trust)  
+> **Status:** v5.0 draft (The 7 Rules of Trust, revised; v4.0 in git history)  
 > **Maintainer:** MSRO  
 > **Scope:** The "Physics of Trust" — event-sourced, emergent, deterministic trust dynamics.
 
@@ -24,11 +24,17 @@ Kaori Flow operates **on top of** Kaori Truth. Observations submitted through Fl
 
 These rules are **invariants**. They cannot be changed without a major version bump.
 
+> [!NOTE]
+> **v5.0 draft (for review).** Rules 2 and 3 change meaning from v4.0: standing no longer grows from aligning with
+> final TruthStates. The research that led here is in `research/flow-sim/` (see "What changed from v4.0" at the end
+> of this section). The v4.0 text remains in the git history of this file.
+
 ---
 
 ### Rule 1: Trust is Event-Sourced
 
-Trust MUST be computed from immutable Signals, not stored as mutable state.
+Trust MUST be computed from immutable Signals, not stored as mutable state. Membership is a Signal too: every agent
+enters through a signed referral, and its lineage is part of the log.
 
 ```python
 Signal = (agent_id, object_id, signal_type, payload, time, policy_version)
@@ -38,19 +44,20 @@ Signal = (agent_id, object_id, signal_type, payload, time, policy_version)
 - ✅ Replayable: Recompute trust at any historical point
 - ✅ Auditable: See exactly how trust evolved
 - ✅ Adaptive: New algorithms can reinterpret same history
-- ✅ No hidden state: Complete transparency
+- ✅ No hidden state: Complete transparency, including who brought whom in
 
 ---
 
 ### Rule 2: Everything is an Agent
 
-Every component that emits or receives signals is an Agent.
+Every component that emits or receives Signals is an Agent, and every Agent produces Signals.
 
 ```
-user:amira           → human agent
+user:amira           → human agent (observer, and validator once eligible)
+camera:amira_phone   → the device that captured the evidence
 sensor:jetson_042    → IoT agent
-ai:bouncer_v1        → AI validator agent
 ai:generalist_v1     → AI validator agent
+provenance:v1        → provenance agent (how real a piece of evidence is)
 probe:flood_watch    → probe agent
 claimtype:flood.v1   → claimtype agent
 policy:flow_v1.0.0   → policy agent
@@ -58,19 +65,19 @@ policy:flow_v1.0.0   → policy agent
 
 All agents have **standing** (a quality metric, 0–1000).
 
-**Effective trust** is computed at compilation time based on:
-- The agent's standing
-- Their role in the specific compilation (observer, validator, etc.)
-- The context (claimtype, probe, network position)
+An Agent's standing grows only from Signals it cannot author: what independent, blindly assigned agents render from
+its own evidence. It never grows from agreeing with a TruthState it helped form.
 
-No static "trust-having" vs "non-trust-having" distinction. Trust relevance is determined by role in context.
-
-**Validators:** All validators (human, AI, sensor) are agents with standing. During the Validation Window, they process observations and emit vote signals (RATIFY/REJECT). Kaori never executes validators — it only records their signed outputs. Standing increases when signals align with final TruthStates, and decreases when incorrect.
+**Validators:** All validators (human, AI, sensor) are agents with standing. They render each piece of evidence they
+are assigned, blind to the claim, the TruthKey and the owner, and emit those renderings as signed Signals. Kaori
+never executes validators; it only records their signed outputs. A validator's standing moves with how its
+renderings fit those of other independent agents on the same evidence.
 
 **Implications:**
 - ✅ Composable: No special-case logic for different types
 - ✅ Scalable: Network grows homogeneously
 - ✅ Emergent governance: Authority emerges from standing, not type
+- ✅ No capture by agreement: a group cannot raise its own standing by forming truths together
 
 ---
 
@@ -83,12 +90,15 @@ class Agent:
     standing: float  # The only persistent trust variable
 ```
 
-**Standing:** Stored, global, earned from signals.  
+**Standing:** Stored, global, earned from signals.
 **Trust:** Computed, local, derived from standing at query time.
+
+Standing is a prior, never a licence: no Agent's standing can make a rendering outweigh what its own evidence shows.
 
 **Initial Standing (new agents):**
 
-New agents start with a FlowPolicy-defined initial standing (e.g., 100). This follows the *innocent until proven guilty* principle — we don't assume zero trust until proven otherwise.
+New agents start with a FlowPolicy-defined initial standing (e.g., 100). This follows the *innocent until proven
+guilty* principle — we don't assume zero trust until proven otherwise.
 
 ```yaml
 # In FlowPolicy
@@ -96,13 +106,12 @@ agent_defaults:
   initial_standing: 100  # New agents start here
 ```
 
-Emergence will naturally adjust this to their actual performance-based standing over time.
-
 **Implications:**
 - ✅ Minimal: One variable to track
 - ✅ Robust: Hard to corrupt a single metric
 - ✅ Comparable: All agents on same scale
 - ✅ Fair start: New agents can participate meaningfully
+- ✅ Not spendable: standing earned in the past cannot carry a rendering its present evidence contradicts
 
 ---
 
@@ -113,28 +122,35 @@ Emergence will naturally adjust this to their actual performance-based standing 
 agent.standing = 750  # True globally
 ```
 
-**Trust** depends on context:
+**Trust** is computed per TruthKey from the local topology:
 ```python
 effective_trust = compute_trust(
     base_standing,
-    context,        # claimtype, probe, mission
-    signal_history, # for network/edge computation  
-    policy          # defines which modifiers apply
+    evidence,       # realness of this evidence, and its fit with the other renderings of it
+    topology,       # bonds: presence, shared error, lineage, declared relationship
+    policy          # defines how each of these weighs
 )
 ```
 
-**The specific modifiers are defined in FlowPolicy YAML**, not hardcoded in the spec.
+Evidence from independent renderings adds; renderings bound by presence, shared error, lineage or declared
+relationship count as one. Checks flow by lineage: a branch receives what its stalk carries, never in proportion to
+how many identities hang from it. A referral's declared relationship and trust shape topology (closeness is expected
+dependence), never standing.
+
+**The specific weightings are defined in FlowPolicy YAML**, not hardcoded in the spec.
 
 **Implications:**
 - ✅ Prevents gaming across domains
 - ✅ Enables specialization
 - ✅ Resilient to reputation laundering
+- ✅ Fakes buy nothing: the cost of an attack is counted in real members, not identities
 
 ---
 
 ### Rule 5: Trust Updates are Deterministic and Nonlinear
 
-Standing evolution MUST be deterministic but nonlinear.
+Standing evolution MUST be deterministic, bounded and nonlinear, and MUST learn only from Signals the updated Agent
+cannot author. Unused standing decays.
 
 **Why nonlinear:**
 - Linear updates are easy to exploit
@@ -145,39 +161,68 @@ Standing evolution MUST be deterministic but nonlinear.
 - Same signals + same policy → same output
 - No randomness, no hidden state
 
+**Why unauthorable:**
+- An Agent (or a group) that could author the Signals its standing learns from could raise it at will
+
 **The specific formulas are defined in FlowPolicy YAML.**
 
 ---
 
 ### Rule 6: Trust Has Phase Transitions
 
-Standing MUST create threshold effects that generate discrete behavioral regimes.
+Standing MUST create threshold effects that generate discrete behavioral regimes, and truths form by crossing a
+threshold.
 
-**Three phases (thresholds defined in FlowPolicy):**
+**Agents (thresholds defined in FlowPolicy):**
 - **Dormant:** Low influence
-- **Active:** Proportional influence  
+- **Active:** Proportional influence
+- **Eligible to validate:** earned only through in-person observation
 - **Dominant:** High influence but capped
+
+**Truths:** A TruthKey condenses when its evidence passes the stakes threshold the ClaimType derives (λ/(1+λ) for
+stakes λ); otherwise it remains open, and a key still split when its window closes is a signed `INCONCLUSIVE`
+truth. Thresholds are defined in FlowPolicy and the ClaimType; ClaimTypes may only tighten them.
 
 **Implications:**
 - ✅ Network self-organizes into tiers
 - ✅ Authority emerges naturally
 - ✅ Small changes near thresholds → big behavioral shifts
+- ✅ Thin evidence stays open rather than forming a weak truth
 
 ---
 
 ### Rule 7: Adaptiveness Lives in Policy Interpretation
 
-Flow MUST adapt by evolving policy versions, not by rewriting history.
+Flow MUST adapt by evolving policy and ClaimType versions, not by rewriting history.
 
 ```
 Immutable: Signal log (events never change)
-Mutable: Policy version (interpretation evolves)
+Mutable: Policy and ClaimType versions (interpretation evolves)
 ```
 
-**FlowPolicy is itself an Agent:**
-- `policy:flow_v1.0.0` has standing
-- Good truth outcomes → policy standing increases
-- Bad policies are naturally deprecated
+**Policies and ClaimTypes are Agents:**
+- `policy:flow_v1.0.0` and `claimtype:sky_cover.v1` have standing
+- Their standing follows the network's health Signals (trusted truths formed, keys stuck, keys contested), never
+  comparison with an external answer
+- Bad versions are naturally deprecated
+- Any history may be recompiled under a new version into new TruthStates; nothing is deleted
+
+---
+
+### What changed from v4.0
+
+| Rule | v4.0 | v5.0 draft | Evidence (`research/flow-sim/`) |
+|---|---|---|---|
+| 1 | Signals only | Membership (referral lineage) is a Signal too | `scale_referral.py`: validators drawn by lineage cost an attacker about one corrupted real member per user; drawn by identity, 4 to 26 members win a quiet hex |
+| 2 | Validators' standing rises when their signals align with final TruthStates | Standing grows only from what independent, blind agents render from your own evidence | `tip2.py`: growing standing from formed truths let a coordinated group capture 78% of validator readings; growing it from own evidence held attackers to 24% at half the population, with no total false attractor |
+| 3 | One scalar | One scalar, and it is a prior, never a licence | `battle2.py`: one number per agent matched three; `soup_decay.py`: damage grew over time while global memory outweighed local evidence |
+| 4 | Context modifiers | Fit with the other renderings of the same evidence; groups count once; checks flow by lineage | `soup.py`, `tip.py`, `scale_referral.py` |
+| 5 | Deterministic, nonlinear | Also: learn only from unauthorable Signals | `tip2.py` |
+| 6 | Dormant / active / dominant | Adds validator eligibility earned by observation, and truth formation at the stakes threshold | `tip2.py`, `trust.py` |
+| 7 | Policy is an agent | Policies and ClaimTypes are agents judged by health Signals; history can be recompiled | Design decision |
+
+All evidence comes from simulated worlds whose provenance and accuracy rates are assumptions; the IAC sky test is
+where they get measured.
 
 ---
 
@@ -402,4 +447,4 @@ class FlowCore:
 
 ---
 
-*End of Kaori Flow Spec (v4.0)*
+*End of Kaori Flow Spec (v5.0 draft)*
