@@ -38,8 +38,13 @@ C0, ETA, THIN, STAKES = 0.1, 0.05, S.SLOW, 10.0
 
 class Soup:
     def __init__(self, law, entangle, provenance, grounded=False, graded=False, local=False, thin=THIN, peers=0,
-                 local_prov=False):
+                 local_prov=False, own_evidence=False, together=False):
         self.law, self.entangle, self.provenance, self.local_prov = law, entangle, provenance, local_prov
+        # own_evidence: a conduit grows only from what blind readers see in the emitter's OWN evidence (never from a
+        #   formed truth, which a group could author). together: emitters that keep turning up together beyond
+        #   chance are one contact with reality (presence bonds).
+        self.own_evidence, self.together = own_evidence, together
+        self.n = defaultdict(float); self.nij = defaultdict(float); self.N = 0.0
         self.grounded, self.graded, self.local, self.thin, self.peers = grounded, graded, local, thin, peers
         self.c = defaultdict(lambda: C0)
         self.ne = defaultdict(float); self.se = defaultdict(float); self.mij = defaultdict(float); self.wij = defaultdict(float)
@@ -59,6 +64,15 @@ class Soup:
     # ---- entanglement: shared dissent beyond chance
     def a(self, i, j):
         if i == j: return 1.0
+        if self.together:
+            key = (i, j) if i < j else (j, i)
+            if key in self._ac: return self._ac[key]
+            nij = self.nij.get(key, 0.0); x = 0.0
+            if nij >= 1:
+                pmi = math.log((nij + 0.5) * (self.N + 1) / ((self.n[i] + 1) * (self.n[j] + 1)))
+                x = max(0.0, pmi) * nij / (nij + 3)
+            self._ac[key] = r = 1 - math.exp(-x)
+            return r
         if not self.entangle: return 0.0
         key = (i, j) if i < j else (j, i)
         if key in self._ac: return self._ac[key]
@@ -157,11 +171,24 @@ class Soup:
                 key = (ks[x], ks[y]) if ks[x] < ks[y] else (ks[y], ks[x])
                 self.mij[key] += 1; self.wij[key] += res[ks[x]] * res[ks[y]]
         self._ac = {}
+    def learn_own(self, cell):
+        """Condition 1: each emitter's conduit moves toward how well its rendering fits the OTHER renderings of its
+        own piece of evidence (blind readers of its photo; for a reader, the other readers), weighted by realness."""
+        reps, items = cell
+        for aid, said, passed, sky, reads in items:
+            w = self.realness(aid, passed) * (1.0 if sky else 0.05) if self.provenance else 1.0
+            rend = [(aid, said)] + [(r, x) for r, x in reads if x is not None]
+            for j, (e, x) in enumerate(rend):
+                num = den = 0.0
+                for k, (f, y) in enumerate(rend):
+                    if k == j or f == e: continue
+                    num += self.c[f] * (1.0 if D[(x, y)] == 0 else 0.5 if D[(x, y)] == 1 else 0.0); den += self.c[f]
+                if den > 0: self.c[e] += ETA * w * (num / den - self.c[e])
     def settle(self, sig, Sset, snap):
         err = {}
         for e, x, w, *_ in sig:
             o = 1.0 if x in Sset else 0.5 if min(D[(x, v)] for v in Sset) == 1 else 0.0
-            if self.law: self.c[e] += ETA * snap * w * (o - self.c[e])
+            if self.law and not self.own_evidence: self.c[e] += ETA * snap * w * (o - self.c[e])
             err[e] = max(err.get(e, 0.0), 1.0 - o)
         if self.grounded: return
         for e, d in err.items(): self.ne[e] += 1; self.se[e] += d
@@ -175,8 +202,20 @@ class Soup:
         reps, items = cell
         for aid, said, passed, sky, reads in items: self.pv[aid][0] += passed; self.pv[aid][1] += 1
         self._rho = None
+        if self.together:
+            ids = [r[0] for r in reps]; self.N += 1
+            for i in ids: self.n[i] += 1
+            for x in range(len(ids)):
+                for y in range(x + 1, len(ids)):
+                    self.nij[(ids[x], ids[y]) if ids[x] < ids[y] else (ids[y], ids[x])] += 1
+            self._ac = {}
+        if self.own_evidence and self.law: self.learn_own(cell)
         if self.grounded and self.entangle: self.ground(cell)
     def fade(self):
+        if self.together:
+            for d in (self.n, self.nij):
+                for k in d: d[k] *= 1 - S.SLOW
+            self.N *= 1 - S.SLOW
         if self.law:
             for e in self.c: self.c[e] *= 1 - self.thin
         for d in (self.ne, self.se, self.mij, self.wij):
@@ -205,6 +244,9 @@ VARIANTS = {
     "L + local provenance": (True, False, True, True, True, True, THIN, 0, True),
     "L + local provenance + peer check": (True, False, True, True, True, True, THIN, 2, True),
     "L + local provenance + in-app capture": (True, False, True, True, True, True, THIN, 0, True),
+    # tipping-point designs (no total false attractor)
+    "T1: grow only from own evidence": (True, False, True, True, True, False, THIN, 0, False, True),
+    "T2: own evidence + together counts once": (True, False, True, True, True, False, THIN, 0, False, True, True),
 }
 FAKE_PASS = {"L + in-app capture": 0.0, "L + peer check + in-app capture": 0.0, "L + local provenance + in-app capture": 0.0}   # otherwise the world's 15%
 
@@ -229,8 +271,16 @@ def run(name, world, detail=False):
         grain, Sset = f
         snap = N.snapshot(sig, Sset, mass, kk) if N.graded else 1 - math.exp(-sum(tv.get(v, 0.0) for v in Sset))
         ok = truth in Sset
+        nh = sum(1 for r in cell[0] if r[1] in ("adv", "stolen"))
+        hostile = nh > 0
+        minority = 0 < nh * 2 < len(cell[0])            # attackers present but fewer than half the observers
+        out["keys_att" if hostile else "keys_clean"] += 1
+        if minority: out["keys_min"] += 1
         if ok: out["right"] += WORTH[grain]
-        else: out["wrong"] += 1
+        else:
+            out["wrong"] += 1
+            out["wrong_att" if hostile else "wrong_clean"] += 1
+            if minority: out["wrong_min"] += 1
         snaps.append((min(3, 4 * t // Tn), snap, ok))
         N.settle(sig, Sset, snap)
         return True
@@ -262,6 +312,8 @@ def run(name, world, detail=False):
            "snap_right": sum(rs) / max(1, len(rs)), "snap_wrong": sum(ws) / max(1, len(ws))}
     res["careful_c"] = sum(N.c[a] for a, k in kinds.items() if k == "careful") / max(1, sum(1 for k in kinds.values() if k == "careful"))
     res["attacker_c"] = sum(N.c[a] for a, k in kinds.items() if k in ("adv", "stolen")) / max(1, sum(1 for k in kinds.values() if k in ("adv", "stolen")))
+    res["wrong_att"] = out["wrong_att"] / max(1, out["keys_att"]); res["wrong_clean"] = out["wrong_clean"] / max(1, out["keys_clean"])
+    res["wrong_min"] = out["wrong_min"] / max(1, out["keys_min"]); res["keys_min"] = out["keys_min"]
     res["wrong_q"] = [sum(1 for q, _, ok in snaps if q == i and not ok) / max(1, out["eq%d" % i]) for i in range(4)]
     if detail:
         tiers = defaultdict(list)
