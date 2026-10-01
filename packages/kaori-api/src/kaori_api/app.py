@@ -431,7 +431,7 @@ def enrich_truth_artifact(stored: Dict[str, Any], truth_store: Any) -> Dict[str,
     return attach_claim_agents(dict(stored), snapshot, state.claim_type, state)
 
 
-def record_vote(app: FastAPI, agent_id: str, truth_key: str, vote: str, confidence: Optional[float] = None) -> List[Observation]:
+def record_vote(app: FastAPI, agent_id: str, truth_key: str, vote: str, confidence: Optional[float] = None, reading: Optional[dict] = None) -> List[Observation]:
     """Sign and record one VALIDATION_VOTE for a TruthKey. Returns its observations."""
     observations = app.state.observation_store.get_for_truthkey(truth_key)
     if not observations:
@@ -462,6 +462,7 @@ def record_vote(app: FastAPI, agent_id: str, truth_key: str, vote: str, confiden
         confidence=confidence,
         time=now,
         signature=signed.signature,
+        reading=reading,
     )
     return observations
 
@@ -504,9 +505,9 @@ def vote_and_compile(app: FastAPI, agent_id: str, truth_key: str, vote: str, con
     return compile_recorded(app, agent_id, truth_key, observations)
 
 
-def reading_vote(app: FastAPI, agent_id: str, truth_key: str, vote: str) -> None:
+def reading_vote(app: FastAPI, agent_id: str, truth_key: str, vote: str, reading: Optional[dict] = None) -> None:
     """Antalya adapter: a blind reading becomes a vote; compile only once the key has its reporters."""
-    observations = record_vote(app, agent_id, truth_key, vote)
+    observations = record_vote(app, agent_id, truth_key, vote, reading=reading)
     try:
         claim_type = app.state.orchestrator.get_claim_type(observations[0].claim_type)
         required = claim_type.minimum_observations()
@@ -709,6 +710,9 @@ def create_app(
                             truth_key=truth_key,
                             provenance=provenance_blocks[index],
                         )
+                    if antalya.enabled():
+                        antalya.start_ai_read(request.app, observation, truth_key,
+                                              lambda a, k, v, r=None: reading_vote(request.app, a, k, v, r))
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -741,7 +745,8 @@ def create_app(
                 status_code=503,
                 detail="generalist unavailable",
             )
-        if client is not None:
+        # Antalya: the AI reads each photo blind (antalya.ai_read), so no key-level AI call here
+        if client is not None and not antalya.enabled():
             timeout = generalist_timeout_seconds(claim_type)
             lock = request.app.state.compile_lock.get(truth_key)
             loop = asyncio.get_running_loop()

@@ -858,3 +858,40 @@ def test_zero_shot_below_the_threshold_rejects():
 def test_prompts_without_distractors_are_refused():
     with pytest.raises(ValueError):
         ClipGeneralistValidator._labels({"ai_validation_routing": {"generalist": {"prompts": ["a photo of the sky"]}}})
+
+
+class _LabelModel:
+    """Stand-in CLIP: puts most belief on the first prompt that mentions `favourite`."""
+
+    def __init__(self, favourite: str, relevance: float = 0.96):
+        self.favourite, self.relevance = favourite, relevance
+
+    def label_probs(self, images, *, labels, engine):
+        hits = [i for i, label in enumerate(labels) if self.favourite in label]
+        row = [0.02] * len(labels)
+        if hits:
+            row[hits[0]] = 1.0 - 0.02 * (len(labels) - 1)
+        return [row]
+
+    def score_labels(self, images, *, prompts, distractors, engine):
+        return [self.relevance]
+
+
+def _jpeg() -> bytes:
+    from PIL import Image as PILImage
+
+    out = io.BytesIO()
+    PILImage.new("RGB", (32, 24), (120, 130, 140)).save(out, format="JPEG")
+    return out.getvalue()
+
+
+def test_blind_read_returns_a_value_per_field_from_the_claim_type_prompts():
+    from pathlib import Path
+
+    root = str(Path(__file__).resolve().parents[2] / "kaori-spec" / "schemas")
+    validator = ClipGeneralistValidator(schema_root=root, model=_LabelModel("overcast grey"))
+    result = validator.read("earth.sky_cover.v1", _jpeg())
+    assert result["values"]["cover"] == "overcast"
+    assert set(result["probs"]["cover"]) == {"clear", "few", "scattered", "broken", "overcast"}
+    assert result["values"]["raining"] in (True, False)
+    assert result["relevance"] == 0.96

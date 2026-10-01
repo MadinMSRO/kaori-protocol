@@ -21,6 +21,7 @@ CLAIM = "earth.sky_cover.v1"
 KEY = "earth:sky_cover:h3:883f6e36d3fffff:surface:2026-10-05T09:00Z"
 KEY2 = "earth:sky_cover:h3:883f6e36d3fffff:surface:2026-10-05T10:00Z"
 ANTALYA = {"lat": 36.8969, "lon": 30.7133}
+AI_SEES = {"values": {"cover": "overcast", "raining": False}, "probs": {}, "relevance": 0.97}
 NEW_SIGNALS = {
     SignalTypes.INVITE_ISSUED, SignalTypes.REFERRAL_REDEEMED, SignalTypes.PROVENANCE_RECORDED,
     SignalTypes.ASSIGNMENT_ISSUED, SignalTypes.READING_SUBMITTED,
@@ -43,7 +44,10 @@ def env(monkeypatch):
     monkeypatch.setenv("KAORI_EXPORT_TOKEN", "export-secret")
     flow = FlowCore(store=InMemorySignalStore())
     store = InMemoryEvidenceStore(bucket_name="kaori-observations")
-    client = TestClient(create_app(flow=flow, verify_token=_verify, evidence_store=store, generalist_client=None))
+    app = create_app(flow=flow, verify_token=_verify, evidence_store=store, generalist_client=None)
+    app.state.ai_reader = lambda claim_type_id, image: dict(AI_SEES)   # stands in for CLIP's blind reading
+    app.state.ai_sync = True
+    client = TestClient(app)
     return client, flow, store
 
 
@@ -227,7 +231,7 @@ def test_reading_records_a_signal_and_a_vote_once(env):
     assert client.post(url, headers=_h("val"), json={"cover": "grey", "raining": False}).status_code == 400
     assert client.post(url, headers=_h("val"), json={"cover": "overcast", "raining": False}).json() == {"ok": True}
     assert client.post(url, headers=_h("val"), json={"cover": "overcast", "raining": False}).status_code == 409
-    [reading] = flow.store.get_by_type(SignalTypes.READING_SUBMITTED)
+    [reading] = [r for r in flow.store.get_by_type(SignalTypes.READING_SUBMITTED) if r.agent_id == "user:val"]
     assert reading.payload["value"] == {"cover": "overcast", "raining": False}
     votes = [s for s in flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) if s.agent_id == "user:val"]
     assert len(votes) == 1 and votes[0].object_id == KEY
@@ -289,7 +293,6 @@ def test_per_observation_votes_ratify_the_key(env):
         _join(client, flow, name)
     for name in ("madin", "amira", "omar"):
         _report(client, name, cover="overcast")
-    _ai_vote(client)
     assert _status(client) != "VERIFIED_TRUE"          # no human ratification yet
     for v in ("v1", "v2", "v3"):
         _read_all(client, v, lambda item: "overcast")
@@ -305,10 +308,9 @@ def test_an_unread_observation_does_not_block_its_key(env, monkeypatch):
     omar = {p["sha"] for p in antalya._photos(flow, client.app.state.observation_store) if p["reporter"] == "user:omar"}
     real = antalya._photos
     monkeypatch.setattr(antalya, "_photos", lambda f, s: [p for p in real(f, s) if p["sha"] not in omar])
-    _ai_vote(client)
     for v in ("v1", "v2", "v3"):
         _read_all(client, v, lambda item: "overcast")
-    readings = flow.store.get_by_type(SignalTypes.READING_SUBMITTED)
+    readings = [r for r in flow.store.get_by_type(SignalTypes.READING_SUBMITTED) if r.agent_id.startswith("user:")]
     assert len(readings) == 6 and not omar & {r.payload["evidence_sha256"] for r in readings}
     assert _status(client) == "VERIFIED_TRUE"
 
@@ -321,7 +323,6 @@ def test_a_rejected_lie_does_not_flip_the_key_whatever_the_order(env):
     _report(client, "madin", cover="overcast")
     _report(client, "amira", cover="overcast")
     _report(client, "omar", cover="clear")             # the photo shows overcast; the eye says clear
-    _ai_vote(client)
     liar = {p["sha"] for p in antalya._photos(flow, client.app.state.observation_store) if p["reporter"] == "user:omar"}
     later = []
     for v in ("v1", "v2", "v3"):
@@ -335,3 +336,29 @@ def test_a_rejected_lie_does_not_flip_the_key_whatever_the_order(env):
     votes = [s.payload.get("vote") for s in flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) if s.agent_id.startswith("user:")]
     assert votes.count("RATIFY") == 6 and votes.count("REJECT") == 3 and votes[-1] == "REJECT"
     assert _status(client) == "VERIFIED_TRUE"
+
+
+def test_the_ai_reads_every_photo_blind_and_alone_cannot_verify(env):
+    client, flow, store = env
+    seen = []
+    client.app.state.ai_reader = lambda claim_type_id, image: seen.append(image) or dict(AI_SEES)
+    for name in ("madin", "amira", "omar"):
+        _join(client, flow, name)
+        _report(client, name, cover="overcast")
+    ai = [r for r in flow.store.get_by_type(SignalTypes.READING_SUBMITTED) if r.agent_id == antalya.AI_AGENT]
+    assert len(ai) == 3 and all(r.payload["value"] == {"cover": "overcast", "raining": False} for r in ai)
+    for image in seen:                                       # the AI gets what a human gets: no EXIF
+        with Image.open(io.BytesIO(image)) as img:
+            assert not dict(img.getexif())
+    assert _status(client) != "VERIFIED_TRUE"               # one agent, counted once, cannot reach the threshold
+
+
+def test_an_ai_that_sees_no_sky_backs_nothing(env):
+    client, flow, _ = env
+    client.app.state.ai_reader = lambda claim_type_id, image: {"values": {"cover": "clear", "raining": False}, "relevance": 0.1}
+    _join(client, flow, "madin")
+    _report(client, "madin", cover="clear")
+    [r] = [r for r in flow.store.get_by_type(SignalTypes.READING_SUBMITTED) if r.agent_id == antalya.AI_AGENT]
+    assert r.payload["value"] is None
+    [v] = [v for v in flow.store.get_by_type(SignalTypes.VALIDATION_VOTE) if v.agent_id == antalya.AI_AGENT]
+    assert v.payload["vote"] == "REJECT"

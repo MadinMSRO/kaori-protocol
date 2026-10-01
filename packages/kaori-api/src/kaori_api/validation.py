@@ -7,7 +7,7 @@ the compiler. HTTP ingest is POST /v1/validate — not a public map vote.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from kaori_flow import FlowCore
 from kaori_flow.primitives.agent import AgentType, create_agent_id
@@ -82,6 +82,7 @@ def record_validation_vote(
     signature: str,
     confidence: Optional[float] = None,
     time: Optional[datetime] = None,
+    reading: Optional[Dict[str, Any]] = None,
 ) -> Signal:
     """
     Emit SignalTypes.VALIDATION_VOTE into the existing SignalStore.
@@ -107,6 +108,9 @@ def record_validation_vote(
     }
     if confidence is not None:
         payload["confidence"] = float(confidence)
+    if reading is not None:
+        # a blind reading's own value (Antalya): the compiler weighs it against the claim
+        payload["reading"] = dict(reading)
 
     signal = Signal(
         signal_type=SignalTypes.VALIDATION_VOTE,

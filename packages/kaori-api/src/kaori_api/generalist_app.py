@@ -5,7 +5,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
+import base64
+
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
 from kaori_api.generalist import (
     ClipGeneralistValidator,
@@ -38,6 +41,19 @@ def create_generalist_app(validator: Optional[ClipGeneralistValidator] = None) -
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         log_validation_vote(vote, source="kaori-generalist")
         return vote
+
+    class ReadRequest(BaseModel):
+        claim_type_id: str
+        image_b64: str
+
+    # A blind reading of one photo (Antalya): the same image a human validator sees, EXIF removed.
+    @application.post("/read")
+    def read(request: ReadRequest) -> dict:
+        try:
+            image = base64.b64decode(request.image_b64, validate=True)
+            return application.state.validator.read(request.claim_type_id, image)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return application
 

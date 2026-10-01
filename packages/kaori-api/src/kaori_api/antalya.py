@@ -307,6 +307,65 @@ def _photos(flow: FlowCore, observation_store: Any) -> List[Dict[str, Any]]:
     return out
 
 
+AI_AGENT = "ai:generalist_v1"
+
+
+def ai_reader(app: Any) -> Optional[Callable[[str, bytes], dict]]:
+    """The AI's blind reader: app.state.ai_reader if set (tests), else the generalist service's /read."""
+    reader = getattr(app.state, "ai_reader", None)
+    if reader is not None:
+        return reader
+    client = getattr(app.state, "generalist_client", None)
+    if client is None:
+        return None
+    return lambda claim_type_id, image: client.read(claim_type_id=claim_type_id, image=image)
+
+
+def ai_read(app: Any, observation: Any, truth_key: str, vote_and_compile: Callable[..., Any]) -> None:
+    """
+    The AI reads the photo blind, exactly as a human validator would: the same EXIF-stripped image, no
+    reporter, place, key or eye answer. Its reading becomes a vote the same way.
+    """
+    reader = ai_reader(app)
+    if reader is None or not observation.evidence_refs:
+        return
+    flow = app.state.flow
+    sha = observation.evidence_refs[0].sha256
+    assignment = _emit(flow, SignalTypes.ASSIGNMENT_ISSUED, AI_AGENT, f"assignment:{uuid.uuid4().hex}", {
+        "evidence_sha256": sha, "validator": AI_AGENT, "reason": "ai",
+        "truthkey": truth_key, "observation_id": str(observation.observation_id), "claim_type_id": observation.claim_type,
+    })
+    try:
+        image = blind_image(app.state.evidence_store.read(observation.evidence_refs[0]))
+        result = reader(observation.claim_type, image)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("AI reading failed for %s", sha)
+        return
+    values = result.get("values") or {}
+    relevance = result.get("relevance")
+    is_evidence = relevance is None or relevance >= 0.5
+    value = {"cover": values.get("cover"), "raining": bool(values.get("raining"))} if is_evidence else None
+    now = _now()
+    _emit(flow, SignalTypes.READING_SUBMITTED, AI_AGENT, assignment.object_id, {
+        "evidence_sha256": sha, "value": value, "probs": result.get("probs"), "relevance": relevance,
+        "latency_ms": int((now - assignment.time).total_seconds() * 1000),
+        "truthkey": truth_key, "observation_id": str(observation.observation_id),
+    }, time=now)
+    vote = vote_for(value, observation.payload) if value and value.get("cover") in COVER else "REJECT"
+    vote_and_compile(AI_AGENT, truth_key, vote, value)
+
+
+def start_ai_read(app: Any, observation: Any, truth_key: str, vote_and_compile: Callable[..., Any]) -> None:
+    if getattr(app.state, "ai_sync", False):
+        ai_read(app, observation, truth_key, vote_and_compile)
+        return
+    thread = threading.Thread(target=ai_read, args=(app, observation, truth_key, vote_and_compile),
+                              name="kaori-ai-read", daemon=True)
+    thread.start()
+
+
 def _assignments(flow: FlowCore) -> Dict[str, Signal]:
     return {s.object_id: s for s in flow.store.get_by_type(SignalTypes.ASSIGNMENT_ISSUED)}
 
@@ -344,6 +403,8 @@ def assign(flow: FlowCore, observation_store: Any, agent_id: str, limit: int, rn
     seen = {s.payload.get("evidence_sha256") for s in issued.values() if s.agent_id == agent_id}
     load: Dict[str, int] = {}
     for oid, s in issued.items():
+        if s.agent_id == AI_AGENT:
+            continue                                    # the AI reads every photo; it takes no human slot
         live = oid in answered or s.time + ASSIGNMENT_TTL > now
         if live:
             load[s.payload.get("evidence_sha256")] = load.get(s.payload.get("evidence_sha256"), 0) + 1
@@ -429,7 +490,7 @@ def submit_reading(flow: FlowCore, observation_store: Any, agent_id: str, assign
         if str(obs.observation_id) == signal.payload["observation_id"]:
             eye = obs.payload
     vote = vote_for({"cover": cover, "raining": raining}, eye)
-    vote_and_compile(agent_id, signal.payload["truthkey"], vote)
+    vote_and_compile(agent_id, signal.payload["truthkey"], vote, {"cover": cover, "raining": raining})
     return {"ok": True}
 
 
@@ -457,7 +518,7 @@ def check_export_token(request: Request) -> None:
 
 # --------------------------------------------------------------------------------------------- routes
 
-def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[[Any, str, str, str], Any]) -> None:
+def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[..., Any]) -> None:
     from fastapi import Depends
 
     lock = threading.Lock()
@@ -502,7 +563,7 @@ def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[[An
         body = await _json(request)
         with lock:
             return submit_reading(app.state.flow, app.state.observation_store, agent_id, assignment_id, body,
-                                  lambda a, k, v: vote_and_compile(app, a, k, v))
+                                  lambda a, k, v, r=None: vote_and_compile(app, a, k, v, r))
 
     @app.get("/v1/export")
     def export(request: Request):

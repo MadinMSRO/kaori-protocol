@@ -179,6 +179,22 @@ class GeneralistClient:
         ).start()
         raise TimeoutError("generalist exceeded ClaimType timeout")
 
+    def read(self, *, claim_type_id: str, image: bytes, timeout: float = 60.0) -> dict:
+        """A blind reading of one photo from the generalist (POST {url}/read)."""
+        import base64
+
+        request = urllib.request.Request(
+            self.url + "/read",
+            data=json.dumps({"claim_type_id": claim_type_id, "image_b64": base64.b64encode(image).decode("ascii")}).encode("utf-8"),
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {self.token_provider(self.url)}",
+                "Content-Type": "application/json",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read())
+
     def _validate_vote(self, vote: ValidationVote, truthkey_id: str) -> None:
         if vote.agent_id != GENERALIST_AGENT_ID:
             raise ValueError("generalist response has an unexpected agent_id")
@@ -210,6 +226,7 @@ def signal_as_compiler_record(signal) -> dict:
         "vote_type": vote,
         "confidence": payload.get("confidence"),
         "timestamp": payload.get("timestamp"),
+        "reading": payload.get("reading"),
         "signal_type": SignalTypes.VALIDATION_VOTE,
     }
     return {key: value for key, value in record.items() if value is not None}

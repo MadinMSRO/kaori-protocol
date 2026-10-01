@@ -12,7 +12,7 @@ import re
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Optional, Protocol, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Sequence, Tuple
 from urllib.parse import quote, urlparse
 
 import yaml
@@ -237,6 +237,24 @@ class OpenClipGeneralist:
             mass = logits.softmax(dim=-1)[:, : len(prompts)].sum(dim=-1)
         return [min(1.0, max(0.0, float(v))) for v in mass.cpu().tolist()]
 
+    def label_probs(self, images: Sequence[object], *, labels: Sequence[str], engine: str) -> List[List[float]]:
+        """Per image, CLIP's softmax over `labels` (zero-shot classification)."""
+        if engine != "clip_v1":
+            raise ValueError(f"unsupported generalist engine: {engine}")
+        self._load()
+        import torch
+
+        image_batch = torch.stack([self._preprocess(image) for image in images])
+        text_batch = self._tokenizer(list(labels))
+        with torch.inference_mode():
+            image_features = self._model.encode_image(image_batch)
+            text_features = self._model.encode_text(text_batch)
+            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+            logits = self._model.logit_scale.exp() * image_features @ text_features.T
+            probs = logits.softmax(dim=-1)
+        return [[float(v) for v in row] for row in probs.cpu().tolist()]
+
     def __init__(self) -> None:
         self._model = None
         self._preprocess = None
@@ -396,6 +414,42 @@ class ClipGeneralistValidator:
         engine = str(embedding.get("engine") or "")
         threshold = float(embedding.get("similarity_threshold"))
         return context, engine, threshold
+
+    def read(self, claim_type_id: str, image_bytes: bytes) -> dict:
+        """
+        Blind reading of one photo, like a human validator's: the value it shows for each field in
+        generalist.readings (zero-shot over that field's prompts), and how much it looks like this
+        claim's evidence at all (the claim's prompts against its distractors).
+        """
+        config = self._load_claim_type(claim_type_id)
+        _, engine, _ = self._generalist_settings(config)
+        readings = ((config.get("ai_validation_routing") or {}).get("generalist") or {}).get("readings") or {}
+        if not isinstance(readings, dict) or not readings:
+            raise ValueError("claim type has no generalist.readings")
+        image = self._load_image(image_bytes)
+        values: Dict[str, Any] = {}
+        probs: Dict[str, Dict[str, float]] = {}
+        for field, options in readings.items():
+            labels: List[str] = []
+            owners: List[str] = []
+            for option, prompts in options.items():
+                for prompt in prompts or []:
+                    labels.append(str(prompt))
+                    owners.append(str(option))
+            row = self.model.label_probs([image], labels=labels, engine=engine)[0]
+            mass: Dict[str, float] = {}
+            for owner, p in zip(owners, row):
+                mass[owner] = mass.get(owner, 0.0) + p
+            best = max(mass, key=mass.get)
+            values[field] = {"true": True, "false": False}.get(best.lower(), best) if isinstance(best, str) else best
+            probs[field] = {k: round(v, 4) for k, v in mass.items()}
+        prompts, distractors = self._labels(config)
+        sky = (
+            self.model.score_labels([image], prompts=prompts, distractors=distractors, engine=engine)[0]
+            if prompts
+            else None
+        )
+        return {"values": values, "probs": probs, "relevance": None if sky is None else round(float(sky), 4)}
 
     @staticmethod
     def _labels(config: dict) -> tuple[List[str], List[str]]:

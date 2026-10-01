@@ -209,6 +209,8 @@ def compile_truth_state(
         aggregate=aggregate,
         claim_type=claim_type,
         votes=votes or [],
+        trust_snapshot=trust_snapshot,
+        claim=validated_payload,
     )
     
     # =========================================================================
@@ -365,10 +367,86 @@ def _has_human_consensus(votes: List[dict]) -> bool:
     return any(_vote_value(vote) in ("RATIFY", "REJECT") for vote in human)
 
 
+def _vote_weight(agent_id: str, trust_snapshot: Optional[TrustSnapshot]) -> float:
+    """Consensus weight from the frozen TrustSnapshot's standing: 1 + log2(1 + standing/10)."""
+    import math
+
+    standing = 0.0
+    if trust_snapshot is not None:
+        trust = trust_snapshot.agent_trusts.get(agent_id)
+        standing = float(trust.standing) if trust else 0.0
+    return 1.0 + math.log2(1 + max(0.0, standing) / 10.0)
+
+
+def _verification_rule(claim_type: ClaimType) -> Optional[str]:
+    config = claim_type.get_config() if hasattr(claim_type, "get_config") else {}
+    rule = ((config or {}).get("verification") or {}).get("rule")
+    return rule if isinstance(rule, str) else None
+
+
+def _supports(reading: dict, claim: dict, claim_type: ClaimType) -> bool:
+    """A reading supports the claim when every claimed field matches: within one step for an ordered option
+    list from ui_schema, exactly otherwise."""
+    config = claim_type.get_config() if hasattr(claim_type, "get_config") else {}
+    options = {f.get("name"): f.get("options") for f in (((config or {}).get("ui_schema") or {}).get("fields") or []) if isinstance(f, dict)}
+    for field, value in (claim or {}).items():
+        if field not in reading:
+            continue
+        seen = reading[field]
+        order = options.get(field)
+        if isinstance(order, list) and value in order and seen in order:
+            if abs(order.index(value) - order.index(seen)) > 1:
+                return False
+        elif seen != value:
+            return False
+    return True
+
+
+def _weighted_readings_status(
+    claim_type: ClaimType,
+    votes: List[dict],
+    trust_snapshot: Optional[TrustSnapshot],
+    claim: Optional[dict] = None,
+) -> tuple[TruthStatus, Optional[VerificationBasis], List[str]]:
+    """
+    One rule for every reader, human or AI (verification.rule: weighted_readings). A blind reading counts +1
+    when its photo shows the claimed value and -1 when it does not; a vote without a reading counts its
+    RATIFY (+1) or REJECT (-1). Each agent counts once per key (the mean of its readings), weighted by its
+    standing in the frozen TrustSnapshot. Verified when the score reaches consensus_model.finalize_threshold, false when
+    it reaches reject_threshold, otherwise still open.
+    """
+    config = claim_type.get_config() if hasattr(claim_type, "get_config") else {}
+    consensus = (config or {}).get("consensus_model") or {}
+    finalize = float(consensus.get("finalize_threshold", 15))
+    reject = float(consensus.get("reject_threshold", -10))
+    by_agent: dict = {}
+    for vote in votes:
+        reading = vote.get("reading")
+        if isinstance(reading, dict) and claim:
+            # a blind reading backs the key when the photo shows the claimed value
+            support = 1.0 if _supports(reading, claim, claim_type) else -1.0
+        else:
+            value = _vote_value(vote)
+            if value not in ("RATIFY", "REJECT"):
+                continue
+            support = 1.0 if value == "RATIFY" else -1.0
+        by_agent.setdefault(_vote_agent_id(vote), []).append(support)
+    score = sum(_vote_weight(agent, trust_snapshot) * sum(v) / len(v) for agent, v in by_agent.items())
+    human = any(agent.startswith(("user:", "human:")) for agent in by_agent)
+    basis = VerificationBasis.HUMAN_CONSENSUS if human else VerificationBasis.AI_AUTOVALIDATION
+    if score >= finalize:
+        return TruthStatus.VERIFIED_TRUE, basis, []
+    if score <= reject:
+        return TruthStatus.VERIFIED_FALSE, basis, []
+    return TruthStatus.INVESTIGATING, None, ["AWAITING_READINGS"]
+
+
 def _determine_status(
     aggregate: dict,
     claim_type: ClaimType,
     votes: List[dict],
+    trust_snapshot: Optional[TrustSnapshot] = None,
+    claim: Optional[dict] = None,
 ) -> tuple[TruthStatus, Optional[VerificationBasis], List[str]]:
     """
     Determine truth status from ClaimType YAML + recorded votes.
@@ -383,6 +461,8 @@ def _determine_status(
       VERIFIED_TRUE / VERIFIED_FALSE (TRUTH_SPEC §15.2). Status stays
       intermediate (LEANING_* / INVESTIGATING), not an invented VALIDATION.
     """
+    if _verification_rule(claim_type) == "weighted_readings":
+        return _weighted_readings_status(claim_type, votes, trust_snapshot, claim)
     transparency_flags: List[str] = []
     gating = _human_gating(claim_type)
     always_require_human = bool(gating.get("always_require_human"))
@@ -419,7 +499,7 @@ def _determine_status(
         transparency_flags.append("AWAITING_HUMAN_CONSENSUS")
         return TruthStatus.PENDING_HUMAN_REVIEW, None, transparency_flags
 
-    human_direction = _human_vote_direction(votes) if has_human else None
+    human_direction = _human_vote_direction(votes, trust_snapshot) if has_human else None
 
     if ai_mean >= ai_true_threshold:
         if human_required_to_verify and not has_human:
@@ -459,13 +539,12 @@ def _determine_status(
     return TruthStatus.INVESTIGATING, None, transparency_flags
 
 
-def _human_vote_direction(votes: List[dict]) -> Optional[str]:
+def _human_vote_direction(votes: List[dict], trust_snapshot: Optional[TrustSnapshot] = None) -> Optional[str]:
     """
-    Standing-weighted majority of human RATIFY/REJECT (the consensus weight, 1 + log2(1 + standing/10)).
-    ABSTAIN is ignored. Independent of vote order; the latest vote breaks an exact tie.
+    Weighted majority of human RATIFY/REJECT, each weighted by the voter's standing in the frozen
+    TrustSnapshot (1 + log2(1 + standing/10)). ABSTAIN is ignored. Independent of vote order; the latest
+    vote breaks an exact tie.
     """
-    import math
-
     score = 0.0
     latest = None
     for vote in votes:
@@ -474,11 +553,7 @@ def _human_vote_direction(votes: List[dict]) -> Optional[str]:
         value = _vote_value(vote)
         if value not in ("RATIFY", "REJECT"):
             continue
-        try:
-            standing = float(_vote_field(vote, "voter_standing") or 10.0)
-        except (TypeError, ValueError):
-            standing = 10.0
-        weight = 1.0 + math.log2(1 + max(0.0, standing) / 10.0)
+        weight = _vote_weight(_vote_agent_id(vote), trust_snapshot)
         score += weight if value == "RATIFY" else -weight
         latest = value
     if latest is None:
