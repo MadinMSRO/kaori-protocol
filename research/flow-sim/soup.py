@@ -37,9 +37,9 @@ from agents import VALS, D, WORTH, HOSTILE, form
 C0, ETA, THIN, STAKES = 0.1, 0.05, S.SLOW, 10.0
 
 class Soup:
-    def __init__(self, law, entangle, provenance, grounded=False, graded=False):
+    def __init__(self, law, entangle, provenance, grounded=False, graded=False, local=False, thin=THIN):
         self.law, self.entangle, self.provenance = law, entangle, provenance
-        self.grounded, self.graded = grounded, graded
+        self.grounded, self.graded, self.local, self.thin = grounded, graded, local, thin
         self.c = defaultdict(lambda: C0)
         self.ne = defaultdict(float); self.se = defaultdict(float); self.mij = defaultdict(float); self.wij = defaultdict(float)
         self._ac = {}
@@ -61,29 +61,38 @@ class Soup:
         self._ac[key] = r = 1 - math.exp(-x)
         return r
     def signals(self, cell):
-        """Every Signal at this object: (emitter, value, item weight)."""
+        """Every Signal at this object: (emitter, value, item weight, item). With local trust (Rule 4), the weight
+        also carries how well the rendering fits the other renderings of the same evidence (never itself)."""
         reps, items = cell
         out = []
-        for aid, said, passed, sky, reads in items:
+        for n, (aid, said, passed, sky, reads) in enumerate(items):
             w = self.realness(aid, passed) * (1.0 if sky else 0.05) if self.provenance else 1.0
-            out.append((aid, said, w))
-            for r, x in reads:
-                if x is not None: out.append((r, x, w))
+            rend = [(aid, said)] + [(r, x) for r, x in reads if x is not None]
+            for j, (e, x) in enumerate(rend):
+                fit = 1.0
+                if self.local:
+                    num = den = 0.0
+                    for k, (f, y) in enumerate(rend):
+                        if k == j or f == e: continue
+                        g = 1.0 if D[(x, y)] == 0 else 0.5 if D[(x, y)] == 1 else 0.0
+                        num += self.c[f] * g; den += self.c[f]
+                    if den > 0: fit = num / den
+                out.append((e, x, w * fit, n))
         return out
     def trust(self, sig):
-        em = list({e for e, _, _ in sig})
+        em = list({e for e, *_ in sig})
         mass = {e: sum(self.a(e, f) for f in em) for e in em}
-        k = Counter(e for e, _, _ in sig)
+        k = Counter(e for e, *_ in sig)
         tv = defaultdict(float)
-        for e, x, w in sig: tv[x] += self.c[e] * w / (mass[e] * k[e])
+        for e, x, w, *_ in sig: tv[x] += self.c[e] * w / (mass[e] * k[e])
         return tv
     def posterior(self, sig):
         """Graded rendering: a signal supports its value, half-supports one step off; a thin conduit is uninformed."""
-        em = list({e for e, _, _ in sig})
+        em = list({e for e, *_ in sig})
         mass = {e: sum(self.a(e, f) for f in em) for e in em}
-        k = Counter(e for e, _, _ in sig)
+        k = Counter(e for e, *_ in sig)
         L = {v: 0.0 for v in VALS}
-        for e, x, w in sig:
+        for e, x, w, *_ in sig:
             r = self.c[e] * w
             g = {v: 1.0 if D[(x, v)] == 0 else 0.5 if D[(x, v)] == 1 else 0.0 for v in VALS}
             z = sum(g.values())
@@ -94,7 +103,7 @@ class Soup:
         """Trust snapshot: the independent support behind the truth, weighted by conduit thickness, as a share of all
         independent support present (bounded in [0, 1])."""
         sup = tot = 0.0
-        for e, x, w in sig:
+        for e, x, w, *_ in sig:
             u = w / (mass[e] * k[e]); tot += u
             if x in Sset: sup += self.c[e] * u
         return sup / tot if tot > 0 else 0.0
@@ -132,7 +141,7 @@ class Soup:
         self._ac = {}
     def settle(self, sig, Sset, snap):
         err = {}
-        for e, x, w in sig:
+        for e, x, w, *_ in sig:
             o = 1.0 if x in Sset else 0.5 if min(D[(x, v)] for v in Sset) == 1 else 0.0
             if self.law: self.c[e] += ETA * snap * w * (o - self.c[e])
             err[e] = max(err.get(e, 0.0), 1.0 - o)
@@ -151,7 +160,7 @@ class Soup:
         if self.grounded and self.entangle: self.ground(cell)
     def fade(self):
         if self.law:
-            for e in self.c: self.c[e] *= 1 - THIN
+            for e in self.c: self.c[e] *= 1 - self.thin
         for d in (self.ne, self.se, self.mij, self.wij):
             for k in d: d[k] *= 1 - S.SLOW
         self._ac = {}
@@ -166,6 +175,10 @@ VARIANTS = {
     "G: flow, graded + provenance": (True, False, True, True, True),
     "G: flow + grounded entanglement, graded": (True, True, False, True, True),
     "G: flow + grounded entanglement, graded + provenance": (True, True, True, True, True),
+    # third round: trust made local (Rule 4), and faster standing decay as the alternative
+    "L: flow, local trust, graded + provenance": (True, False, True, True, True, True),
+    "D: flow, graded + provenance, decay 14 d": (True, False, True, True, True, False, math.log(2) / (14 * 24)),
+    "D: flow, graded + provenance, decay 7 d": (True, False, True, True, True, False, math.log(2) / (7 * 24)),
 }
 
 def run(name, world, detail=False):
@@ -220,6 +233,8 @@ def run(name, world, detail=False):
     res = {"right": out["right"] / E, "wrong": out["wrong"] / E, "stuck": out["stuck"] / E, "sep": sep, "auc": auc,
            "snap_q": [sum(s for q, s, _ in snaps if q == i) / max(1, sum(1 for q, *_ in snaps if q == i)) for i in range(4)],
            "snap_right": sum(rs) / max(1, len(rs)), "snap_wrong": sum(ws) / max(1, len(ws))}
+    res["careful_c"] = sum(N.c[a] for a, k in kinds.items() if k == "careful") / max(1, sum(1 for k in kinds.values() if k == "careful"))
+    res["attacker_c"] = sum(N.c[a] for a, k in kinds.items() if k in ("adv", "stolen")) / max(1, sum(1 for k in kinds.values() if k in ("adv", "stolen")))
     res["wrong_q"] = [sum(1 for q, _, ok in snaps if q == i and not ok) / max(1, out["eq%d" % i]) for i in range(4)]
     if detail:
         tiers = defaultdict(list)
