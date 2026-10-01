@@ -1,0 +1,74 @@
+master seed 184231629610483
+
+### phase 1: an attacker evolved against each version (16 x 10 generations x 2 worlds each)
+  vs trust.py (current)                 best attacker fitness 0.161  4 ids, out 61% of hours, attacks 80% of those, scatter 16%, sleeps 67% of the run, re-registers every 142 h, steals 2 account(s), true-photo lies 1%, farm 8, signed 81%
+  vs trust.py, no implicit consensus    best attacker fitness 0.152  7 ids, out 63% of hours, attacks 27% of those, scatter 52%, sleeps 58% of the run, re-registers every 160 h, steals 2 account(s), true-photo lies 36%, farm 0, signed 49%
+  vs 3 laws + bonds (presence+error)    best attacker fitness 0.226  7 ids, out 95% of hours, attacks 13% of those, scatter 0%, sleeps 35% of the run, re-registers every 166 h, steals 2 account(s), true-photo lies 0%, farm 0, signed 34%
+  vs 3 laws + presence-only bonds       best attacker fitness 0.293  8 ids, out 95% of hours, attacks 27% of those, scatter 11%, sleeps 0% of the run, re-registers every 117 h, steals 1 account(s), true-photo lies 0%, farm 11, signed 100%
+  vs 3 laws + tuned flock (mu=2.75)     best attacker fitness 0.183  8 ids, out 95% of hours, attacks 38% of those, scatter 49%, sleeps 72% of the run, re-registers every 200 h, steals 2 account(s), true-photo lies 16%, farm 4, signed 15%
+  vs 3 laws + GLS screening (derived)   best attacker fitness 0.167  6 ids, out 44% of hours, attacks 53% of those, scatter 69%, sleeps 80% of the run, re-registers every 200 h, steals 2 account(s), true-photo lies 25%, farm 0, signed 39%
+  vs 3 laws, no screening               best attacker fitness 0.497  5 ids, out 95% of hours, attacks 78% of those, scatter 22%, sleeps 21% of the run, never re-registers, steals 2 account(s), true-photo lies 86%, farm 10, signed 100%
+  vs 3 laws + bonds, validators always  best attacker fitness 0.150  6 ids, out 53% of hours, attacks 16% of those, scatter 64%, sleeps 51% of the run, re-registers every 142 h, steals 2 account(s), true-photo lies 20%, farm 1, signed 9%
+  vs Dawid-Skene + observer gate        best attacker fitness 0.109  8 ids, out 51% of hours, attacks 5% of those, scatter 77%, sleeps 32% of the run, re-registers every 101 h, steals 2 account(s), true-photo lies 55%, farm 0, signed 82%
+  vs Dawid-Skene, no observer gate      best attacker fitness 0.104  8 ids, out 89% of hours, attacks 51% of those, scatter 43%, sleeps 56% of the run, re-registers every 200 h, steals 1 account(s), true-photo lies 27%, farm 10, signed 49%
+
+### phase 2: every version x 19 attacks x 6 fresh worlds
+
+                                      right  wrong  worst    own contest implicit  load   AUC
+trust.py (current)                     0.93  0.034  0.128  0.033    0.03     0.39  0.62  0.62
+trust.py, no implicit consensus        0.93  0.035  0.133  0.026    0.03     0.00  1.00  0.62
+3 laws + bonds (presence+error)        0.91  0.044  0.148  0.052    0.02     0.95  0.06  0.64
+3 laws + presence-only bonds           0.92  0.045  0.144  0.124    0.01     0.95  0.05  0.64
+3 laws + tuned flock (mu=2.75)         0.91  0.046  0.144  0.041    0.01     0.95  0.06  0.69
+3 laws + GLS screening (derived)       0.92  0.045  0.145  0.029    0.01     0.96  0.05  0.62
+3 laws, no screening                   0.88  0.093  0.424  0.381    0.01     0.96  0.05  0.51
+3 laws + bonds, validators always      0.94  0.033  0.132  0.016    0.02     0.00  1.00  0.63
+Dawid-Skene + observer gate            0.84  0.009  0.027  0.002    0.13     0.00  1.00  0.77
+Dawid-Skene, no observer gate          0.95  0.009  0.032  0.007    0.01     0.00  1.00  0.82
+
+### wrong per attack (rows: versions; columns: attacks)
+  [ 0] cabal (co-evolved)
+  [ 1] ring
+  [ 2] sleeper + theft
+  [ 3] patient scatterers
+  [ 4] calm
+  [ 5] farm + signed real photos
+  [ 6] wash every 48 h
+  [ 7] hall of fame: trust adaptive
+  [ 8] hall of fame: captcha adaptive
+  [ 9] evolved vs trust.py (current)
+  [10] evolved vs trust.py, no implicit consensus
+  [11] evolved vs 3 laws + bonds (presence+error)
+  [12] evolved vs 3 laws + presence-only bonds
+  [13] evolved vs 3 laws + tuned flock (mu=2.75)
+  [14] evolved vs 3 laws + GLS screening (derived)
+  [15] evolved vs 3 laws, no screening
+  [16] evolved vs 3 laws + bonds, validators always
+  [17] evolved vs Dawid-Skene + observer gate
+  [18] evolved vs Dawid-Skene, no observer gate
+                                         0     1     2     3     4     5     6     7     8     9    10    11    12    13    14    15    16    17    18
+trust.py (current)                    .008  .003  .045  .013  .002  .001  .001  .076  .128  .033  .026  .044  .119  .035  .021  .050  .015  .005  .012
+trust.py, no implicit consensus       .007  .003  .046  .014  .003  .001  .002  .078  .133  .034  .026  .045  .119  .036  .022  .051  .017  .005  .013
+3 laws + bonds (presence+error)       .013  .013  .055  .020  .014  .023  .020  .090  .148  .043  .037  .052  .124  .038  .030  .062  .025  .019  .017
+3 laws + presence-only bonds          .017  .013  .056  .019  .013  .022  .019  .090  .144  .051  .037  .051  .124  .038  .030  .061  .026  .019  .018
+3 laws + tuned flock (mu=2.75)        .020  .014  .048  .017  .013  .022  .019  .089  .144  .056  .039  .055  .121  .041  .032  .066  .028  .020  .023
+3 laws + GLS screening (derived)      .020  .013  .056  .023  .012  .020  .019  .092  .145  .050  .037  .050  .130  .039  .029  .060  .027  .015  .020
+3 laws, no screening                  .027  .014  .056  .030  .012  .260  .018  .109  .424  .056  .048  .052  .131  .047  .033  .381  .029  .011  .024
+3 laws + bonds, validators always     .007  .003  .045  .013  .000  .000  .001  .076  .132  .030  .026  .045  .117  .034  .020  .050  .016  .004  .011
+Dawid-Skene + observer gate           .021  .009  .014  .008  .000  .000  .000  .013  .025  .009  .007  .012  .027  .008  .007  .008  .005  .002  .004
+Dawid-Skene, no observer gate         .032  .011  .010  .003  .000  .000  .001  .010  .025  .011  .004  .007  .022  .006  .003  .008  .005  .001  .007
+
+### right per attack
+                                         0     1     2     3     4     5     6     7     8     9    10    11    12    13    14    15    16    17    18
+trust.py (current)                    0.62  0.85  0.95  0.98  0.99  0.99  0.99  0.92  0.86  0.90  0.97  0.95  0.85  0.96  0.97  0.94  0.98  0.99  0.92
+trust.py, no implicit consensus       0.63  0.87  0.95  0.98  0.99  1.00  1.00  0.92  0.86  0.91  0.97  0.95  0.85  0.96  0.97  0.94  0.98  0.99  0.93
+3 laws + bonds (presence+error)       0.72  0.87  0.92  0.96  0.96  0.95  0.95  0.89  0.82  0.90  0.94  0.92  0.84  0.95  0.95  0.91  0.94  0.96  0.93
+3 laws + presence-only bonds          0.78  0.89  0.92  0.97  0.96  0.96  0.96  0.89  0.83  0.91  0.94  0.93  0.85  0.95  0.95  0.92  0.94  0.96  0.94
+3 laws + tuned flock (mu=2.75)        0.78  0.89  0.93  0.97  0.96  0.95  0.96  0.88  0.83  0.90  0.94  0.92  0.85  0.94  0.94  0.91  0.94  0.95  0.93
+3 laws + GLS screening (derived)      0.78  0.89  0.92  0.96  0.96  0.96  0.96  0.89  0.83  0.90  0.94  0.93  0.84  0.95  0.95  0.92  0.94  0.96  0.93
+3 laws, no screening                  0.79  0.89  0.93  0.96  0.96  0.72  0.96  0.88  0.55  0.91  0.94  0.93  0.85  0.95  0.95  0.60  0.95  0.97  0.94
+3 laws + bonds, validators always     0.73  0.91  0.95  0.99  1.00  1.00  1.00  0.92  0.86  0.93  0.97  0.95  0.86  0.96  0.98  0.95  0.98  0.99  0.94
+Dawid-Skene + observer gate           0.68  0.81  0.90  0.95  0.89  0.75  0.82  0.84  0.62  0.86  0.91  0.87  0.82  0.93  0.92  0.68  0.92  0.94  0.89
+Dawid-Skene, no observer gate         0.84  0.92  0.97  0.99  0.99  0.99  0.98  0.94  0.90  0.94  0.98  0.94  0.91  0.98  0.98  0.95  0.98  0.98  0.94
+
+1543s
