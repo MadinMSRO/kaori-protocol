@@ -1,0 +1,81 @@
+{
+ "rows": [
+  {
+   "N": 100,
+   "density": 0.027777777777777773,
+   "quiet": null,
+   "typical": null,
+   "hotspot": null,
+   "no_capture": 5,
+   "total": 80
+  },
+  {
+   "N": 300,
+   "density": 0.08333333333333333,
+   "quiet": null,
+   "typical": null,
+   "hotspot": null,
+   "no_capture": 5,
+   "total": 240
+  },
+  {
+   "N": 1000,
+   "density": 0.27777777777777773,
+   "quiet": null,
+   "typical": null,
+   "hotspot": null,
+   "no_capture": 8,
+   "total": 800
+  },
+  {
+   "N": 3000,
+   "density": 0.8333333333333334,
+   "quiet": null,
+   "typical": null,
+   "hotspot": null,
+   "no_capture": 8,
+   "total": 2400
+  },
+  {
+   "N": 10000,
+   "density": 2.7777777777777777,
+   "quiet": null,
+   "typical": null,
+   "hotspot": null,
+   "no_capture": null,
+   "total": 8000
+  },
+  {
+   "N": 30000,
+   "density": 8.333333333333334,
+   "quiet": null,
+   "typical": null,
+   "hotspot": null,
+   "no_capture": null,
+   "total": 24000
+  },
+  {
+   "N": 100000,
+   "density": 27.777777777777775,
+   "quiet": null,
+   "typical": null,
+   "hotspot": null,
+   "no_capture": null,
+   "total": 80000
+  }
+ ],
+ "assumptions": {
+  "ACTIVE_HEXES": 300,
+  "OBS_PER_USER_HOUR": 0.08333333333333333,
+  "ELIG": 0.8,
+  "EARN": 25,
+  "C": {
+   "honest": 0.8,
+   "attacker": 0.75,
+   "ai": 0.85,
+   "validator": 0.8
+  },
+  "TRIALS": 300,
+  "BOND": 0.5
+ }
+}
