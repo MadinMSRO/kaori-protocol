@@ -48,6 +48,7 @@ SECRET_VALIDATOR=antalya-validator-key
 SECRET_EXPORT=antalya-export-token
 SECRET_DB=antalya-database-url          # the API's login (kaori_runtime only)
 SECRET_DB_ADMIN=antalya-db-admin-url    # schema owner; only the db job reads it
+SECRET_NAMES=antalya-name-key           # encrypts people's names in the ledger; only the API reads it
 SIGNING_KEY_ID=msro-antalya-1
 FIREBASE_APP_NAME="Liminal Antalya"
 FIREBASE_CONFIG=$HERE/firebase-config.json
@@ -176,11 +177,12 @@ step_bucket() {
 step_secrets() {
   say "Secrets (generated here; nobody types or sees them)"
   local name
-  for name in "$SECRET_SIGNING" "$SECRET_VALIDATOR" "$SECRET_EXPORT" "$SECRET_DB" "$SECRET_DB_ADMIN"; do
+  for name in "$SECRET_SIGNING" "$SECRET_VALIDATOR" "$SECRET_EXPORT" "$SECRET_DB" "$SECRET_DB_ADMIN" "$SECRET_NAMES"; do
     gc secrets describe "$name" >/dev/null 2>&1 || gc secrets create "$name" --replication-policy=automatic
   done
   # The TruthState key and the validator key must differ (the API refuses to start otherwise).
-  for name in "$SECRET_SIGNING" "$SECRET_VALIDATOR" "$SECRET_EXPORT"; do
+  # the name key never changes once made: names already in the ledger are sealed with it
+  for name in "$SECRET_SIGNING" "$SECRET_VALIDATOR" "$SECRET_EXPORT" "$SECRET_NAMES"; do
     if secret_has_version "$name"; then echo "  $name: kept"; else
       openssl rand -hex 32 | tr -d '\n' | gc secrets versions add "$name" --data-file=- >/dev/null
       echo "  $name: generated"
@@ -208,7 +210,7 @@ step_accounts() {
     gc iam service-accounts describe "${sa%%:*}@$PROJECT_ID.iam.gserviceaccount.com" >/dev/null 2>&1 \
       || gc iam service-accounts create "${sa%%:*}" --display-name="${sa#*:}"
   done
-  for name in "$SECRET_SIGNING" "$SECRET_VALIDATOR" "$SECRET_EXPORT" "$SECRET_DB"; do
+  for name in "$SECRET_SIGNING" "$SECRET_VALIDATOR" "$SECRET_EXPORT" "$SECRET_DB" "$SECRET_NAMES"; do
     retry gc secrets add-iam-policy-binding "$name" --member="serviceAccount:$API_SA" \
       --role=roles/secretmanager.secretAccessor >/dev/null
   done
@@ -489,8 +491,8 @@ step_api() {
     --service-account="$API_SA" --allow-unauthenticated --set-cloudsql-instances="$SQL_CONN" \
     --cpu=1 --memory=1Gi --min-instances=1 --max-instances=1 --concurrency=40 --timeout=120 \
     --no-cpu-throttling --cpu-boost \
-    --set-env-vars="^|^KAORI_ANTALYA=1|KAORI_ENVIRONMENT=production|KAORI_SIGNING_KEY_ID=$SIGNING_KEY_ID|KAORI_OBSERVATIONS_BUCKET=$BUCKET|KAORI_GENERALIST_URL=$gen_url|FIREBASE_PROJECT_ID=$PROJECT_ID|KAORI_ANDROID_PACKAGE=$ANDROID_PACKAGE|KAORI_ANDROID_CERT_SHA256=$app_cert|KAORI_REQUIRE_DEVICE=$REQUIRE_DEVICE|KAORI_ADMIN_EMAILS=$ADMIN_EMAILS|KAORI_CORS_ORIGINS=$ADMIN_ORIGINS" \
-    --set-secrets="KAORI_SIGNING_KEY=$SECRET_SIGNING:latest,KAORI_VALIDATOR_SIGNING_KEY=$SECRET_VALIDATOR:latest,KAORI_EXPORT_TOKEN=$SECRET_EXPORT:latest,DATABASE_URL=$SECRET_DB:latest"
+    --set-env-vars="^|^KAORI_ANTALYA=1|KAORI_ENVIRONMENT=production|KAORI_SIGNING_KEY_ID=$SIGNING_KEY_ID|KAORI_OBSERVATIONS_BUCKET=$BUCKET|KAORI_GENERALIST_URL=$gen_url|FIREBASE_PROJECT_ID=$PROJECT_ID|KAORI_ANDROID_PACKAGE=$ANDROID_PACKAGE|KAORI_ANDROID_CERT_SHA256=$app_cert|KAORI_REQUIRE_DEVICE=$REQUIRE_DEVICE|KAORI_ADMIN_EMAILS=$ADMIN_EMAILS|KAORI_CORS_ORIGINS=$ADMIN_ORIGINS|KAORI_JOIN_URL=https://storage.googleapis.com/$DL_BUCKET/join.html" \
+    --set-secrets="KAORI_SIGNING_KEY=$SECRET_SIGNING:latest,KAORI_VALIDATOR_SIGNING_KEY=$SECRET_VALIDATOR:latest,KAORI_EXPORT_TOKEN=$SECRET_EXPORT:latest,DATABASE_URL=$SECRET_DB:latest,KAORI_NAME_KEY=$SECRET_NAMES:latest"
   local url; url=$(service_url "$API_SERVICE")
   # Some organisations forbid public (allUsers) access; Cloud Run can skip its own check instead.
   if [ "$(curl -s -o /dev/null -w '%{http_code}' "$url/v1/invites/AAAA-AAAA")" = "403" ]; then

@@ -40,7 +40,7 @@ python -m kaori_api.antalya seed user:<firebase-uid> "<callsign>"
 |---|---|---|
 | `POST /v1/invites` | member | Body `{callsign?}` → `{code, expires_at, qr_payload}`. Single use, 7 days. Only the hash is stored |
 | `GET /v1/invites/{code}` | none | `{valid, referrer_callsign, expires_at}`, or `{valid:false, reason: unknown\|used\|expired}` |
-| `POST /v1/invites/redeem` | new user | `{code, relationship, known_for, device_id}` → `{agent_id, referrer}`. One member per device (hashed) |
+| `POST /v1/invites/redeem` | new user | `{code, name, relationship, known_for, device_id}` (the invitee's own account, given without seeing the inviter's) → `{agent_id, referrer}`. One member per device (hashed) |
 | `GET /v1/assignments?limit=5` | member | Blind: `{assignment_id, image_url, provenance_badge, claim_type_id, options, expires_at}` |
 | `GET /v1/assignments/{id}/image` | the assigned member | The photo, re-encoded as JPEG **without EXIF** (EXIF would reveal place and time) |
 | `POST /v1/assignments/{id}/reading` | the assigned member | `{cover, raining}` → `{ok}`. One reading per assignment. Records a vote on the key (plan §3.4) |
@@ -125,3 +125,23 @@ both from `ADMIN_ORIGINS`).
 
 Callsigns come from the ledger: a seed's, or the one on the latest invite a member issued. Kaori holds no
 emails for members; a member is `user:<firebase uid>`.
+
+## Two-sided introductions
+
+Each invite carries two independent accounts of the same relationship. The inviter names the person they invite
+and says how they know them and for how long; the invitee, without seeing those answers, gives their own name
+and their own answers. At redemption Kaori records `agreement: {relationship, known_for (within one step),
+name (first name, accents and case ignored)}`, each true, false, or null when a side did not say. A
+disagreement is recorded, not refused.
+
+Names are encrypted (AES-256-GCM, `KAORI_NAME_KEY` from Secret Manager), each bound to its record, so no name is
+in clear in a Signal, the export or a log. `GET /v1/admin/members` decrypts them for admins: `name` (the
+member's own), `name_by_inviter`, `inviter_relationship`, `inviter_known_for` and `agreement`.
+
+The invite QR holds `KAORI_JOIN_URL?code=…`, a web page that opens Liminal straight into Join, or installs it first.
+
+## Sky photos at 1x
+
+`earth.sky_cover.v1` declares `evidence.capture.camera_zoom: 1`. The app takes sky photos with its own camera
+held at 1x and says so in the provenance block (`camera: {zoom: 1}`, plus EXIF `digital_zoom` when the photo
+has it). Kaori records `checks.zoom_matches` and validators see it among the provenance ticks.

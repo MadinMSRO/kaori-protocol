@@ -55,6 +55,7 @@ def _callsigns(flow: FlowCore) -> Dict[str, str]:
 
 def members(flow: FlowCore) -> List[Dict[str, Any]]:
     names = _callsigns(flow)
+    issued = {(s.payload or {}).get("code_hash"): s for s in flow.store.get_by_type(SignalTypes.INVITE_ISSUED)}
     linked = {s.agent_id: s for s in devices.linked_devices(flow).values()}
     reports = Counter(s.agent_id for s in flow.store.get_by_type(SignalTypes.OBSERVATION_SUBMITTED))
     readings = Counter(s.agent_id for s in flow.store.get_by_type(SignalTypes.READING_SUBMITTED))
@@ -71,6 +72,8 @@ def members(flow: FlowCore) -> List[Dict[str, Any]]:
             "referrer_callsign": names.get(p.get("referrer")),
             "relationship": p.get("relationship"),
             "known_for": p.get("known_for"),
+            # both sides of the introduction: the inviter's account, and whether the two agree
+            **_introduction(s, issued.get(p.get("code_hash"))),
             "joined_at": _iso(s.time),
             "device": None if device is None else {
                 "device_id": device.object_id, "linked_at": _iso(device.time),
@@ -82,6 +85,22 @@ def members(flow: FlowCore) -> List[Dict[str, Any]]:
             "standing": round(flow.get_standing(s.agent_id), 1),
         })
     return out
+
+
+def _introduction(redeemed, invite) -> Dict[str, Any]:
+    """Names decrypted for admins (they are encrypted in the ledger), the inviter's answers, the agreement."""
+    from kaori_api import names as name_box
+
+    p = redeemed.payload or {}
+    ip = (invite.payload or {}) if invite is not None else {}
+    chash = p.get("code_hash")
+    return {
+        "name": name_box.unseal(p.get("name_enc"), f"member:{redeemed.agent_id}"),
+        "name_by_inviter": name_box.unseal(ip.get("invitee_name_enc"), f"invite:{chash}") if chash else None,
+        "inviter_relationship": ip.get("relationship"),
+        "inviter_known_for": ip.get("known_for"),
+        "agreement": p.get("agreement"),
+    }
 
 
 def truths(flow: FlowCore, truth_store: Any) -> List[Dict[str, Any]]:

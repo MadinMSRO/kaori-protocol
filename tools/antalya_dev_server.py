@@ -11,6 +11,7 @@ import os
 
 os.environ.setdefault("KAORI_ANTALYA", "1")
 os.environ.setdefault("KAORI_EXPORT_TOKEN", "dev-export")
+os.environ.setdefault("KAORI_NAME_KEY", __import__("secrets").token_hex(32))   # names sealed for this run only
 
 import uvicorn  # noqa: E402
 

@@ -38,7 +38,7 @@ from fastapi.responses import Response, StreamingResponse
 from kaori_flow import FlowCore
 from kaori_flow.primitives.signal import Signal, SignalTypes
 
-from kaori_api import devices
+from kaori_api import devices, names
 from kaori_api.generalist_client import generalist_timeout_seconds
 
 INVITE_TTL = timedelta(days=7)
@@ -168,14 +168,54 @@ def invite_status(flow: FlowCore, code: str) -> Dict[str, Any]:
     }
 
 
-def issue_invite(flow: FlowCore, agent_id: str, callsign: Optional[str] = None) -> Dict[str, Any]:
+def join_link(code: str) -> str:
+    """What the invite QR holds: the web join page when one is configured (it opens Liminal, or installs it
+    first), otherwise the app link."""
+    base = os.environ.get("KAORI_JOIN_URL", "").strip()
+    return f"{base}?code={code}" if base else f"liminal://join?code={code}"
+
+
+def _inviter_side(body: Dict[str, Any]) -> Dict[str, Any]:
+    """The inviter's account of the person they invite: their name, how they know them, for how long."""
+    try:
+        name = names.clean(body.get("invitee_name"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="invitee_name: " + str(exc))
+    relationship, known_for = body.get("relationship"), body.get("known_for")
+    if relationship is not None and relationship not in RELATIONSHIPS:
+        raise HTTPException(status_code=400, detail="relationship must be one of " + ", ".join(RELATIONSHIPS))
+    if known_for is not None and known_for not in KNOWN_FOR:
+        raise HTTPException(status_code=400, detail="known_for must be one of " + ", ".join(KNOWN_FOR))
+    return {"name": name, "relationship": relationship, "known_for": known_for}
+
+
+def issue_invite(flow: FlowCore, agent_id: str, callsign: Optional[str] = None,
+                 body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     require_member(flow, agent_id)
+    side = _inviter_side(body or {})
     code = new_code()
     chash = code_hash(code)
     expires_at = _now() + INVITE_TTL
+    # the inviter's answers are kept for comparison when the invite is redeemed, and never shown to the invitee
     _emit(flow, SignalTypes.INVITE_ISSUED, agent_id, f"invite:{chash}",
-          {"code_hash": chash, "expires_at": expires_at.isoformat(), "callsign": callsign})
-    return {"code": code, "expires_at": expires_at.isoformat(), "qr_payload": f"liminal://join?code={code}"}
+          {"code_hash": chash, "expires_at": expires_at.isoformat(), "callsign": callsign,
+           "invitee_name_enc": names.seal(side["name"], f"invite:{chash}"),
+           "relationship": side["relationship"], "known_for": side["known_for"]})
+    return {"code": code, "expires_at": expires_at.isoformat(), "qr_payload": join_link(code)}
+
+
+def agreement(inviter: Dict[str, Any], invitee: Dict[str, Any]) -> Dict[str, Optional[bool]]:
+    """Whether the two independent accounts agree; None where one side did not say."""
+    def known_close(a, b):
+        if a not in KNOWN_FOR or b not in KNOWN_FOR:
+            return None
+        return abs(KNOWN_FOR.index(a) - KNOWN_FOR.index(b)) <= 1
+    rel_a, rel_b = inviter.get("relationship"), invitee.get("relationship")
+    return {
+        "relationship": None if not rel_a or not rel_b else rel_a == rel_b,
+        "known_for": known_close(inviter.get("known_for"), invitee.get("known_for")),
+        "name": names.same_person(inviter.get("name"), invitee.get("name")),
+    }
 
 
 def redeem_invite(flow: FlowCore, agent_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
@@ -204,14 +244,23 @@ def redeem_invite(flow: FlowCore, agent_id: str, body: Dict[str, Any]) -> Dict[s
     referrer = issued.agent_id
     if referrer == agent_id:
         raise HTTPException(status_code=400, detail="You cannot redeem your own invite")
+    try:
+        own_name = names.clean(body.get("name"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="name: " + str(exc))
     device_hash = _sha("device:" + device_id.strip())
     for signal in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED):
         if signal.payload.get("device_id_hash") == device_hash:
             raise HTTPException(status_code=409, detail="This device already joined")
     ensure_agent_registered(flow, agent_id, role="observer")
+    ip = issued.payload or {}
+    inviter = {"name": names.unseal(ip.get("invitee_name_enc"), f"invite:{chash}"),
+               "relationship": ip.get("relationship"), "known_for": ip.get("known_for")}
     _emit(flow, SignalTypes.REFERRAL_REDEEMED, agent_id, f"invite:{chash}",
           {"referrer": referrer, "relationship": relationship, "known_for": known_for,
-           "device_id_hash": device_hash, "code_hash": chash})
+           "device_id_hash": device_hash, "code_hash": chash,
+           "name_enc": names.seal(own_name, f"member:{agent_id}"),
+           "agreement": agreement(inviter, {"name": own_name, "relationship": relationship, "known_for": known_for})})
     return {"agent_id": agent_id, "referrer": referrer}
 
 
@@ -244,6 +293,23 @@ def _exif_time(exif: Dict[str, Any]) -> tuple[Optional[datetime], bool]:
     return naive.replace(tzinfo=timezone.utc), False
 
 
+def zoom_check(provenance: Dict[str, Any], capture: Optional[Dict[str, Any]]) -> Optional[bool]:
+    """The ClaimType's camera zoom (evidence.capture.camera_zoom), if it sets one: the app must declare that
+    zoom, and the photo's EXIF DigitalZoomRatio, when present, must agree (0 or 1 means no digital zoom)."""
+    want = (capture or {}).get("camera_zoom")
+    if want is None:
+        return None
+    camera = provenance.get("camera") if isinstance(provenance.get("camera"), dict) else {}
+    exif = provenance.get("exif") if isinstance(provenance.get("exif"), dict) else {}
+    declared = camera.get("zoom")
+    ratio = exif.get("digital_zoom")
+    if isinstance(ratio, (int, float)) and ratio not in (0, 1) and abs(ratio - float(want)) > 0.01:
+        return False
+    if not isinstance(declared, (int, float)):
+        return None if ratio is None else abs(float(ratio or 1) - float(want)) <= 0.01
+    return abs(float(declared) - float(want)) <= 0.01
+
+
 def provenance_checks(provenance: Dict[str, Any], reported_at: datetime, geo: Dict[str, float]) -> Dict[str, Any]:
     exif = provenance.get("exif") if isinstance(provenance.get("exif"), dict) else {}
     in_app = provenance.get("capture_source") == "camera"
@@ -264,7 +330,8 @@ def provenance_checks(provenance: Dict[str, Any], reported_at: datetime, geo: Di
 
 
 def record_provenance(flow: FlowCore, *, reporter_id: str, observation: Any, truth_key: str,
-                      provenance: Optional[Dict[str, Any]], device_proof: Optional[Dict[str, Any]] = None) -> Optional[Signal]:
+                      provenance: Optional[Dict[str, Any]], device_proof: Optional[Dict[str, Any]] = None,
+                      capture: Optional[Dict[str, Any]] = None) -> Optional[Signal]:
     if not observation.evidence_refs:
         return None
     provenance = provenance if isinstance(provenance, dict) else {}
@@ -276,21 +343,26 @@ def record_provenance(flow: FlowCore, *, reporter_id: str, observation: Any, tru
         "truthkey": truth_key,
         "claim_type_id": observation.claim_type,
         "evidence_sha256": sha,
-        "exif": {k: exif.get(k) for k in ("datetime_original", "offset_time", "tz_offset_min", "gps") if k in exif},
+        "exif": {k: exif.get(k) for k in ("datetime_original", "offset_time", "tz_offset_min", "gps", "digital_zoom") if k in exif},
         "capture_source": provenance.get("capture_source"),
+        "camera": {k: provenance["camera"].get(k) for k in ("zoom",)} if isinstance(provenance.get("camera"), dict) else None,
         "device": {k: device.get(k) for k in ("platform", "model", "app_version") if k in device},
         "checks": {**provenance_checks(provenance, observation.reported_at, observation.geo),
+                   "zoom_matches": zoom_check(provenance, capture),
                    "device_signed": bool(device_proof and device_proof.get("verified"))},
         "device_proof": device_proof or {"device_id": None, "verified": False, "reason": "unsigned"},
     })
+
+
+BADGE = ("in_app_capture", "time_matches", "place_matches", "zoom_matches", "device_signed")
 
 
 def provenance_badge(flow: FlowCore, sha: str) -> Dict[str, Any]:
     for signal in flow.store.get_by_type(SignalTypes.PROVENANCE_RECORDED):
         if signal.payload.get("evidence_sha256") == sha:
             checks = signal.payload.get("checks") or {}
-            return {k: checks.get(k) for k in ("in_app_capture", "time_matches", "place_matches", "device_signed")}
-    return {"in_app_capture": None, "time_matches": None, "place_matches": None, "device_signed": None}
+            return {k: checks.get(k) for k in BADGE}
+    return {k: None for k in BADGE}
 
 
 # --------------------------------------------------------------------------------------------- assignments
@@ -554,7 +626,7 @@ def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[...
         body = await _json(request)
         callsign = body.get("callsign") if isinstance(body.get("callsign"), str) else None
         with lock:
-            return issue_invite(app.state.flow, agent_id, callsign=(callsign or "")[:40] or None)
+            return issue_invite(app.state.flow, agent_id, callsign=(callsign or "")[:40] or None, body=body)
 
     @app.get("/v1/invites/{code}")
     def check_invite(code: str):

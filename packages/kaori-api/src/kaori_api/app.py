@@ -738,6 +738,7 @@ def create_app(
                             truth_key=truth_key,
                             provenance=provenance_blocks[index],
                             device_proof=proofs[index],
+                            capture=((claim_type.get_config() or {}).get("evidence") or {}).get("capture"),
                         )
                     if antalya.enabled():
                         antalya.start_ai_read(request.app, observation, truth_key,

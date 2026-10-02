@@ -168,7 +168,7 @@ def test_provenance_is_recorded_with_its_checks(env):
     assert signal.payload["capture_source"] == "camera"
     assert signal.payload["device"] == {"platform": "android", "model": "Pixel 8", "app_version": "0.9.0"}
     assert signal.payload["checks"] == {"in_app_capture": True, "time_matches": True, "place_matches": True,
-                                        "device_signed": False}
+                                        "zoom_matches": None, "device_signed": False}
 
 
 def test_provenance_checks_catch_wrong_time_and_place():
@@ -200,7 +200,7 @@ def test_assignments_are_blind_and_never_your_own(env):
     assert len(got) == 3
     for item in got:
         assert set(item) == {"assignment_id", "image_url", "provenance_badge", "claim_type_id", "options", "expires_at"}
-        assert set(item["provenance_badge"]) == {"in_app_capture", "time_matches", "place_matches", "device_signed"}
+        assert set(item["provenance_badge"]) == {"in_app_capture", "time_matches", "place_matches", "zoom_matches", "device_signed"}
         assert KEY not in json.dumps(item) and "user:" not in json.dumps(item)
     again = client.get("/v1/assignments?limit=5", headers=_h("val")).json()
     assert sorted(a["assignment_id"] for a in again) == sorted(a["assignment_id"] for a in got)
@@ -373,3 +373,27 @@ def test_seed_command_needs_only_the_ledger(monkeypatch, capsys):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     assert antalya.main(["seed", "user:someone"]) == 2
     assert "DATABASE_URL is required" in capsys.readouterr().out
+
+
+
+@pytest.mark.parametrize("provenance,expected", [
+    ({"camera": {"zoom": 1}}, True),                                     # the app's camera, held at 1x
+    ({"camera": {"zoom": 1}, "exif": {"digital_zoom": 1.0}}, True),
+    ({"camera": {"zoom": 1}, "exif": {"digital_zoom": 0}}, True),        # 0 = no digital zoom (EXIF)
+    ({"camera": {"zoom": 2}}, False),
+    ({"camera": {"zoom": 1}, "exif": {"digital_zoom": 3.2}}, False),     # declared 1x, the photo says otherwise
+    ({"exif": {"digital_zoom": 2.0}}, False),
+    ({"exif": {"digital_zoom": 1.0}}, True),
+    ({}, None),                                                          # nothing to go on
+])
+def test_sky_photos_must_be_taken_at_1x(provenance, expected):
+    assert antalya.zoom_check(provenance, {"camera_zoom": 1}) is expected
+    assert antalya.zoom_check(provenance, None) is None                  # a ClaimType without the rule
+
+
+def test_the_sky_claimtype_declares_1x():
+    from pathlib import Path
+    from kaori_truth.factory import load_claim_type
+    spec = Path(__file__).parents[2] / "kaori-spec/schemas"
+    ct = load_claim_type(spec / "earth/sky_cover_v1.yaml", str(spec))
+    assert ct.get_config()["evidence"]["capture"] == {"camera_zoom": 1}

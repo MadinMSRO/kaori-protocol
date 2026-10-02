@@ -82,6 +82,11 @@ evidence:
   types: ["photo"]
   min_count: 1
   max_count: 5
+  # How the photo must be taken. Every sky photo at the camera's 1x (no zoom), so each covers the same
+  # field of view and readings of different photos compare. The app's camera holds 1x; Kaori checks the
+  # photo's provenance (the app's declaration and EXIF DigitalZoomRatio) and shows validators a tick.
+  capture:
+    camera_zoom: 1
   storage:
     canonical_scheme: "gs://"
     bucket: "kaori-evidence"
