@@ -55,11 +55,13 @@ def _join(client, flow, name, referrer="seed", device=None):
     if referrer == "seed":
         antalya.seed_member(flow, "user:" + name, callsign=name.title())
         return
-    code = client.post("/v1/invites", headers=_h(referrer), json={"callsign": referrer.title()}).json()["code"]
+    made = client.post("/v1/invites", headers=_h(referrer), json={"callsign": referrer.title()}).json()
     r = client.post("/v1/invites/redeem", headers=_h(name),
-                    json={"code": code, "relationship": "colleague", "known_for": "1_5y",
+                    json={"code": made["code"], "relationship": "colleague", "known_for": "1_5y",
                           "device_id": device or f"device-{name}-0001"})
     assert r.status_code == 200, r.text
+    # the in-person handshake: the inviter confirms who is joining
+    assert client.post(f"/v1/invites/{made['id']}/confirm", headers=_h(referrer)).status_code == 200
 
 
 def _jpeg_with_exif() -> bytes:
@@ -98,7 +100,8 @@ def test_routes_mount_only_on_the_antalya_service(monkeypatch):
     live = {getattr(r, "path", None) for r in create_app(flow=FlowCore(store=InMemorySignalStore()),
                                                          verify_token=_verify).router.routes}
     assert live - plain == {
-        "/v1/invites", "/v1/invites/{code}", "/v1/invites/redeem", "/v1/assignments",
+        "/v1/invites", "/v1/invites/{code}", "/v1/invites/redeem", "/v1/invites/mine",
+        "/v1/invites/{invite_id}/{action}", "/v1/admin/invites", "/v1/assignments",
         "/v1/assignments/{assignment_id}/image", "/v1/assignments/{assignment_id}/reading", "/v1/export",
         "/v1/me", "/v1/devices/challenge", "/v1/devices/link",
         "/v1/admin/me", "/v1/admin/overview", "/v1/admin/members", "/v1/admin/truths", "/v1/admin/devices",
@@ -112,14 +115,15 @@ def test_invite_is_single_use_and_stored_only_as_a_hash(env):
     client, flow, _ = env
     _join(client, flow, "madin")
     made = client.post("/v1/invites", headers=_h("madin"), json={"callsign": "Heron"}).json()
-    assert set(made) == {"code", "expires_at", "qr_payload"}
+    assert set(made) == {"code", "id", "expires_at", "qr_payload"}
     assert made["qr_payload"].endswith(made["code"])
     check = client.get(f"/v1/invites/{made['code'].lower()}").json()
     assert check["valid"] and check["referrer_callsign"] == "Heron"
 
     body = {"code": made["code"], "relationship": "friend", "known_for": "gt_5y", "device_id": "install-aaaa-1111"}
     first = client.post("/v1/invites/redeem", headers=_h("amira"), json=body)
-    assert first.status_code == 200 and first.json() == {"agent_id": "user:amira", "referrer": "user:madin"}
+    assert first.status_code == 200
+    assert (first.json()["agent_id"], first.json()["referrer"], first.json()["member"]) == ("user:amira", "user:madin", False)
     again = client.post("/v1/invites/redeem", headers=_h("omar"), json=dict(body, device_id="install-bbbb-2222"))
     assert again.status_code == 410
     assert client.get(f"/v1/invites/{made['code']}").json() == {"valid": False, "reason": "used"}
@@ -133,7 +137,7 @@ def test_invite_expires(env, monkeypatch):
     client, flow, _ = env
     _join(client, flow, "madin")
     code = client.post("/v1/invites", headers=_h("madin")).json()["code"]
-    later = datetime.now(timezone.utc) + timedelta(days=8)
+    later = datetime.now(timezone.utc) + timedelta(minutes=31)   # an invite QR lasts 30 minutes
     monkeypatch.setattr(antalya, "_now", lambda: later)
     r = client.post("/v1/invites/redeem", headers=_h("amira"),
                     json={"code": code, "relationship": "friend", "known_for": "lt_1m", "device_id": "install-xyz-123"})

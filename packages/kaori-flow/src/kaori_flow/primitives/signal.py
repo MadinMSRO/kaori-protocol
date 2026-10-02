@@ -115,6 +115,10 @@ class SignalTypes:
     # Membership by referral (Antalya MVP)
     INVITE_ISSUED = "INVITE_ISSUED"
     REFERRAL_REDEEMED = "REFERRAL_REDEEMED"
+    # the inviter's side of the in-person handshake
+    INVITE_CONFIRMED = "INVITE_CONFIRMED"
+    INVITE_DECLINED = "INVITE_DECLINED"
+    INVITE_CANCELLED = "INVITE_CANCELLED"
 
     # Evidence provenance and blind readings (Antalya MVP)
     PROVENANCE_RECORDED = "PROVENANCE_RECORDED"

@@ -60,8 +60,12 @@ def members(flow: FlowCore) -> List[Dict[str, Any]]:
     reports = Counter(s.agent_id for s in flow.store.get_by_type(SignalTypes.OBSERVATION_SUBMITTED))
     readings = Counter(s.agent_id for s in flow.store.get_by_type(SignalTypes.READING_SUBMITTED))
     invites = Counter(s.agent_id for s in flow.store.get_by_type(SignalTypes.INVITE_ISSUED))
+    joined = Counter(s.agent_id for s in flow.store.get_by_type(SignalTypes.INVITE_CONFIRMED))
     out = []
     for s in sorted(flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED), key=lambda s: s.time):
+        # members only: a request still waiting for its inviter, or declined, is not a member
+        if not antalya._admitted(flow, s):
+            continue
         p = s.payload or {}
         device = linked.get(s.agent_id)
         out.append({
@@ -82,6 +86,7 @@ def members(flow: FlowCore) -> List[Dict[str, Any]]:
             "reports": reports.get(s.agent_id, 0),
             "readings": readings.get(s.agent_id, 0),
             "invites_issued": invites.get(s.agent_id, 0),
+            "invites_joined": joined.get(s.agent_id, 0),
             "standing": round(flow.get_standing(s.agent_id), 1),
         })
     return out
@@ -148,6 +153,18 @@ def device_report(flow: FlowCore) -> Dict[str, Any]:
     return {"linked": sorted(linked, key=lambda d: d["linked_at"] or "", reverse=True), "refused": refused}
 
 
+def invites(flow: FlowCore) -> List[Dict[str, Any]]:
+    """Every invite and what happened to it, newest first, with both people's callsigns."""
+    names = _callsigns(flow)
+    out = []
+    for s in sorted(flow.store.get_by_type(SignalTypes.INVITE_ISSUED), key=lambda s: s.time, reverse=True):
+        view = antalya._invite_view(flow, s)
+        red = antalya._redemption(flow, view["id"])
+        out.append({**view, "inviter": s.agent_id, "inviter_callsign": names.get(s.agent_id),
+                    "joiner": red.agent_id if red is not None else None})
+    return out
+
+
 def overview(flow: FlowCore, truth_store: Any) -> Dict[str, Any]:
     m = members(flow)
     t = truths(flow, truth_store)
@@ -157,11 +174,14 @@ def overview(flow: FlowCore, truth_store: Any) -> Dict[str, Any]:
     hours = sorted(set(reports_h) | set(readings_h))
     statuses = Counter(x["status"] for x in t)
     redeemed = by_type(SignalTypes.REFERRAL_REDEEMED)
+    inv = invites(flow)
     return {
         "members": len(m),
         "seeds": sum(1 for x in m if x["seed"]),
-        "invites_issued": len(by_type(SignalTypes.INVITE_ISSUED)),
-        "invites_redeemed": sum(1 for s in redeemed if (s.payload or {}).get("code_hash")),
+        "invites_issued": len(inv),
+        # what happened to every invite: only "joined" are new members
+        "invites_by_status": dict(Counter(x["status"] for x in inv)),
+        "invites_redeemed": sum(1 for s in redeemed if (s.payload or {}).get("code_hash") and antalya._admitted(flow, s)),
         "phones_linked": sum(1 for x in m if x["device"]),
         "phones_refused": len(by_type(SignalTypes.DEVICE_LINK_REFUSED)),
         "reports": len(by_type(SignalTypes.OBSERVATION_SUBMITTED)),
@@ -212,6 +232,10 @@ def add_routes(app: Any) -> None:
     @app.get("/v1/admin/members")
     def admin_members(_: Dict[str, str] = Depends(require_admin)):
         return members(app.state.flow)
+
+    @app.get("/v1/admin/invites")
+    def admin_invites(_: Dict[str, str] = Depends(require_admin)):
+        return invites(app.state.flow)
 
     @app.get("/v1/admin/truths")
     def admin_truths(_: Dict[str, str] = Depends(require_admin)):

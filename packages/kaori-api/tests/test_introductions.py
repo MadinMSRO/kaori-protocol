@@ -97,6 +97,7 @@ def test_admins_see_both_sides_decrypted(env, monkeypatch):  # noqa: F811
     antalya.seed_member(flow, "user:madin", callsign="Mugiwara")
     made = _invite(client, invitee_name="Aisha Ibrahim", relationship="friend", known_for="gt_5y")
     _redeem(client, made["code"], "aisha", name="Aisha", relationship="friend", known_for="1_5y")
+    client.post(f"/v1/invites/{made['id']}/confirm", headers=_h("madin"))
     [m] = [m for m in client.get("/v1/admin/members", headers={"Authorization": "Bearer t"}).json() if m["agent_id"] == "user:aisha"]
     assert (m["name"], m["name_by_inviter"], m["inviter_relationship"], m["inviter_known_for"]) == ("Aisha", "Aisha Ibrahim", "friend", "gt_5y")
     assert m["agreement"] == {"relationship": True, "known_for": True, "name": True}

@@ -151,12 +151,12 @@ def link(flow: FlowCore, agent_id: str, body: Dict[str, Any], trust: Optional[at
 
 
 def me(flow: FlowCore, agent_id: str) -> Dict[str, Any]:
-    from kaori_api.antalya import is_member
+    from kaori_api.antalya import join_state
 
     device = active_device(flow, agent_id)
     return {
         "agent_id": agent_id,
-        "member": is_member(flow, agent_id),
+        **join_state(flow, agent_id),
         "device": None if device is None else {
             "device_id": device.object_id,
             "linked_at": device.time.isoformat(),

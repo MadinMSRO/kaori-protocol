@@ -55,9 +55,10 @@ def test_only_verified_listed_admins_get_in(env, token, code):
 
 def test_members_show_who_invited_whom_and_their_phone(env):
     client, flow, phone = env
-    code = client.post("/v1/invites", headers=_h("madin"), json={"callsign": "Heron"}).json()["code"]
+    made = client.post("/v1/invites", headers=_h("madin"), json={"callsign": "Heron"}).json()
     assert client.post("/v1/invites/redeem", headers=_h("aisha"),
-                       json={"code": code, "relationship": "met_at_iac", "known_for": "lt_1m", "device_id": "dev-aisha-001"}).status_code == 200
+                       json={"code": made["code"], "relationship": "met_at_iac", "known_for": "lt_1m", "device_id": "dev-aisha-001"}).status_code == 200
+    assert client.post(f"/v1/invites/{made['id']}/confirm", headers=_h("madin")).status_code == 200
     device_id = _link(client, phone, who="aisha").json()["device_id"]
     by_id = {m["agent_id"]: m for m in client.get("/v1/admin/members", headers=_a()).json()}
     assert by_id["user:madin"]["seed"] and by_id["user:madin"]["callsign"] == "Heron"

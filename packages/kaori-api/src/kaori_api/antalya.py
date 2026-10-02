@@ -4,8 +4,12 @@ Antalya MVP (IAC 2026): referral-only membership, provenance, blind readings and
 Every event here is an immutable Signal (Rule 1). Invites, redemptions, provenance, assignments and readings are
 derived from the signal log, so the test needs no new tables:
 
-  INVITE_ISSUED        a member creates an invite              agent = referrer,  object = invite:<code hash>
-  REFERRAL_REDEEMED    an invitee (or a seed) becomes a member  agent = new member, object = invite:<code hash>
+  INVITE_ISSUED        a member shows an invite QR (30 min)     agent = referrer,  object = invite:<code hash>
+  REFERRAL_REDEEMED    the invitee asks to join with it          agent = invitee,   object = invite:<code hash>
+                       (a seed joins this way with no invite)
+  INVITE_CONFIRMED     the inviter, in person, confirms them     agent = referrer,  object = invite:<code hash>
+  INVITE_DECLINED      the inviter says it is not who they meant agent = referrer,  object = invite:<code hash>
+  INVITE_CANCELLED     the inviter withdraws an unused invite    agent = referrer,  object = invite:<code hash>
   PROVENANCE_RECORDED  an observation's evidence is accepted    agent = reporter,  object = evidence:<sha256>
   ASSIGNMENT_ISSUED    a photo is assigned to a validator       agent = validator, object = assignment:<id>
   READING_SUBMITTED    a validator renders the photo            agent = validator, object = assignment:<id>
@@ -13,6 +17,10 @@ derived from the signal log, so the test needs no new tables:
 Blindness: an assignment never carries the reporter, the place, the TruthKey, the reporter's eye answer or other
 readings, and the image is re-encoded without its EXIF before a validator sees it. A validator is never assigned
 their own photo, nor a photo from a key they reported at.
+
+Membership is an in-person handshake: the inviter shows a QR, the invitee scans it, installs Liminal, signs in and
+asks to join; the inviter's phone then shows who is joining and they become a member only when the inviter
+confirms. Invites are counted by what happened to them (waiting, joining, joined, expired, declined, cancelled).
 
 Readings feed the proven compile path through an adapter (plan §3.4): RATIFY when the reading is within one band
 of that observation's eye value and agrees on rain, otherwise REJECT. The readings themselves stay in the log for
@@ -41,7 +49,9 @@ from kaori_flow.primitives.signal import Signal, SignalTypes
 from kaori_api import devices, names
 from kaori_api.generalist_client import generalist_timeout_seconds
 
-INVITE_TTL = timedelta(days=7)
+INVITE_TTL = timedelta(minutes=30)
+# the inviter confirms a join request within this (they are standing together)
+CONFIRM_TTL = timedelta(minutes=30)
 ASSIGNMENT_TTL = timedelta(minutes=30)
 READINGS_PER_PHOTO = 3
 MAX_ASSIGNMENTS = 20
@@ -111,8 +121,55 @@ def _parse_time(value: Any) -> Optional[datetime]:
 
 # --------------------------------------------------------------------------------------------- membership
 
+_RESOLUTIONS = (SignalTypes.INVITE_CONFIRMED, SignalTypes.INVITE_DECLINED, SignalTypes.INVITE_CANCELLED)
+
+
+def _resolution(flow: FlowCore, chash: Optional[str]) -> Optional[Signal]:
+    """The inviter's last word on an invite: confirmed, declined or cancelled."""
+    if not chash:
+        return None
+    found = [s for kind in _RESOLUTIONS for s in flow.store.get_by_type(kind) if (s.payload or {}).get("code_hash") == chash]
+    return max(found, key=lambda s: s.time) if found else None
+
+
+def _admitted(flow: FlowCore, redemption: Signal) -> bool:
+    """A redemption makes a member when it needs no confirmation (seeds, and joins from before the handshake)
+    or when the inviter confirmed it."""
+    p = redemption.payload or {}
+    if not p.get("needs_confirm"):
+        return True
+    res = _resolution(flow, p.get("code_hash"))
+    return res is not None and res.signal_type == SignalTypes.INVITE_CONFIRMED
+
+
+def _pending(flow: FlowCore, redemption: Signal) -> bool:
+    p = redemption.payload or {}
+    return bool(p.get("needs_confirm")) and _resolution(flow, p.get("code_hash")) is None \
+        and redemption.time + CONFIRM_TTL > _now()
+
+
 def is_member(flow: FlowCore, agent_id: str) -> bool:
-    return any(s.agent_id == agent_id for s in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED))
+    return any(s.agent_id == agent_id and _admitted(flow, s) for s in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED))
+
+
+def join_state(flow: FlowCore, agent_id: str) -> Dict[str, Any]:
+    """For /v1/me: member, or waiting for their inviter to confirm them, or neither."""
+    if is_member(flow, agent_id):
+        return {"member": True, "joining": None}
+    mine = sorted((s for s in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED) if s.agent_id == agent_id),
+                  key=lambda s: s.time)
+    if not mine:
+        return {"member": False, "joining": None}
+    last = mine[-1]
+    p = last.payload or {}
+    res = _resolution(flow, p.get("code_hash"))
+    issued = _invite(flow, p.get("code_hash")) if p.get("code_hash") else None
+    state = "waiting" if _pending(flow, last) else "declined" if res is not None else "expired"
+    return {"member": False, "joining": {
+        "state": state,
+        "referrer_callsign": (issued.payload or {}).get("callsign") if issued else None,
+        "confirm_by": (last.time + CONFIRM_TTL).isoformat(),
+    }}
 
 
 def require_member(flow: FlowCore, agent_id: str) -> None:
@@ -157,6 +214,9 @@ def invite_status(flow: FlowCore, code: str) -> Dict[str, Any]:
     if issued is None:
         return {"valid": False, "reason": "unknown"}
     expires_at = _parse_time(issued.payload.get("expires_at"))
+    res = _resolution(flow, chash)
+    if res is not None and res.signal_type == SignalTypes.INVITE_CANCELLED:
+        return {"valid": False, "reason": "cancelled"}
     if _redemption(flow, chash) is not None:
         return {"valid": False, "reason": "used"}
     if expires_at is None or expires_at <= _now():
@@ -201,7 +261,7 @@ def issue_invite(flow: FlowCore, agent_id: str, callsign: Optional[str] = None,
           {"code_hash": chash, "expires_at": expires_at.isoformat(), "callsign": callsign,
            "invitee_name_enc": names.seal(side["name"], f"invite:{chash}"),
            "relationship": side["relationship"], "known_for": side["known_for"]})
-    return {"code": code, "expires_at": expires_at.isoformat(), "qr_payload": join_link(code)}
+    return {"code": code, "id": chash, "expires_at": expires_at.isoformat(), "qr_payload": join_link(code)}
 
 
 def agreement(inviter: Dict[str, Any], invitee: Dict[str, Any]) -> Dict[str, Optional[bool]]:
@@ -235,9 +295,11 @@ def redeem_invite(flow: FlowCore, agent_id: str, body: Dict[str, Any]) -> Dict[s
         raise HTTPException(status_code=400, detail="Missing device_id")
     if is_member(flow, agent_id):
         raise HTTPException(status_code=409, detail="Already a member")
+    if any(s.agent_id == agent_id and _pending(flow, s) for s in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED)):
+        raise HTTPException(status_code=409, detail="Waiting for your inviter to confirm you")
     status = invite_status(flow, code)
     if not status["valid"]:
-        raise HTTPException(status_code=410 if status["reason"] in ("used", "expired") else 404,
+        raise HTTPException(status_code=410 if status["reason"] in ("used", "expired", "cancelled") else 404,
                             detail=f"Invite {status['reason']}")
     chash = code_hash(code)
     issued = _invite(flow, chash)
@@ -250,7 +312,8 @@ def redeem_invite(flow: FlowCore, agent_id: str, body: Dict[str, Any]) -> Dict[s
         raise HTTPException(status_code=400, detail="name: " + str(exc))
     device_hash = _sha("device:" + device_id.strip())
     for signal in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED):
-        if signal.payload.get("device_id_hash") == device_hash:
+        # a phone joins once; a request that was declined or ran out does not hold it
+        if signal.payload.get("device_id_hash") == device_hash and (_admitted(flow, signal) or _pending(flow, signal)):
             raise HTTPException(status_code=409, detail="This device already joined")
     ensure_agent_registered(flow, agent_id, role="observer")
     ip = issued.payload or {}
@@ -260,8 +323,62 @@ def redeem_invite(flow: FlowCore, agent_id: str, body: Dict[str, Any]) -> Dict[s
           {"referrer": referrer, "relationship": relationship, "known_for": known_for,
            "device_id_hash": device_hash, "code_hash": chash,
            "name_enc": names.seal(own_name, f"member:{agent_id}"),
-           "agreement": agreement(inviter, {"name": own_name, "relationship": relationship, "known_for": known_for})})
-    return {"agent_id": agent_id, "referrer": referrer}
+           "agreement": agreement(inviter, {"name": own_name, "relationship": relationship, "known_for": known_for}),
+           "needs_confirm": True})
+    return {"agent_id": agent_id, "referrer": referrer, "member": False, "joining": join_state(flow, agent_id)["joining"]}
+
+
+# ------------------------------------------------------------------------------- the inviter's side
+
+def _invite_view(flow: FlowCore, issued: Signal) -> Dict[str, Any]:
+    """One invite as its inviter sees it. The joiner's own answers about the inviter are never shown."""
+    p = issued.payload or {}
+    chash = p.get("code_hash")
+    red = _redemption(flow, chash)
+    res = _resolution(flow, chash)
+    expires_at = _parse_time(p.get("expires_at"))
+    if res is not None:
+        status = {SignalTypes.INVITE_CONFIRMED: "joined", SignalTypes.INVITE_DECLINED: "declined",
+                  SignalTypes.INVITE_CANCELLED: "cancelled"}[res.signal_type]
+    elif red is not None:
+        status = "joining" if red.time + CONFIRM_TTL > _now() else "expired"
+    else:
+        status = "waiting" if expires_at and expires_at > _now() else "expired"
+    return {
+        "id": chash,
+        "status": status,
+        "created_at": issued.time.isoformat(),
+        "expires_at": expires_at.isoformat() if expires_at else None,
+        "name_by_you": names.unseal(p.get("invitee_name_enc"), f"invite:{chash}"),
+        # the name the person typed on their own phone, so the inviter can see who is joining
+        "joiner_name": names.unseal((red.payload or {}).get("name_enc"), f"member:{red.agent_id}") if red else None,
+        "joined_at": res.time.isoformat() if res is not None and status == "joined" else None,
+        "confirm_by": (red.time + CONFIRM_TTL).isoformat() if red is not None and status == "joining" else None,
+    }
+
+
+def my_invites(flow: FlowCore, agent_id: str) -> List[Dict[str, Any]]:
+    mine = [s for s in flow.store.get_by_type(SignalTypes.INVITE_ISSUED) if s.agent_id == agent_id]
+    return [_invite_view(flow, s) for s in sorted(mine, key=lambda s: s.time, reverse=True)]
+
+
+def resolve_invite(flow: FlowCore, agent_id: str, invite_id: str, action: str) -> Dict[str, Any]:
+    """confirm or decline the person joining with my invite, or cancel one nobody has used yet."""
+    issued = _invite(flow, invite_id)
+    if issued is None or issued.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="No such invite of yours")
+    view = _invite_view(flow, issued)
+    kinds = {"confirm": (SignalTypes.INVITE_CONFIRMED, "joining"), "decline": (SignalTypes.INVITE_DECLINED, "joining"),
+             "cancel": (SignalTypes.INVITE_CANCELLED, "waiting")}
+    if action not in kinds:
+        raise HTTPException(status_code=400, detail="action must be confirm, decline or cancel")
+    kind, needs = kinds[action]
+    if view["status"] != needs:
+        raise HTTPException(status_code=409, detail=f"This invite is {view['status']}")
+    red = _redemption(flow, invite_id)
+    _emit(flow, kind, agent_id, f"invite:{invite_id}",
+          {"code_hash": invite_id, "member": red.agent_id if red is not None else None})
+    return _invite_view(flow, issued)
 
 
 # --------------------------------------------------------------------------------------------- provenance
@@ -628,9 +745,18 @@ def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[...
         with lock:
             return issue_invite(app.state.flow, agent_id, callsign=(callsign or "")[:40] or None, body=body)
 
+    @app.get("/v1/invites/mine")
+    def list_my_invites(agent_id: str = Depends(require_agent)):
+        return my_invites(app.state.flow, agent_id)
+
     @app.get("/v1/invites/{code}")
     def check_invite(code: str):
         return invite_status(app.state.flow, code)
+
+    @app.post("/v1/invites/{invite_id}/{action}")
+    def resolve(invite_id: str, action: str, agent_id: str = Depends(require_agent)):
+        with lock:
+            return resolve_invite(app.state.flow, agent_id, invite_id, action)
 
     @app.post("/v1/invites/redeem")
     async def redeem(request: Request, agent_id: str = Depends(require_agent)):
