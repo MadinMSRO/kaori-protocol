@@ -10,6 +10,7 @@ derived from the signal log, so the test needs no new tables:
   INVITE_CONFIRMED     the inviter, in person, confirms them     agent = referrer,  object = invite:<code hash>
   INVITE_DECLINED      the inviter says it is not who they meant agent = referrer,  object = invite:<code hash>
   INVITE_CANCELLED     the inviter withdraws an unused invite    agent = referrer,  object = invite:<code hash>
+  INVITE_HOLD_OPENED   the joiner's phone opens an NFC hold     agent = invitee,   object = invite:<code hash>
   PROVENANCE_RECORDED  an observation's evidence is accepted    agent = reporter,  object = evidence:<sha256>
   ASSIGNMENT_ISSUED    evidence is assigned to a validator      agent = validator, object = assignment:<id>
   READING_SUBMITTED    a validator answers what it shows        agent = validator, object = assignment:<id>
@@ -31,6 +32,8 @@ the offline v5.0 analysis.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import io
 import json
@@ -366,8 +369,69 @@ def my_invites(flow: FlowCore, agent_id: str) -> List[Dict[str, Any]]:
     return [_invite_view(flow, s) for s in sorted(mine, key=lambda s: s.time, reverse=True)]
 
 
-def resolve_invite(flow: FlowCore, agent_id: str, invite_id: str, action: str) -> Dict[str, Any]:
-    """confirm or decline the person joining with my invite, or cancel one nobody has used yet."""
+# ------------------------------------------------------------------------------------------- the NFC hold
+
+HOLD_MIN_MS = 2500     # the app asks for 3 s; a little slack for the clocks of two phones
+HOLD_TEXT = "liminal-hold:v1:{invite}:{nonce}:{hold_ms}"
+
+
+def _sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def open_hold(flow: FlowCore, agent_id: str) -> Dict[str, Any]:
+    """
+    The joiner's side of the NFC hold. Their phone gets a fresh secret (only its hash is recorded) and shows it,
+    with the invite, to the inviter's phone over NFC while the two are held together. When the inviter confirms
+    with that secret, Kaori knows the inviter's phone touched the phone signed in as the person who asked to join.
+    """
+    mine = sorted((s for s in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED) if s.agent_id == agent_id and _pending(flow, s)),
+                  key=lambda s: s.time)
+    if not mine:
+        raise HTTPException(status_code=409, detail="Nothing is waiting for your inviter")
+    chash = mine[-1].payload.get("code_hash")
+    nonce = secrets.token_urlsafe(18)
+    _emit(flow, SignalTypes.INVITE_HOLD_OPENED, agent_id, f"invite:{chash}", {"code_hash": chash, "nonce_sha256": _sha(nonce)})
+    return {"invite_id": chash, "nonce": nonce, "hold_ms": 3000}
+
+
+def _hold_evidence(flow: FlowCore, agent_id: str, chash: str, red: Signal, proof: Any) -> Dict[str, Any]:
+    """Check an NFC hold the inviter sends with their confirm; raise if it does not match this invite."""
+    if not isinstance(proof, dict) or proof.get("method") != "nfc_hold":
+        raise HTTPException(status_code=400, detail="proof must be an nfc_hold")
+    nonce, hold_ms = proof.get("nonce"), proof.get("hold_ms")
+    if not isinstance(nonce, str) or not isinstance(hold_ms, int) or isinstance(hold_ms, bool):
+        raise HTTPException(status_code=400, detail="proof needs the nonce and hold_ms")
+    if hold_ms < HOLD_MIN_MS:
+        raise HTTPException(status_code=400, detail="The phones were not held together long enough")
+    opened = [s for s in flow.store.get_by_type(SignalTypes.INVITE_HOLD_OPENED)
+              if s.agent_id == red.agent_id and s.payload.get("code_hash") == chash and s.time + CONFIRM_TTL > _now()]
+    if not any(s.payload.get("nonce_sha256") == _sha(nonce) for s in opened):
+        raise HTTPException(status_code=409, detail="That hold was with a different phone")
+    evidence: Dict[str, Any] = {"in_person": "nfc_hold", "hold_ms": hold_ms, "device_id": None, "device_verified": False}
+    device = proof.get("device")
+    if isinstance(device, dict):
+        from kaori_api import attestation
+        from kaori_api.devices import linked_devices
+
+        device_id, signature = device.get("device_id"), device.get("signature")
+        linked = linked_devices(flow).get(device_id) if isinstance(device_id, str) else None
+        if linked is not None and linked.agent_id == agent_id and isinstance(signature, str):
+            evidence["device_id"] = device_id
+            try:
+                spki = base64.b64decode(linked.payload["public_key_spki"])
+                sig = base64.b64decode(signature, validate=True)
+                text = HOLD_TEXT.format(invite=chash, nonce=nonce, hold_ms=hold_ms)
+                evidence["device_verified"] = attestation.verify_signature(spki, text.encode("utf-8"), sig)
+            except (KeyError, binascii.Error, ValueError):
+                pass
+    return evidence
+
+
+def resolve_invite(flow: FlowCore, agent_id: str, invite_id: str, action: str, body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """confirm or decline the person joining with my invite, or cancel one nobody has used yet. A confirm may carry
+    the NFC hold (``{"proof": {"method": "nfc_hold", "nonce", "hold_ms", "device"?}}``); a hold that does not match
+    this invite is refused rather than confirmed."""
     issued = _invite(flow, invite_id)
     if issued is None or issued.agent_id != agent_id:
         raise HTTPException(status_code=404, detail="No such invite of yours")
@@ -380,8 +444,11 @@ def resolve_invite(flow: FlowCore, agent_id: str, invite_id: str, action: str) -
     if view["status"] != needs:
         raise HTTPException(status_code=409, detail=f"This invite is {view['status']}")
     red = _redemption(flow, invite_id)
+    extra: Dict[str, Any] = {}
+    if action == "confirm" and red is not None and (body or {}).get("proof") is not None:
+        extra = _hold_evidence(flow, agent_id, invite_id, red, body["proof"])
     _emit(flow, kind, agent_id, f"invite:{invite_id}",
-          {"code_hash": invite_id, "member": red.agent_id if red is not None else None})
+          {"code_hash": invite_id, "member": red.agent_id if red is not None else None, **extra})
     return _invite_view(flow, issued)
 
 
@@ -967,10 +1034,16 @@ def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[...
     def check_invite(code: str):
         return invite_status(app.state.flow, code)
 
-    @app.post("/v1/invites/{invite_id}/{action}")
-    def resolve(invite_id: str, action: str, agent_id: str = Depends(require_agent)):
+    @app.post("/v1/joining/hold")
+    def joining_hold(agent_id: str = Depends(require_agent)):
         with lock:
-            return resolve_invite(app.state.flow, agent_id, invite_id, action)
+            return open_hold(app.state.flow, agent_id)
+
+    @app.post("/v1/invites/{invite_id}/{action}")
+    async def resolve(invite_id: str, action: str, request: Request, agent_id: str = Depends(require_agent)):
+        body = await _json(request)
+        with lock:
+            return resolve_invite(app.state.flow, agent_id, invite_id, action, body)
 
     @app.post("/v1/invites/redeem")
     async def redeem(request: Request, agent_id: str = Depends(require_agent)):

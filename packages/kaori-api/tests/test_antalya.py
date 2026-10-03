@@ -101,7 +101,7 @@ def test_routes_mount_only_on_the_antalya_service(monkeypatch):
                                                          verify_token=_verify).router.routes}
     assert live - plain == {
         "/v1/invites", "/v1/invites/{code}", "/v1/invites/redeem", "/v1/invites/mine",
-        "/v1/invites/{invite_id}/{action}", "/v1/admin/invites", "/v1/assignments",
+        "/v1/invites/{invite_id}/{action}", "/v1/joining/hold", "/v1/admin/invites", "/v1/assignments",
         "/v1/assignments/{assignment_id}/image", "/v1/assignments/{assignment_id}/evidence/{index}",
         "/v1/assignments/{assignment_id}/reading", "/v1/export",
         "/v1/me", "/v1/devices/challenge", "/v1/devices/link",

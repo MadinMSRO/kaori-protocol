@@ -119,6 +119,8 @@ class SignalTypes:
     INVITE_CONFIRMED = "INVITE_CONFIRMED"
     INVITE_DECLINED = "INVITE_DECLINED"
     INVITE_CANCELLED = "INVITE_CANCELLED"
+    # the joiner's phone, ready to be held to the inviter's (the NFC hold confirms in person)
+    INVITE_HOLD_OPENED = "INVITE_HOLD_OPENED"
 
     # Evidence provenance and validators' readings (Antalya MVP)
     PROVENANCE_RECORDED = "PROVENANCE_RECORDED"
