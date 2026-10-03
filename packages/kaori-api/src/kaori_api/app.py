@@ -44,7 +44,7 @@ from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 from kaori_truth.signing import production_signing_required
 from pydantic import ValidationError
 
-from kaori_api import admin, antalya, devices
+from kaori_api import admin, antalya, devices, evidence_kinds
 from kaori_api.auth import (
     AuthError,
     FirebaseCerts,
@@ -512,7 +512,7 @@ def vote_and_compile(app: FastAPI, agent_id: str, truth_key: str, vote: str, con
 
 
 def reading_vote(app: FastAPI, agent_id: str, truth_key: str, vote: str, reading: Optional[dict] = None) -> None:
-    """Antalya adapter: a blind reading becomes a vote; compile only once the key has its reporters."""
+    """Antalya adapter: a validator's reading becomes a vote; compile only once the key has its reporters."""
     observations = record_vote(app, agent_id, truth_key, vote, reading=reading)
     try:
         claim_type = app.state.orchestrator.get_claim_type(observations[0].claim_type)
@@ -524,7 +524,7 @@ def reading_vote(app: FastAPI, agent_id: str, truth_key: str, vote: str, reading
     try:
         compile_recorded(app, agent_id, truth_key, observations)
     except HTTPException as exc:
-        LOGGER.info("compile after blind reading did not finish for %s: %s", truth_key, exc.detail)
+        LOGGER.info("compile after a validator's reading did not finish for %s: %s", truth_key, exc.detail)
 
 
 def create_app(
@@ -620,13 +620,22 @@ def create_app(
         if antalya.enabled():
             antalya.require_member(app.state.flow, agent_id)
             devices.require_device(app.state.flow, agent_id)
+        kind = evidence_kinds.kind_of(file.content_type)
+        if kind is None:
+            raise HTTPException(
+                status_code=415,
+                detail="This type of file cannot be used as evidence. Accepted: "
+                + evidence_kinds.accepted_summary(),
+            )
+        limit = evidence_kinds.MAX_BYTES.get(kind)
         try:
             evidence_ref = app.state.evidence_store.upload(
                 file.file,
                 filename=file.filename or "evidence",
-                content_type=file.content_type,
+                content_type=evidence_kinds.normalize_mime(file.content_type),
                 reporter_id=agent_id,
                 expected_sha256=expected_sha256,
+                **({"max_bytes": limit} if limit else {}),
             )
         except EvidenceStorageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -775,7 +784,7 @@ def create_app(
                 status_code=503,
                 detail="generalist unavailable",
             )
-        # Antalya: the AI reads each photo blind (antalya.ai_read), so no key-level AI call here
+        # Antalya: the AI reads each photo as a validator does (antalya.ai_read), so no key-level AI call here
         if client is not None and not antalya.enabled():
             timeout = generalist_timeout_seconds(claim_type)
             lock = request.app.state.compile_lock.get(truth_key)

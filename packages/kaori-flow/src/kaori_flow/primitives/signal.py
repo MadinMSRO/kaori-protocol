@@ -120,7 +120,7 @@ class SignalTypes:
     INVITE_DECLINED = "INVITE_DECLINED"
     INVITE_CANCELLED = "INVITE_CANCELLED"
 
-    # Evidence provenance and blind readings (Antalya MVP)
+    # Evidence provenance and validators' readings (Antalya MVP)
     PROVENANCE_RECORDED = "PROVENANCE_RECORDED"
     ASSIGNMENT_ISSUED = "ASSIGNMENT_ISSUED"
     READING_SUBMITTED = "READING_SUBMITTED"

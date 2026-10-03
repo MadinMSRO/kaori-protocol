@@ -433,7 +433,7 @@ class ClipGeneralistValidator:
 
     def read(self, claim_type_id: str, image_bytes: bytes) -> dict:
         """
-        Blind reading of one photo, like a human validator's: the value it shows for each field in
+        A reading of one photo, like a human validator's: the value it shows for each field in
         generalist.readings (zero-shot over that field's prompts), and how much it looks like this
         claim's evidence at all (the claim's prompts against its distractors).
         """

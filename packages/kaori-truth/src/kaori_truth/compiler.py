@@ -409,7 +409,7 @@ def _weighted_readings_status(
     claim: Optional[dict] = None,
 ) -> tuple[TruthStatus, Optional[VerificationBasis], List[str]]:
     """
-    One rule for every reader, human or AI (verification.rule: weighted_readings). A blind reading counts +1
+    One rule for every reader, human or AI (verification.rule: weighted_readings). A validator's reading counts +1
     when its photo shows the claimed value and -1 when it does not; a vote without a reading counts its
     RATIFY (+1) or REJECT (-1). Each agent counts once per key (the mean of its readings), weighted by its
     standing in the frozen TrustSnapshot. Verified when the score reaches consensus_model.finalize_threshold, false when
@@ -423,7 +423,7 @@ def _weighted_readings_status(
     for vote in votes:
         reading = vote.get("reading")
         if isinstance(reading, dict) and claim:
-            # a blind reading backs the key when the photo shows the claimed value
+            # a validator's reading backs the key when the photo shows the claimed value
             support = 1.0 if _supports(reading, claim, claim_type) else -1.0
         else:
             value = _vote_value(vote)

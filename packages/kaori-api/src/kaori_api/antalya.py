@@ -1,5 +1,5 @@
 """
-Antalya MVP (IAC 2026): referral-only membership, provenance, blind readings and export.
+Antalya MVP (IAC 2026): referral-only membership, provenance, validators' readings and export.
 
 Every event here is an immutable Signal (Rule 1). Invites, redemptions, provenance, assignments and readings are
 derived from the signal log, so the test needs no new tables:
@@ -11,19 +11,22 @@ derived from the signal log, so the test needs no new tables:
   INVITE_DECLINED      the inviter says it is not who they meant agent = referrer,  object = invite:<code hash>
   INVITE_CANCELLED     the inviter withdraws an unused invite    agent = referrer,  object = invite:<code hash>
   PROVENANCE_RECORDED  an observation's evidence is accepted    agent = reporter,  object = evidence:<sha256>
-  ASSIGNMENT_ISSUED    a photo is assigned to a validator       agent = validator, object = assignment:<id>
-  READING_SUBMITTED    a validator renders the photo            agent = validator, object = assignment:<id>
+  ASSIGNMENT_ISSUED    evidence is assigned to a validator      agent = validator, object = assignment:<id>
+  READING_SUBMITTED    a validator answers what it shows        agent = validator, object = assignment:<id>
 
-Blindness: an assignment never carries the reporter, the place, the TruthKey, the reporter's eye answer or other
-readings, and the image is re-encoded without its EXIF before a validator sees it. A validator is never assigned
-their own photo, nor a photo from a key they reported at.
+Validators check each report independently, without seeing whose report it is: an assignment never carries the
+reporter, the place, the TruthKey, the reporter's answer or other readings, and the evidence is served with its
+metadata stripped (evidence_kinds: a photo re-encoded without EXIF, data without location, time or identity
+fields, a recording without container metadata). A validator is never assigned their own report, nor one from a
+key they reported at. Evidence is a photo, data, audio or video.
 
 Membership is an in-person handshake: the inviter shows a QR, the invitee scans it, installs Liminal, signs in and
 asks to join; the inviter's phone then shows who is joining and they become a member only when the inviter
 confirms. Invites are counted by what happened to them (waiting, joining, joined, expired, declined, cancelled).
 
-Readings feed the proven compile path through an adapter (plan §3.4): RATIFY when the reading is within one band
-of that observation's eye value and agrees on rain, otherwise REJECT. The readings themselves stay in the log for
+Readings feed the proven compile path through an adapter (plan §3.4): RATIFY when every field of the ClaimType's
+`validation` block agrees with that observation's answer by its rule (sky cover: within one band and the same
+answer on rain), otherwise REJECT; evidence a validator marks unusable is a REJECT. The readings themselves stay in the log for
 the offline v5.0 analysis.
 """
 from __future__ import annotations
@@ -46,14 +49,15 @@ from fastapi.responses import Response, StreamingResponse
 from kaori_flow import FlowCore
 from kaori_flow.primitives.signal import Signal, SignalTypes
 
-from kaori_api import devices, names
+from kaori_api import devices, evidence_kinds, names
+from kaori_api.evidence_kinds import strip_photo
 from kaori_api.generalist_client import generalist_timeout_seconds
 
 INVITE_TTL = timedelta(minutes=30)
 # the inviter confirms a join request within this (they are standing together)
 CONFIRM_TTL = timedelta(minutes=30)
 ASSIGNMENT_TTL = timedelta(minutes=30)
-READINGS_PER_PHOTO = 3
+READINGS_PER_EVIDENCE = 3
 MAX_ASSIGNMENTS = 20
 TIME_MATCH_SECONDS = 120
 PLACE_MATCH_METRES = 150.0
@@ -482,10 +486,195 @@ def provenance_badge(flow: FlowCore, sha: str) -> Dict[str, Any]:
     return {k: None for k in BADGE}
 
 
+# --------------------------------------------------------------------------------------------- questions and agreement
+
+SKY_COVER = "earth.sky_cover.v1"
+# The sky ClaimType's questions and rule, used when its YAML cannot be loaded (and by vote_for without one).
+_SKY: Dict[str, Any] = {
+    "id": SKY_COVER,
+    "topic": "sky_cover",
+    "ui_schema": {"fields": [
+        {"name": "cover", "type": "select", "label": "How much of the sky is cloud?", "required": True,
+         "options": list(COVER),
+         "option_labels": {"clear": "None", "few": "A little", "scattered": "About half", "broken": "Most",
+                           "overcast": "All"}},
+        {"name": "raining", "type": "boolean", "label": "Is it raining here?", "required": True},
+    ]},
+    "validation": {"fields": [{"name": "cover", "agree": {"within_steps": 1}},
+                              {"name": "raining", "agree": "equal"}]},
+}
+DEFAULT_WITHIN_PCT = 10
+
+
+def _config(claim_type: Any) -> Dict[str, Any]:
+    """The raw ClaimType config: a loaded ClaimType, a dict, or the sky's built-in one for None."""
+    if claim_type is None:
+        return _SKY
+    if isinstance(claim_type, dict):
+        return claim_type
+    try:
+        return claim_type.get_config() or {}
+    except Exception:
+        return {}
+
+
+def _resolve(claim_types: Optional[Callable[[str], Any]], claim_type_id: Optional[str]) -> Dict[str, Any]:
+    found = None
+    if claim_types is not None and claim_type_id:
+        try:
+            found = claim_types(claim_type_id)
+        except Exception:
+            found = None
+    if found is None:
+        return _SKY if claim_type_id in (None, SKY_COVER) else {"id": claim_type_id}
+    return _config(found)
+
+
+def claim_type_resolver(app: Any) -> Callable[[str], Any]:
+    return lambda claim_type_id: app.state.orchestrator.get_claim_type(claim_type_id)
+
+
+def _ui_fields(cfg: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    fields = ((cfg.get("ui_schema") or {}).get("fields") or [])
+    return {f["name"]: f for f in fields if isinstance(f, dict) and isinstance(f.get("name"), str)}
+
+
+def validation_fields(claim_type: Any) -> List[Dict[str, Any]]:
+    """[{name, agree}] from the ClaimType's `validation` block, or derived from its required ui_schema fields:
+    select and boolean must be equal, a number within 10 percent."""
+    cfg = _config(claim_type)
+    ui = _ui_fields(cfg)
+    declared = (cfg.get("validation") or {}).get("fields")
+    if isinstance(declared, list) and declared:
+        return [{"name": f["name"], "agree": f.get("agree", "equal")} for f in declared
+                if isinstance(f, dict) and f.get("name") in ui]
+    out = []
+    for name, field in ui.items():
+        if not field.get("required"):
+            continue
+        if field.get("type") in ("select", "boolean"):
+            out.append({"name": name, "agree": "equal"})
+        elif field.get("type") == "number":
+            out.append({"name": name, "agree": {"within_pct": DEFAULT_WITHIN_PCT}})
+    return out
+
+
+def questions(claim_type: Any) -> List[Dict[str, Any]]:
+    """What a validator answers: one question per validation field, from its ui_schema field."""
+    ui = _ui_fields(_config(claim_type))
+    out = []
+    for rule in validation_fields(claim_type):
+        field = ui[rule["name"]]
+        q: Dict[str, Any] = {"name": rule["name"], "type": field.get("type"),
+                             "label": field.get("label") or rule["name"].replace("_", " ").capitalize()}
+        if field.get("type") == "select":
+            q["options"] = list(field.get("options") or [])
+            if isinstance(field.get("option_labels"), dict):
+                q["option_labels"] = dict(field["option_labels"])
+        if field.get("type") == "number":
+            q.update({k: field[k] for k in ("unit", "min", "max", "step") if field.get(k) is not None})
+        out.append(q)
+    return out
+
+
+def _title(cfg: Dict[str, Any], claim_type_id: Optional[str]) -> str:
+    if isinstance(cfg.get("title"), str) and cfg["title"].strip():
+        return cfg["title"].strip()
+    topic = cfg.get("topic") or ((claim_type_id or "").split(".")[1] if (claim_type_id or "").count(".") >= 2 else "")
+    return topic.replace("_", " ").capitalize() or (claim_type_id or "")
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _agrees(question: Dict[str, Any], agree: Any, seen: Any, claimed: Any) -> bool:
+    kind = question.get("type")
+    rule = agree if isinstance(agree, dict) else {}
+    if "within_steps" in rule:
+        options = question.get("options") or []
+        if seen not in options or claimed not in options:
+            return False
+        return abs(options.index(seen) - options.index(claimed)) <= rule["within_steps"]
+    if "within" in rule or "within_pct" in rule:
+        if not _is_number(seen) or not _is_number(claimed):
+            return False
+        allowed = float(rule["within"]) if "within" in rule else abs(float(claimed)) * float(rule["within_pct"]) / 100
+        return abs(float(seen) - float(claimed)) <= allowed + 1e-9
+    if kind == "boolean":
+        return bool(seen) == bool(claimed)
+    if kind == "number":
+        return _is_number(seen) and _is_number(claimed) and float(seen) == float(claimed)
+    return seen == claimed
+
+
+def vote_for(values: Optional[Dict[str, Any]], observation_payload: Dict[str, Any], claim_type: Any = None) -> str:
+    """RATIFY when every validation field of the validator's values agrees with the observation by its rule,
+    otherwise REJECT. Sky cover: within one cover band and the same answer on rain."""
+    if not values:
+        return "REJECT"
+    by_name = {q["name"]: q for q in questions(claim_type)}
+    rules = validation_fields(claim_type)
+    if not rules:
+        return "REJECT"
+    payload = observation_payload or {}
+    for rule in rules:
+        name = rule["name"]
+        if name not in values or (name not in payload and by_name[name].get("type") != "boolean"):
+            return "REJECT"
+        if not _agrees(by_name[name], rule["agree"], values.get(name), payload.get(name)):
+            return "REJECT"
+    return "RATIFY"
+
+
+def check_values(values: Any, claim_type: Any) -> Dict[str, Any]:
+    """The validator's answers, one per question, or 400 with a plain sentence."""
+    if not isinstance(values, dict):
+        raise HTTPException(status_code=400, detail="values must be an object with one answer per question")
+    out: Dict[str, Any] = {}
+    for q in questions(claim_type):
+        name = q["name"]
+        if name not in values or values[name] is None:
+            raise HTTPException(status_code=400, detail=f"Answer every question: {name} is missing")
+        value = values[name]
+        if q["type"] == "select":
+            if value not in q.get("options", []):
+                raise HTTPException(status_code=400, detail=f"{name} must be one of " + ", ".join(map(str, q.get("options", []))))
+        elif q["type"] == "boolean":
+            if not isinstance(value, bool):
+                raise HTTPException(status_code=400, detail=f"{name} must be true or false")
+        elif q["type"] == "number":
+            if not _is_number(value):
+                raise HTTPException(status_code=400, detail=f"{name} must be a number")
+            low, high = q.get("min"), q.get("max")
+            if (low is not None and value < low) or (high is not None and value > high):
+                raise HTTPException(status_code=400, detail=f"{name} must be between {low} and {high}")
+        out[name] = value
+    if not out:
+        raise HTTPException(status_code=400, detail="This claim has no questions for validators")
+    return out
+
+
+def parse_reading(body: Dict[str, Any], claim_type: Any) -> tuple[Optional[Dict[str, Any]], bool]:
+    """(values, unusable). Body `{values: {...}}`, `{values: null, unusable: true}` when the evidence cannot be
+    checked, or the older top-level answers (`{cover, raining}`)."""
+    if body.get("unusable") is True:
+        return None, True
+    if "values" in body:
+        return check_values(body.get("values"), claim_type), False
+    return check_values({q["name"]: body.get(q["name"]) for q in questions(claim_type)}, claim_type), False
+
+
 # --------------------------------------------------------------------------------------------- assignments
 
-def _photos(flow: FlowCore, observation_store: Any) -> List[Dict[str, Any]]:
-    """Every observation with evidence, as (reporter, truthkey, observation, sha, eye value)."""
+def _evidence(observation: Any) -> List[Any]:
+    """An observation's evidence refs that validators can check (photo, data, audio, video), in order."""
+    return [ref for ref in (observation.evidence_refs or []) if evidence_kinds.ref_kind(ref) is not None]
+
+
+def _evidence_items(flow: FlowCore, observation_store: Any) -> List[Dict[str, Any]]:
+    """Every observation with evidence of any kind, as (reporter, truthkey, observation, sha of its first
+    evidence). The sha identifies the observation's evidence for the per-evidence reader cap."""
     out: List[Dict[str, Any]] = []
     by_key: Dict[str, List[Any]] = {}
     for signal in flow.store.get_by_type(SignalTypes.OBSERVATION_SUBMITTED):
@@ -494,9 +683,10 @@ def _photos(flow: FlowCore, observation_store: Any) -> List[Dict[str, Any]]:
             by_key[key] = observation_store.get_for_truthkey(key)
         wanted = signal.payload.get("observation_id")
         for obs in by_key[key]:
-            if str(obs.observation_id) == wanted and obs.evidence_refs:
+            refs = _evidence(obs) if str(obs.observation_id) == wanted else []
+            if refs:
                 out.append({"reporter": obs.reporter_id, "truthkey": key, "observation": obs,
-                            "observation_id": wanted, "sha": obs.evidence_refs[0].sha256,
+                            "observation_id": wanted, "sha": refs[0].sha256,
                             "claim_type_id": obs.claim_type, "submitted": signal.time})
     return out
 
@@ -505,7 +695,7 @@ AI_AGENT = "ai:generalist_v1"
 
 
 def ai_reader(app: Any) -> Optional[Callable[[str, bytes], dict]]:
-    """The AI's blind reader: app.state.ai_reader if set (tests), else the generalist service's /read."""
+    """The AI's reader: app.state.ai_reader if set (tests), else the generalist service's /read."""
     reader = getattr(app.state, "ai_reader", None)
     if reader is not None:
         return reader
@@ -524,14 +714,16 @@ def ai_reader(app: Any) -> Optional[Callable[[str, bytes], dict]]:
 
 def ai_read(app: Any, observation: Any, truth_key: str, vote_and_compile: Callable[..., Any]) -> None:
     """
-    The AI reads the photo blind, exactly as a human validator would: the same EXIF-stripped image, no
-    reporter, place, key or eye answer. Its reading becomes a vote the same way.
+    The AI reads the photo exactly as a human validator would: the same EXIF-stripped image, without the
+    reporter, place, key or the reporter's answer. Its reading becomes a vote the same way. Photos only.
     """
     reader = ai_reader(app)
-    if reader is None or not observation.evidence_refs:
+    photo = next((ref for ref in (observation.evidence_refs or []) if evidence_kinds.ref_kind(ref) == "photo"), None)
+    if reader is None or photo is None:
         return
     flow = app.state.flow
-    sha = observation.evidence_refs[0].sha256
+    sha = photo.sha256
+    cfg = _resolve(claim_type_resolver(app), observation.claim_type)
     assignment = _emit(flow, SignalTypes.ASSIGNMENT_ISSUED, AI_AGENT, f"assignment:{uuid.uuid4().hex}", {
         "evidence_sha256": sha, "validator": AI_AGENT, "reason": "ai",
         "truthkey": truth_key, "observation_id": str(observation.observation_id), "claim_type_id": observation.claim_type,
@@ -539,7 +731,7 @@ def ai_read(app: Any, observation: Any, truth_key: str, vote_and_compile: Callab
     result = None
     for attempt in range(2):                      # one retry: a hiccup should not lose the AI's reading
         try:
-            image = blind_image(app.state.evidence_store.read(observation.evidence_refs[0]))
+            image = strip_photo(app.state.evidence_store.read(photo))
             result = reader(observation.claim_type, image)
             break
         except Exception:
@@ -551,14 +743,17 @@ def ai_read(app: Any, observation: Any, truth_key: str, vote_and_compile: Callab
     values = result.get("values") or {}
     relevance = result.get("relevance")
     is_evidence = bool(result.get("evidence", relevance is None or relevance >= 0.5))
-    value = {"cover": values.get("cover"), "raining": bool(values.get("raining"))} if is_evidence else None
+    value = None
+    if is_evidence:
+        value = {q["name"]: bool(values.get(q["name"])) if q["type"] == "boolean" else values.get(q["name"])
+                 for q in questions(cfg)}
     now = _now()
     _emit(flow, SignalTypes.READING_SUBMITTED, AI_AGENT, assignment.object_id, {
         "evidence_sha256": sha, "value": value, "probs": result.get("probs"), "relevance": relevance,
         "latency_ms": int((now - assignment.time).total_seconds() * 1000),
         "truthkey": truth_key, "observation_id": str(observation.observation_id),
     }, time=now)
-    vote = vote_for(value, observation.payload) if value and value.get("cover") in COVER else "REJECT"
+    vote = vote_for(value, observation.payload, cfg) if value else "REJECT"
     vote_and_compile(AI_AGENT, truth_key, vote, value)
 
 
@@ -579,19 +774,43 @@ def _readings(flow: FlowCore) -> Dict[str, Signal]:
     return {s.object_id: s for s in flow.store.get_by_type(SignalTypes.READING_SUBMITTED)}
 
 
-def _public_assignment(flow: FlowCore, signal: Signal) -> Dict[str, Any]:
+def _observation(observation_store: Any, signal: Signal) -> Optional[Any]:
+    for obs in observation_store.get_for_truthkey(signal.payload["truthkey"]):
+        if str(obs.observation_id) == signal.payload["observation_id"]:
+            return obs
+    return None
+
+
+def _public_assignment(flow: FlowCore, observation_store: Any, signal: Signal,
+                       claim_types: Optional[Callable[[str], Any]] = None) -> Dict[str, Any]:
+    """What a validator receives: the evidence and the questions. Never the reporter, place, time, key or the
+    reporter's answer."""
     assignment_id = signal.object_id.split(":", 1)[1]
+    claim_type_id = signal.payload.get("claim_type_id")
+    cfg = _resolve(claim_types, claim_type_id)
+    obs = _observation(observation_store, signal)
+    refs = _evidence(obs) if obs is not None else []
+    evidence = [{"kind": evidence_kinds.ref_kind(ref),
+                 "mime": evidence_kinds.normalize_mime(ref.mime_type) or "image/jpeg",
+                 "url": f"/v1/assignments/{assignment_id}/evidence/{i}"} for i, ref in enumerate(refs)]
+    asked = questions(cfg)
     return {
         "assignment_id": assignment_id,
-        "image_url": f"/v1/assignments/{assignment_id}/image",
+        "claim_type_id": claim_type_id,
+        "title": _title(cfg, claim_type_id),
         "provenance_badge": provenance_badge(flow, signal.payload["evidence_sha256"]),
-        "claim_type_id": signal.payload.get("claim_type_id"),
-        "options": {"cover": list(COVER), "raining": [True, False]},
         "expires_at": (signal.time + ASSIGNMENT_TTL).isoformat(),
+        "evidence": evidence,
+        "questions": asked,
+        # kept for older app builds: the first photo, and the answer options of select and boolean questions
+        "image_url": f"/v1/assignments/{assignment_id}/image" if any(e["kind"] == "photo" for e in evidence) else None,
+        "options": {q["name"]: list(q["options"]) if q["type"] == "select" else [True, False]
+                    for q in asked if q["type"] in ("select", "boolean")},
     }
 
 
-def assign(flow: FlowCore, observation_store: Any, agent_id: str, limit: int, rng: Any = None) -> List[Dict[str, Any]]:
+def assign(flow: FlowCore, observation_store: Any, agent_id: str, limit: int, rng: Any = None,
+           claim_types: Optional[Callable[[str], Any]] = None) -> List[Dict[str, Any]]:
     require_member(flow, agent_id)
     limit = max(1, min(MAX_ASSIGNMENTS, int(limit)))
     rng = rng or secrets.SystemRandom()
@@ -600,7 +819,7 @@ def assign(flow: FlowCore, observation_store: Any, agent_id: str, limit: int, rn
     answered = _readings(flow)
     mine_open = [s for oid, s in issued.items() if s.agent_id == agent_id and oid not in answered
                  and s.time + ASSIGNMENT_TTL > now]
-    result = [_public_assignment(flow, s) for s in mine_open[:limit]]
+    result = [_public_assignment(flow, observation_store, s, claim_types) for s in mine_open[:limit]]
     if len(result) >= limit:
         return result
 
@@ -613,18 +832,18 @@ def assign(flow: FlowCore, observation_store: Any, agent_id: str, limit: int, rn
         live = oid in answered or s.time + ASSIGNMENT_TTL > now
         if live:
             load[s.payload.get("evidence_sha256")] = load.get(s.payload.get("evidence_sha256"), 0) + 1
-    candidates = [p for p in _photos(flow, observation_store)
+    candidates = [p for p in _evidence_items(flow, observation_store)
                   if p["reporter"] != agent_id and p["truthkey"] not in my_keys and p["sha"] not in seen
-                  and load.get(p["sha"], 0) < READINGS_PER_PHOTO]
+                  and load.get(p["sha"], 0) < READINGS_PER_EVIDENCE]
     rng.shuffle(candidates)
-    for photo in candidates[: limit - len(result)]:
+    for item in candidates[: limit - len(result)]:
         assignment_id = uuid.uuid4().hex
         signal = _emit(flow, SignalTypes.ASSIGNMENT_ISSUED, agent_id, f"assignment:{assignment_id}", {
-            "evidence_sha256": photo["sha"], "validator": agent_id, "reason": "random",
-            "truthkey": photo["truthkey"], "observation_id": photo["observation_id"],
-            "claim_type_id": photo["claim_type_id"],
+            "evidence_sha256": item["sha"], "validator": agent_id, "reason": "random",
+            "truthkey": item["truthkey"], "observation_id": item["observation_id"],
+            "claim_type_id": item["claim_type_id"],
         })
-        result.append(_public_assignment(flow, signal))
+        result.append(_public_assignment(flow, observation_store, signal, claim_types))
     return result
 
 
@@ -637,42 +856,41 @@ def _own_assignment(flow: FlowCore, agent_id: str, assignment_id: str) -> Signal
     return signal
 
 
-def blind_image(raw: bytes) -> bytes:
-    """Re-encode without metadata (EXIF GPS and time would reveal the place)."""
-    from PIL import Image, ImageOps
-
-    with Image.open(io.BytesIO(raw)) as img:
-        img = ImageOps.exif_transpose(img).convert("RGB")
-        img.thumbnail((1600, 1600))
-        out = io.BytesIO()
-        img.save(out, format="JPEG", quality=85)
-    return out.getvalue()
+def assignment_evidence(flow: FlowCore, observation_store: Any, evidence_store: Any, agent_id: str,
+                        assignment_id: str, index: int) -> tuple[bytes, str]:
+    """(bytes, content type) of one piece of an assignment's evidence, for its validator only, with anything
+    that reveals place, time or person removed."""
+    signal = _own_assignment(flow, agent_id, assignment_id)
+    obs = _observation(observation_store, signal)
+    refs = _evidence(obs) if obs is not None else []
+    if not 0 <= index < len(refs):
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    ref = refs[index]
+    kind = evidence_kinds.ref_kind(ref)
+    try:
+        return evidence_kinds.prepare(evidence_store.read(ref), kind, ref.mime_type)
+    except evidence_kinds.EvidenceNotReadable as exc:
+        raise HTTPException(status_code=415, detail=f"This evidence could not be prepared for checking: {exc}") from exc
 
 
 def assignment_image(flow: FlowCore, observation_store: Any, evidence_store: Any, agent_id: str, assignment_id: str) -> bytes:
+    """The assignment's first photo (older app builds)."""
     signal = _own_assignment(flow, agent_id, assignment_id)
-    observations = observation_store.get_for_truthkey(signal.payload["truthkey"])
-    for obs in observations:
-        if str(obs.observation_id) == signal.payload["observation_id"]:
-            raw = evidence_store.read(obs.evidence_refs[0])
-            try:
-                return blind_image(raw)
-            except Exception as exc:
-                raise HTTPException(status_code=415, detail="Evidence is not a readable image") from exc
-    raise HTTPException(status_code=404, detail="Evidence not found")
-
-
-def vote_for(reading: Dict[str, Any], eye: Dict[str, Any]) -> str:
-    """Plan §3.4: RATIFY when within one cover band of the observation's eye value and agreeing on rain."""
+    obs = _observation(observation_store, signal)
+    if obs is None:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    photo = next((ref for ref in _evidence(obs) if evidence_kinds.ref_kind(ref) == "photo"), None)
+    if photo is None:
+        raise HTTPException(status_code=404, detail="This assignment has no photo")
     try:
-        close = abs(COVER.index(reading["cover"]) - COVER.index(eye.get("cover"))) <= 1
-    except ValueError:
-        close = False
-    return "RATIFY" if close and bool(reading["raining"]) == bool(eye.get("raining")) else "REJECT"
+        return strip_photo(evidence_store.read(photo))
+    except Exception as exc:
+        raise HTTPException(status_code=415, detail="Evidence is not a readable image") from exc
 
 
 def submit_reading(flow: FlowCore, observation_store: Any, agent_id: str, assignment_id: str,
-                   body: Dict[str, Any], vote_and_compile: Callable[[str, str, str], Any]) -> Dict[str, Any]:
+                   body: Dict[str, Any], vote_and_compile: Callable[..., Any],
+                   claim_types: Optional[Callable[[str], Any]] = None) -> Dict[str, Any]:
     from kaori_api.devices import require_device
 
     require_device(flow, agent_id)
@@ -681,24 +899,20 @@ def submit_reading(flow: FlowCore, observation_store: Any, agent_id: str, assign
         raise HTTPException(status_code=409, detail="Already answered")
     if signal.time + ASSIGNMENT_TTL <= _now():
         raise HTTPException(status_code=410, detail="Assignment expired")
-    cover = body.get("cover")
-    raining = body.get("raining")
-    if cover not in COVER:
-        raise HTTPException(status_code=400, detail="cover must be one of " + ", ".join(COVER))
-    if not isinstance(raining, bool):
-        raise HTTPException(status_code=400, detail="raining must be true or false")
+    cfg = _resolve(claim_types, signal.payload.get("claim_type_id"))
+    values, unusable = parse_reading(body, cfg)
     now = _now()
-    _emit(flow, SignalTypes.READING_SUBMITTED, agent_id, signal.object_id, {
-        "evidence_sha256": signal.payload["evidence_sha256"], "value": {"cover": cover, "raining": raining},
+    payload = {
+        "evidence_sha256": signal.payload["evidence_sha256"], "value": values,
         "latency_ms": int((now - signal.time).total_seconds() * 1000),
         "truthkey": signal.payload["truthkey"], "observation_id": signal.payload["observation_id"],
-    }, time=now)
-    eye = {}
-    for obs in observation_store.get_for_truthkey(signal.payload["truthkey"]):
-        if str(obs.observation_id) == signal.payload["observation_id"]:
-            eye = obs.payload
-    vote = vote_for({"cover": cover, "raining": raining}, eye)
-    vote_and_compile(agent_id, signal.payload["truthkey"], vote, {"cover": cover, "raining": raining})
+    }
+    if unusable:
+        payload["unusable"] = True
+    _emit(flow, SignalTypes.READING_SUBMITTED, agent_id, signal.object_id, payload, time=now)
+    obs = _observation(observation_store, signal)
+    vote = "REJECT" if unusable else vote_for(values, obs.payload if obs is not None else {}, cfg)
+    vote_and_compile(agent_id, signal.payload["truthkey"], vote, values)
     return {"ok": True}
 
 
@@ -767,7 +981,14 @@ def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[...
     @app.get("/v1/assignments")
     def assignments(limit: int = 5, agent_id: str = Depends(require_agent)):
         with lock:
-            return assign(app.state.flow, app.state.observation_store, agent_id, limit)
+            return assign(app.state.flow, app.state.observation_store, agent_id, limit,
+                          claim_types=claim_type_resolver(app))
+
+    @app.get("/v1/assignments/{assignment_id}/evidence/{index}")
+    def evidence(assignment_id: str, index: int, agent_id: str = Depends(require_agent)):
+        data, mime = assignment_evidence(app.state.flow, app.state.observation_store, app.state.evidence_store,
+                                         agent_id, assignment_id, index)
+        return Response(content=data, media_type=mime, headers={"Cache-Control": "private, no-store"})
 
     @app.get("/v1/assignments/{assignment_id}/image")
     def image(assignment_id: str, agent_id: str = Depends(require_agent)):
@@ -780,7 +1001,8 @@ def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[...
         body = await _json(request)
         with lock:
             return submit_reading(app.state.flow, app.state.observation_store, agent_id, assignment_id, body,
-                                  lambda a, k, v, r=None: vote_and_compile(app, a, k, v, r))
+                                  lambda a, k, v, r=None: vote_and_compile(app, a, k, v, r),
+                                  claim_types=claim_type_resolver(app))
 
     @app.get("/v1/me")
     def whoami(agent_id: str = Depends(require_agent)):

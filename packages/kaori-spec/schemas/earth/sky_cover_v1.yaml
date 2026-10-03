@@ -46,6 +46,12 @@ ui_schema:
       label: "How much of the sky is cloud?"
       required: true
       options: ["clear", "few", "scattered", "broken", "overcast"]
+      option_labels:
+        clear: "None"
+        few: "A little"
+        scattered: "About half"
+        broken: "Most"
+        overcast: "All"
       # clear:     no cloud (0 oktas)
       # few:       a little cloud (1-2 oktas)
       # scattered: about half the sky or less (3-4 oktas)
@@ -55,6 +61,19 @@ ui_schema:
       type: boolean
       label: "Is it raining here?"
       required: true
+
+# ----------------------------------------------------------------------------
+# Validation (how a validator's reading is compared with the report)
+# ----------------------------------------------------------------------------
+# Validators check each photo independently, without seeing whose report it is
+# or what the reporter answered. A reading backs the report when every field
+# below agrees: cover within one band (index distance in options), rain equal.
+validation:
+  fields:
+    - name: cover
+      agree: {within_steps: 1}
+    - name: raining
+      agree: equal
 
 # ----------------------------------------------------------------------------
 # Output Schema (TruthState.claim)
@@ -141,7 +160,7 @@ ai_validation_routing:
       - "a photo of the sky at sunset"
       - "a photo of the sky above rooftops and trees"
       - "a photo of the sky with the horizon at the bottom"
-    # Blind readings (Antalya): the AI reads each photo like a human validator, zero-shot over these prompts.
+    # Validator readings (Antalya): the AI reads each photo like a human validator, zero-shot over these prompts.
     # One prompt per band keeps the bands unbiased. On 8 local sky photos: cover 6/8 exact, 8/8 within one
     # band; rain 7/8. Antalya measures it properly against the airport METAR.
     readings:
@@ -185,7 +204,7 @@ autovalidation:
 # ----------------------------------------------------------------------------
 # Human Gating (Section 13 of SPEC)
 # ----------------------------------------------------------------------------
-# One rule for every reader, human or AI (kaori_truth.compiler): each blind reading backs the claim when its
+# One rule for every reader, human or AI (kaori_truth.compiler): each validator's reading backs the claim when its
 # photo shows the claimed value; each agent counts once per key, weighted by standing in the TrustSnapshot;
 # verified at consensus_model.finalize_threshold. Replaces the AI-only threshold for this claim type.
 verification:

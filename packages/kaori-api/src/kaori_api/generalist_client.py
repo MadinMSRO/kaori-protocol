@@ -180,7 +180,7 @@ class GeneralistClient:
         raise TimeoutError("generalist exceeded ClaimType timeout")
 
     def read(self, *, claim_type_id: str, image: bytes, timeout: float = 60.0) -> dict:
-        """A blind reading of one photo from the generalist (POST {url}/read)."""
+        """The generalist's reading of one photo, as a validator sees it (POST {url}/read)."""
         import base64
 
         request = urllib.request.Request(

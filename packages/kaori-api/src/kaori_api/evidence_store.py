@@ -71,8 +71,9 @@ class InMemoryEvidenceStore:
         content_type: Optional[str],
         reporter_id: str,
         expected_sha256: Optional[str] = None,
+        max_bytes: Optional[int] = None,
     ) -> EvidenceRef:
-        sha256, size = _digest_and_size(stream, self.max_bytes)
+        sha256, size = _digest_and_size(stream, max_bytes or self.max_bytes)
         if expected_sha256 and expected_sha256.lower() != sha256:
             raise EvidenceStorageError("evidence sha256 does not match uploaded content")
         object_name = evidence_object_name(reporter_id, sha256, filename)
@@ -86,7 +87,7 @@ class InMemoryEvidenceStore:
         )
 
     def read(self, evidence: EvidenceRef) -> bytes:
-        """Stored bytes for an evidence ref (blind validation serves them re-encoded)."""
+        """Stored bytes for an evidence ref (validators receive them with metadata stripped)."""
         object_name = urlparse(evidence.uri).path.lstrip("/")
         if object_name not in self.objects:
             raise EvidenceStorageError("evidence object does not exist")
@@ -134,8 +135,9 @@ class GcsEvidenceStore:
         content_type: Optional[str],
         reporter_id: str,
         expected_sha256: Optional[str] = None,
+        max_bytes: Optional[int] = None,
     ) -> EvidenceRef:
-        sha256, size = _digest_and_size(stream, self.max_bytes)
+        sha256, size = _digest_and_size(stream, max_bytes or self.max_bytes)
         if expected_sha256 and expected_sha256.lower() != sha256:
             raise EvidenceStorageError("evidence sha256 does not match uploaded content")
 

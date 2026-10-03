@@ -109,7 +109,7 @@ def record_validation_vote(
     if confidence is not None:
         payload["confidence"] = float(confidence)
     if reading is not None:
-        # a blind reading's own value (Antalya): the compiler weighs it against the claim
+        # a validator's reading, its own value (Antalya): the compiler weighs it against the claim
         payload["reading"] = dict(reading)
 
     signal = Signal(

@@ -15,7 +15,15 @@ verified user to `user:{id}`; `profiles.id` is never accepted as identity.
 
 `POST /v1/evidence` computes SHA-256 from the uploaded bytes and writes once to
 the private `KAORI_OBSERVATIONS_BUCKET`. It returns a content-bound
-`{uri, sha256}` reference with a stable `gs://` URI.
+`{uri, sha256}` reference with a stable `gs://` URI. It accepts four kinds of
+evidence, by MIME type, and answers 415 for anything else:
+
+| kind  | MIME | limit |
+|-------|------|-------|
+| photo | `image/jpeg`, `image/png`, `image/heic`, `image/webp` | `KAORI_MAX_EVIDENCE_BYTES` (25 MB) |
+| data  | `application/json`, `text/csv` | 2 MB |
+| audio | `audio/mpeg`, `audio/mp4`, `audio/aac`, `audio/wav`, `audio/x-wav`, `audio/ogg`, `audio/webm` | 20 MB |
+| video | `video/mp4`, `video/quicktime`, `video/webm` | 30 MB (Cloud Run caps a request at 32 MB) |
 
 `POST /v1/compile` admits incoming observations to immutable Bronze storage,
 counts distinct authenticated reporters, and returns `202 PENDING` until the

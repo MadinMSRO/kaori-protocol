@@ -12,7 +12,7 @@
 To understand Kaori, you must separate **Truth** (the Court) from **Flow** (the Legal System).
 
 *   **TRUTH (`kaori-truth`) is the Court Verdict.**
-    It is a deterministic machine. Given rigid evidence and rules, it produces a signed verdict. It does not care about politics, nuance, or "who you are." It blindly checks signatures and timestamps.
+    It is a deterministic machine. Given rigid evidence and rules, it produces a signed verdict. It does not care about politics, nuance, or "who you are." It checks signatures and timestamps, and nothing else.
 
 *   **FLOW (`kaori-flow`) is the Credibility System.**
     It decides *who is allowed to testify* and *how much their testimony weighs*. It manages the messy reality of reputation, history, and trust.

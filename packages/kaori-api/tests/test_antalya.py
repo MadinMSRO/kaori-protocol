@@ -1,4 +1,4 @@
-"""Antalya MVP: referral-only membership, provenance, blind assignments and readings, export (plan §3)."""
+"""Antalya MVP: referral-only membership, provenance, validators' assignments and readings, export (plan §3)."""
 from __future__ import annotations
 
 import hashlib
@@ -45,7 +45,7 @@ def env(monkeypatch):
     flow = FlowCore(store=InMemorySignalStore())
     store = InMemoryEvidenceStore(bucket_name="kaori-observations")
     app = create_app(flow=flow, verify_token=_verify, evidence_store=store, generalist_client=None)
-    app.state.ai_reader = lambda claim_type_id, image: dict(AI_SEES)   # stands in for CLIP's blind reading
+    app.state.ai_reader = lambda claim_type_id, image: dict(AI_SEES)   # stands in for CLIP's reading
     app.state.ai_sync = True
     client = TestClient(app)
     return client, flow, store
@@ -102,7 +102,8 @@ def test_routes_mount_only_on_the_antalya_service(monkeypatch):
     assert live - plain == {
         "/v1/invites", "/v1/invites/{code}", "/v1/invites/redeem", "/v1/invites/mine",
         "/v1/invites/{invite_id}/{action}", "/v1/admin/invites", "/v1/assignments",
-        "/v1/assignments/{assignment_id}/image", "/v1/assignments/{assignment_id}/reading", "/v1/export",
+        "/v1/assignments/{assignment_id}/image", "/v1/assignments/{assignment_id}/evidence/{index}",
+        "/v1/assignments/{assignment_id}/reading", "/v1/export",
         "/v1/me", "/v1/devices/challenge", "/v1/devices/link",
         "/v1/admin/me", "/v1/admin/overview", "/v1/admin/members", "/v1/admin/truths", "/v1/admin/devices",
         "/v1/admin/seeds", "/v1/admin/devices/{device_id}/unlink", "/v1/admin/export",
@@ -195,7 +196,7 @@ def _three_at_key(client, flow):
         _report(client, name, cover=cover)
 
 
-def test_assignments_are_blind_and_never_your_own(env):
+def test_assignments_hide_the_reporter_and_are_never_your_own(env):
     client, flow, _ = env
     _three_at_key(client, flow)
     mine = client.get("/v1/assignments?limit=5", headers=_h("madin")).json()
@@ -203,7 +204,8 @@ def test_assignments_are_blind_and_never_your_own(env):
     got = client.get("/v1/assignments?limit=5", headers=_h("val")).json()
     assert len(got) == 3
     for item in got:
-        assert set(item) == {"assignment_id", "image_url", "provenance_badge", "claim_type_id", "options", "expires_at"}
+        assert set(item) == {"assignment_id", "claim_type_id", "title", "provenance_badge", "expires_at", "evidence",
+                             "questions", "image_url", "options"}
         assert set(item["provenance_badge"]) == {"in_app_capture", "time_matches", "place_matches", "zoom_matches", "device_signed"}
         assert KEY not in json.dumps(item) and "user:" not in json.dumps(item)
     again = client.get("/v1/assignments?limit=5", headers=_h("val")).json()
@@ -313,9 +315,9 @@ def test_an_unread_observation_does_not_block_its_key(env, monkeypatch):
         _join(client, flow, name)
     for name in ("madin", "amira", "omar"):
         _report(client, name, cover="overcast")
-    omar = {p["sha"] for p in antalya._photos(flow, client.app.state.observation_store) if p["reporter"] == "user:omar"}
-    real = antalya._photos
-    monkeypatch.setattr(antalya, "_photos", lambda f, s: [p for p in real(f, s) if p["sha"] not in omar])
+    omar = {p["sha"] for p in antalya._evidence_items(flow, client.app.state.observation_store) if p["reporter"] == "user:omar"}
+    real = antalya._evidence_items
+    monkeypatch.setattr(antalya, "_evidence_items", lambda f, s: [p for p in real(f, s) if p["sha"] not in omar])
     for v in ("v1", "v2", "v3"):
         _read_all(client, v, lambda item: "overcast")
     readings = [r for r in flow.store.get_by_type(SignalTypes.READING_SUBMITTED) if r.agent_id.startswith("user:")]
@@ -331,7 +333,7 @@ def test_a_rejected_lie_does_not_flip_the_key_whatever_the_order(env):
     _report(client, "madin", cover="overcast")
     _report(client, "amira", cover="overcast")
     _report(client, "omar", cover="clear")             # the photo shows overcast; the eye says clear
-    liar = {p["sha"] for p in antalya._photos(flow, client.app.state.observation_store) if p["reporter"] == "user:omar"}
+    liar = {p["sha"] for p in antalya._evidence_items(flow, client.app.state.observation_store) if p["reporter"] == "user:omar"}
     later = []
     for v in ("v1", "v2", "v3"):
         for item in client.get("/v1/assignments?limit=5", headers=_h(v)).json():
@@ -346,7 +348,7 @@ def test_a_rejected_lie_does_not_flip_the_key_whatever_the_order(env):
     assert _status(client) == "VERIFIED_TRUE"
 
 
-def test_the_ai_reads_every_photo_blind_and_alone_cannot_verify(env):
+def test_the_ai_reads_every_photo_like_a_validator_and_alone_cannot_verify(env):
     client, flow, store = env
     seen = []
     client.app.state.ai_reader = lambda claim_type_id, image: seen.append(image) or dict(AI_SEES)

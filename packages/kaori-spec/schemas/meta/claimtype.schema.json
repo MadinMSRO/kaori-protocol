@@ -91,7 +91,108 @@
                 "fields": {
                     "type": "array",
                     "items": {
-                        "type": "object"
+                        "type": "object",
+                        "required": [
+                            "name",
+                            "type"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "type": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "label": {
+                                "type": "string"
+                            },
+                            "required": {
+                                "type": "boolean"
+                            },
+                            "options": {
+                                "type": "array"
+                            },
+                            "option_labels": {
+                                "type": "object",
+                                "description": "Plain words a validator sees for each select option, keyed by option",
+                                "additionalProperties": {
+                                    "type": "string"
+                                }
+                            },
+                            "unit": {
+                                "type": "string",
+                                "description": "Number fields: the unit of the value, e.g. m"
+                            },
+                            "min": {
+                                "type": "number"
+                            },
+                            "max": {
+                                "type": "number"
+                            },
+                            "step": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "validation": {
+            "type": "object",
+            "description": "How a validator's reading is compared with the report. Optional: when absent, every required ui_schema field is compared (select and boolean equal, number within 10 percent).",
+            "required": [
+                "fields"
+            ],
+            "properties": {
+                "fields": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "name",
+                            "agree"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "agree": {
+                                "oneOf": [
+                                    {
+                                        "const": "equal"
+                                    },
+                                    {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "minProperties": 1,
+                                        "maxProperties": 1,
+                                        "properties": {
+                                            "within_steps": {
+                                                "type": "integer",
+                                                "minimum": 0,
+                                                "description": "select: index distance in options"
+                                            },
+                                            "within": {
+                                                "type": "number",
+                                                "minimum": 0,
+                                                "description": "number: absolute difference, in the field's unit"
+                                            },
+                                            "within_pct": {
+                                                "type": "number",
+                                                "minimum": 0,
+                                                "description": "number: difference as a percentage of the reported value"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
                     }
                 }
             }
@@ -112,7 +213,14 @@
                     "type": "array",
                     "minItems": 1,
                     "items": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Evidence kind. Validators check photo, data (numbers and readings), audio and video; other names are descriptive labels from earlier ClaimTypes.",
+                        "examples": [
+                            "photo",
+                            "data",
+                            "audio",
+                            "video"
+                        ]
                     }
                 },
                 "min_count": {

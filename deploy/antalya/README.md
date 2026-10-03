@@ -70,7 +70,7 @@ process, so they must not be split across instances, and the CPU must stay on af
   - the account is deleted. Nothing is written to the ledger;
 - the AI refuses outside callers and reads a photo.
 
-The full loop (invite → photo → blind readings → VERIFIED_TRUE) is not run against the live service, because
+The full loop (invite → photo → validators' readings → VERIFIED_TRUE) is not run against the live service, because
 it would write test truths into the real ledger. It is proven locally by `npm run antalya-contract` in
 `liminal-mobile`, and on the live service by the Malé dry run with real phones.
 

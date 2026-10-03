@@ -58,6 +58,19 @@ ui_schema:
       # widespread: water as far as you can see
 
 # ----------------------------------------------------------------------------
+# Validation (how a validator's reading is compared with the report)
+# ----------------------------------------------------------------------------
+# Validators check each report's photo or video independently, without seeing
+# whose report it is or what the reporter answered. A reading backs the report
+# when both fields agree: the same answer on water, extent within one step.
+validation:
+  fields:
+    - name: water_present
+      agree: equal
+    - name: extent
+      agree: {within_steps: 1}
+
+# ----------------------------------------------------------------------------
 # Output Schema (TruthState.claim)
 # ----------------------------------------------------------------------------
 # Claim keys come only from these properties (kaori-truth claim derivation).

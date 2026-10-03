@@ -9,7 +9,7 @@ The IAC sky test runs the same image as `kaori-api`, with one extra environment 
 |---|---|---|
 | `KAORI_ANTALYA` | `1` | Mounts the routes below. `/v1/evidence` and `/v1/compile` accept members only (joined by invite, or seeded) |
 | `KAORI_EXPORT_TOKEN` | a new secret | Bearer token for `GET /v1/export` |
-| `KAORI_GENERALIST_URL` | the `kaori-generalist` service URL | **Required.** The AI reads every photo blind through its `POST /read` |
+| `KAORI_GENERALIST_URL` | the `kaori-generalist` service URL | **Required.** The AI reads every photo through its `POST /read`, as a validator does |
 | `FIREBASE_PROJECT_ID` | the GCP project id | Sign-in is Firebase Auth: Kaori verifies each ID token offline (Google's signature, this project as audience and issuer) and the agent is `user:{firebase uid}`. Unset, Kaori uses Supabase Auth as before |
 | everything else | set by `deploy/antalya/deploy.sh` | Cloud SQL ledger, a private bucket, new signing keys |
 
@@ -41,9 +41,10 @@ python -m kaori_api.antalya seed user:<firebase-uid> "<callsign>"
 | `POST /v1/invites` | member | Body `{callsign?}` → `{code, expires_at, qr_payload}`. Single use, 7 days. Only the hash is stored |
 | `GET /v1/invites/{code}` | none | `{valid, referrer_callsign, expires_at}`, or `{valid:false, reason: unknown\|used\|expired}` |
 | `POST /v1/invites/redeem` | new user | `{code, name, relationship, known_for, device_id}` (the invitee's own account, given without seeing the inviter's) → `{agent_id, referrer}`. One member per device (hashed) |
-| `GET /v1/assignments?limit=5` | member | Blind: `{assignment_id, image_url, provenance_badge, claim_type_id, options, expires_at}` |
-| `GET /v1/assignments/{id}/image` | the assigned member | The photo, re-encoded as JPEG **without EXIF** (EXIF would reveal place and time) |
-| `POST /v1/assignments/{id}/reading` | the assigned member | `{cover, raining}` → `{ok}`. One reading per assignment. Records a vote on the key (plan §3.4) |
+| `GET /v1/assignments?limit=5` | member | Without whose report it is, where or when: `[{assignment_id, claim_type_id, title, provenance_badge, expires_at, evidence: [{kind, mime, url}], questions: [{name, type, label, options?, option_labels?, unit?, min?, max?, step?}], image_url, options}]`. `image_url` (first photo, or null) and `options` are kept for older app builds |
+| `GET /v1/assignments/{id}/evidence/{i}` | the assigned member | One piece of evidence with its metadata stripped: a photo re-encoded as JPEG **without EXIF**; JSON or CSV without location, time or identity keys and columns; audio and video remuxed without metadata (`ffmpeg -map_metadata -1`; served as stored, with a logged warning, when ffmpeg is missing) |
+| `GET /v1/assignments/{id}/image` | the assigned member | The first photo, re-encoded as JPEG **without EXIF** (EXIF would reveal place and time) |
+| `POST /v1/assignments/{id}/reading` | the assigned member | `{values: {<question>: <answer>}}`, or `{values: null, unusable: true}` when the evidence can't be checked (a REJECT); the older `{cover, raining}` still works → `{ok}`. One reading per assignment. Records a vote on the key (plan §3.4) |
 | `GET /v1/export` | `Bearer $KAORI_EXPORT_TOKEN` | NDJSON: every Signal, then every TruthState |
 | `GET /v1/me` | signed in | `{agent_id, member, device, device_required}` |
 | `POST /v1/devices/challenge` | member | `{challenge, package, expires_in}`: single use, ten minutes, bound to the caller |
@@ -85,7 +86,7 @@ Certificates are read with Kaori's own DER reader, not a strict X.509 parser: so
 certificates with harmless encoding quirks. It is tested on Google's real sample chains
 (`tests/data/attestation`).
 
-## The AI reads every photo blind
+## The AI reads every photo as a validator does
 
 Every accepted photo is also assigned to `ai:generalist_v1`. Kaori sends `kaori-generalist` (`POST /read`) the
 same EXIF-stripped image a person sees. CLIP reads it zero-shot over the ClaimType's `generalist.readings`
@@ -139,6 +140,20 @@ in clear in a Signal, the export or a log. `GET /v1/admin/members` decrypts them
 member's own), `name_by_inviter`, `inviter_relationship`, `inviter_known_for` and `agreement`.
 
 The invite QR holds `KAORI_JOIN_URL?code=…`, a web page that opens Liminal straight into Join, or installs it first.
+
+## What validators check
+
+Validators check any kind of evidence: photo, data (numbers and readings), audio or video. Each report is checked
+independently, without seeing whose report it is, where or when it was made, or what the reporter said. Any
+report with evidence can be assigned (never your own, nor one from a key you reported at; at most three people per
+report). The questions come from the ClaimType: its `validation` block names the fields a validator answers and
+how each is compared with the report, `equal`, `{within_steps: n}` (index distance in a select's options),
+`{within: x}` (absolute, in the field's unit) or `{within_pct: p}`. Without a `validation` block every required
+`ui_schema` field is asked: select and boolean must be equal, a number within 10 percent. A reading is RATIFY when
+every field agrees, otherwise REJECT. Sky cover: cover within one band and the same answer on rain.
+
+`ui_schema` select fields may carry `option_labels` (sky cover: None, A little, About half, Most, All) and number
+fields `unit`, `min`, `max` and `step`. The AI reads photos only.
 
 ## Sky photos at 1x
 

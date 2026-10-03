@@ -885,7 +885,7 @@ def _jpeg() -> bytes:
     return out.getvalue()
 
 
-def test_blind_read_returns_a_value_per_field_from_the_claim_type_prompts():
+def test_read_returns_a_value_per_field_from_the_claim_type_prompts():
     from pathlib import Path
 
     root = str(Path(__file__).resolve().parents[2] / "kaori-spec" / "schemas")

@@ -2,7 +2,7 @@
 
 **Real-time truth extraction and verification for high-stakes decisions.**
 
-Kaori Protocol exists to close the most expensive gap in modern decision systems: data can be abundant, but truth and trust are not. It combines two complementary layers — Kaori Truth (the Mechanics of Verification), which deterministically compiles observations into signed, replayable TruthStates anchored by a canonical TruthKey, and Kaori Flow (the Physics of Trust), which models standing, coordination, and adversarial resilience across agents and networks. Together, they make truth operational: verifiable, auditable, and composable without requiring blind trust in any single pipeline.
+Kaori Protocol exists to close the most expensive gap in modern decision systems: data can be abundant, but truth and trust are not. It combines two complementary layers — Kaori Truth (the Mechanics of Verification), which deterministically compiles observations into signed, replayable TruthStates anchored by a canonical TruthKey, and Kaori Flow (the Physics of Trust), which models standing, coordination, and adversarial resilience across agents and networks. Together, they make truth operational: verifiable, auditable, and composable without having to take any single pipeline on trust.
 
 Kaori transforms raw physical observations into signed, traceable Truth Records and Truth Maps that can be used operationally and defended under scrutiny.
 

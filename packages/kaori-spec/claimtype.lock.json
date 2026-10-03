@@ -31,10 +31,10 @@
             "sha256": "579ca26db361f513494d5f05ba72c2dc25786d624667eb417d58e3caa47b8727"
         },
         "packages/kaori-spec/schemas/earth/flood_water_v1.yaml": {
-            "sha256": "4a04561626352cb84f00986968896a2bdc7a973eed78468ed59ead65cbf296bf"
+            "sha256": "7855591b6cf0abd0e1a3abd75991f75a9aa6c7ea7e4f5394b92b6b061bddad82"
         },
         "packages/kaori-spec/schemas/earth/sky_cover_v1.yaml": {
-            "sha256": "7b83bb11aa326bb2c475daeaace45750661031b4d18f52725d6d3596216f9f2a"
+            "sha256": "9a05b4e99dec3de0a0d5b9f731fdfe5978508c2ba24003873374e8299906e3c7"
         }
     }
 }

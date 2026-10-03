@@ -19,7 +19,7 @@ from kaori_api.generalist import (
 
 
 class ReadRequest(BaseModel):
-    """A blind reading request: the claim type and the photo exactly as a human validator sees it."""
+    """A reading request: the claim type and the photo exactly as a human validator sees it."""
 
     claim_type_id: str
     image_b64: str
@@ -56,7 +56,7 @@ def create_generalist_app(validator: Optional[ClipGeneralistValidator] = None) -
         log_validation_vote(vote, source="kaori-generalist")
         return vote
 
-    # A blind reading of one photo (Antalya): the same image a human validator sees, EXIF removed.
+    # A reading of one photo (Antalya): the same image a human validator sees, EXIF removed.
     @application.post("/read")
     def read(request: ReadRequest) -> dict:
         try:
