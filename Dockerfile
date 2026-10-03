@@ -11,6 +11,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# ffmpeg strips location and time from audio and video evidence before validators get it
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 COPY packages/kaori-truth/src/kaori_truth /app/kaori_truth
 COPY packages/kaori-flow/src/kaori_flow /app/kaori_flow
 COPY packages/kaori-db/src/kaori_db /app/kaori_db
