@@ -325,3 +325,21 @@ def test_flood_readings_can_ratify(env):
                     json={"values": {"water_present": True, "extent": "street"}})
     assert r.json() == {"ok": True}
     assert _human_vote(flow) == "RATIFY"
+
+
+def test_a_full_size_camera_photo_is_served_small_and_without_exif():
+    """A 12 MP phone photo with EXIF (GPS, time) comes back at most 2048 px on its long edge, aspect kept,
+    as a JPEG with no metadata: small enough for a phone to show."""
+    img = Image.new("RGB", (4032, 3024), (120, 160, 220))
+    exif = Image.Exif()
+    exif[0x9003] = "2026:10:05 12:00:00"
+    exif[0x010F] = "PhoneMaker"
+    raw = io.BytesIO()
+    img.save(raw, format="JPEG", quality=95, exif=exif.tobytes())
+    data, mime = evidence_kinds.prepare(raw.getvalue(), "photo", "image/jpeg")
+    assert mime == "image/jpeg"
+    with Image.open(io.BytesIO(data)) as out:
+        assert out.format == "JPEG"
+        assert max(out.size) <= 2048 and out.size == (evidence_kinds.PHOTO_MAX_EDGE, 1200)
+        assert not dict(out.getexif())
+    assert len(data) < len(raw.getvalue())

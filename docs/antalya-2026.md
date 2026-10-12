@@ -47,6 +47,8 @@ python -m kaori_api.antalya seed user:<firebase-uid> "<callsign>"
 | `POST /v1/assignments/{id}/reading` | the assigned member | `{values: {<question>: <answer>}}`, or `{values: null, unusable: true}` when the evidence can't be checked (a REJECT); the older `{cover, raining}` still works → `{ok}`. One reading per assignment. Records a vote on the key (plan §3.4) |
 | `GET /v1/export` | `Bearer $KAORI_EXPORT_TOKEN` | NDJSON: every Signal, then every TruthState |
 | `GET /v1/me` | signed in | `{agent_id, member, device, device_required}` |
+| `DELETE /v1/me` | signed in | `{agent_id, member: false, left: true, appended}`. Leaves: MEMBERSHIP_ENDED, DEVICE_UNLINKED, INVITE_CANCELLED for open invites and a waiting join. Idempotent |
+| `GET /v1/progress/{truthkey}` | signed in | `{truthkey, received, required, status}`. Reporters so far; `PENDING` until a TruthState exists. Read-only, never 404 |
 | `POST /v1/devices/challenge` | member | `{challenge, package, expires_in}`: single use, ten minutes, bound to the caller |
 | `POST /v1/devices/link` | member | `{challenge, chain: [base64 DER, leaf first]}` → `{device_id: "sensor:android-…", security_level, verified_boot_state, …}` or 403 with `reasons` |
 

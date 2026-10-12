@@ -91,6 +91,24 @@ ledger. A Firebase uid works in place of the email.
 a `probe-antalya` branch, and GitHub Actions builds the APK and publishes it as a pre-release. The
 Firebase values are public by design; they identify the project and grant nothing.
 
+## Leaving, and a reporter's progress
+
+`DELETE /v1/me` (signed in, as for every `/v1` route) is how the app deletes an account. Kaori appends
+`MEMBERSHIP_ENDED` (reason `left`), `DEVICE_UNLINKED` for their phone, and `INVITE_CANCELLED` for their unused
+invites and any join waiting on them; nothing in the ledger is changed or removed. From then on they are not a
+member (`/v1/me` says `member: false`; reports, readings, votes and invites are refused, the Validation Desk
+stops assigning to them), admin views no longer list them or decrypt their name (the overview counts them in
+`members_left`), and their past reports and readings stay under their agent id. Calling it again changes
+nothing. They can be invited again, and the newest admission wins.
+
+`GET /v1/progress/{truthkey}` (signed in; optional `?claim_type_id=`) returns
+`{truthkey, received, required, status}`: how many people have reported at a key, the number `/v1/compile`
+needs, and `PENDING` until a TruthState exists (then its status). It writes nothing and an unreported key
+gives `received: 0`, so the first reporter's phone can see the second report arrive.
+
+Both are new in the API image: `./deploy/antalya/deploy.sh build`, then `./deploy/antalya/deploy.sh api`.
+Until then the app says account deletion needs a server update, and falls back to its old progress polling.
+
 ## Getting the data out
 
 ```bash

@@ -9,6 +9,7 @@ adding a seed (REFERRAL_REDEEMED from seed:msro) and unlinking a phone (DEVICE_U
     GET  /v1/admin/me                         {email, agent_id}
     GET  /v1/admin/overview                   counts, and reports and readings per hour
     GET  /v1/admin/members                    each member: who invited them, phone, reports, readings, standing
+                                              (people who left are not listed; overview counts them as left)
     GET  /v1/admin/truths                     each TruthKey: reporters, readings, status
     GET  /v1/admin/devices                    linked phones, and refusals with their reasons
     POST /v1/admin/seeds                      {agent_id: "user:<firebase uid>", callsign}
@@ -43,10 +44,14 @@ def _hour(t) -> str:
 
 
 def _callsigns(flow: FlowCore) -> Dict[str, str]:
-    """A member's callsign: the one they joined with as a seed, or the latest one on an invite they issued."""
+    """A member's callsign: the one they joined with as a seed, or the latest one on an invite they issued.
+    Callsigns given before a person left are not shown again."""
     names: Dict[str, str] = {}
+    ends = antalya._ends(flow)
     for s in sorted(flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED) + flow.store.get_by_type(SignalTypes.INVITE_ISSUED),
                     key=lambda s: s.time):
+        if not antalya._current(s, ends):
+            continue
         name = (s.payload or {}).get("callsign")
         if isinstance(name, str) and name.strip():
             names[s.agent_id] = name.strip()
@@ -62,10 +67,15 @@ def members(flow: FlowCore) -> List[Dict[str, Any]]:
     invites = Counter(s.agent_id for s in flow.store.get_by_type(SignalTypes.INVITE_ISSUED))
     joined = Counter(s.agent_id for s in flow.store.get_by_type(SignalTypes.INVITE_CONFIRMED))
     out = []
+    ends = antalya._ends(flow)
+    # each member once, by the admission that made them one; someone who left is not listed (their name is
+    # never decrypted again), and someone who came back is listed by their new admission
+    current: Dict[str, Any] = {}
     for s in sorted(flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED), key=lambda s: s.time):
         # members only: a request still waiting for its inviter, or declined, is not a member
-        if not antalya._admitted(flow, s):
-            continue
+        if antalya._current(s, ends) and antalya._admitted(flow, s):
+            current.setdefault(s.agent_id, s)
+    for s in sorted(current.values(), key=lambda s: s.time):
         p = s.payload or {}
         device = linked.get(s.agent_id)
         out.append({
@@ -175,8 +185,11 @@ def overview(flow: FlowCore, truth_store: Any) -> Dict[str, Any]:
     statuses = Counter(x["status"] for x in t)
     redeemed = by_type(SignalTypes.REFERRAL_REDEEMED)
     inv = invites(flow)
+    left = {a for a in antalya._ends(flow) if not antalya.is_member(flow, a)}
     return {
         "members": len(m),
+        # people who deleted their account and have not come back
+        "members_left": len(left),
         "seeds": sum(1 for x in m if x["seed"]),
         "invites_issued": len(inv),
         # what happened to every invite: only "joined" are new members

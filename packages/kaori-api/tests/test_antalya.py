@@ -104,7 +104,7 @@ def test_routes_mount_only_on_the_antalya_service(monkeypatch):
         "/v1/invites/{invite_id}/{action}", "/v1/joining/hold", "/v1/admin/invites", "/v1/assignments",
         "/v1/assignments/{assignment_id}/image", "/v1/assignments/{assignment_id}/evidence/{index}",
         "/v1/assignments/{assignment_id}/reading", "/v1/export",
-        "/v1/me", "/v1/devices/challenge", "/v1/devices/link",
+        "/v1/me", "/v1/devices/challenge", "/v1/devices/link", "/v1/progress/{truthkey:path}",
         "/v1/admin/me", "/v1/admin/overview", "/v1/admin/members", "/v1/admin/truths", "/v1/admin/devices",
         "/v1/admin/seeds", "/v1/admin/devices/{device_id}/unlink", "/v1/admin/export",
     }

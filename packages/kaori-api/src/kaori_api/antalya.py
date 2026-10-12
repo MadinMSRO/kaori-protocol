@@ -11,6 +11,8 @@ derived from the signal log, so the test needs no new tables:
   INVITE_DECLINED      the inviter says it is not who they meant agent = referrer,  object = invite:<code hash>
   INVITE_CANCELLED     the inviter withdraws an unused invite    agent = referrer,  object = invite:<code hash>
   INVITE_HOLD_OPENED   the joiner's phone opens an NFC hold     agent = invitee,   object = invite:<code hash>
+  MEMBERSHIP_ENDED     a person leaves (deletes their account)  agent = them,      object = member:<agent id>
+                       (INVITE_CANCELLED is also emitted by a joiner who leaves while waiting to be confirmed)
   PROVENANCE_RECORDED  an observation's evidence is accepted    agent = reporter,  object = evidence:<sha256>
   ASSIGNMENT_ISSUED    evidence is assigned to a validator      agent = validator, object = assignment:<id>
   READING_SUBMITTED    a validator answers what it shows        agent = validator, object = assignment:<id>
@@ -24,6 +26,11 @@ key they reported at. Evidence is a photo, data, audio or video.
 Membership is an in-person handshake: the inviter shows a QR, the invitee scans it, installs Liminal, signs in and
 asks to join; the inviter's phone then shows who is joining and they become a member only when the inviter
 confirms. Invites are counted by what happened to them (waiting, joining, joined, expired, declined, cancelled).
+
+Leaving (DELETE /v1/me) appends MEMBERSHIP_ENDED; nothing is changed or removed. A redemption from before a
+person's latest MEMBERSHIP_ENDED no longer counts: they are not a member, their join request is withdrawn, and
+the names recorded with it (their own, and the one their inviter typed) are never decrypted again. Their past
+reports and readings stay, under their agent id only. They can be invited again; the newest admission wins.
 
 Readings feed the proven compile path through an adapter (plan §3.4): RATIFY when every field of the ClaimType's
 `validation` block agrees with that observation's answer by its rule (sky cover: within one band and the same
@@ -139,6 +146,22 @@ def _resolution(flow: FlowCore, chash: Optional[str]) -> Optional[Signal]:
     return max(found, key=lambda s: s.time) if found else None
 
 
+def _ends(flow: FlowCore) -> Dict[str, datetime]:
+    """agent id -> the time of their latest MEMBERSHIP_ENDED."""
+    out: Dict[str, datetime] = {}
+    for s in flow.store.get_by_type(SignalTypes.MEMBERSHIP_ENDED):
+        if s.agent_id not in out or s.time > out[s.agent_id]:
+            out[s.agent_id] = s.time
+    return out
+
+
+def _current(signal: Signal, ends: Dict[str, datetime]) -> bool:
+    """Whether a signal by a person comes after they last left (or they never left). A redemption that is not
+    current makes no member, and the names recorded with it are not decrypted."""
+    end = ends.get(signal.agent_id)
+    return end is None or signal.time > end
+
+
 def _admitted(flow: FlowCore, redemption: Signal) -> bool:
     """A redemption makes a member when it needs no confirmation (seeds, and joins from before the handshake)
     or when the inviter confirmed it."""
@@ -152,19 +175,25 @@ def _admitted(flow: FlowCore, redemption: Signal) -> bool:
 def _pending(flow: FlowCore, redemption: Signal) -> bool:
     p = redemption.payload or {}
     return bool(p.get("needs_confirm")) and _resolution(flow, p.get("code_hash")) is None \
-        and redemption.time + CONFIRM_TTL > _now()
+        and redemption.time + CONFIRM_TTL > _now() and _current(redemption, _ends(flow))
+
+
+def _redemptions_of(flow: FlowCore, agent_id: str) -> List[Signal]:
+    """This person's redemptions since they last left, oldest first."""
+    ends = _ends(flow)
+    return sorted((s for s in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED)
+                   if s.agent_id == agent_id and _current(s, ends)), key=lambda s: s.time)
 
 
 def is_member(flow: FlowCore, agent_id: str) -> bool:
-    return any(s.agent_id == agent_id and _admitted(flow, s) for s in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED))
+    return any(_admitted(flow, s) for s in _redemptions_of(flow, agent_id))
 
 
 def join_state(flow: FlowCore, agent_id: str) -> Dict[str, Any]:
     """For /v1/me: member, or waiting for their inviter to confirm them, or neither."""
     if is_member(flow, agent_id):
         return {"member": True, "joining": None}
-    mine = sorted((s for s in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED) if s.agent_id == agent_id),
-                  key=lambda s: s.time)
+    mine = _redemptions_of(flow, agent_id)
     if not mine:
         return {"member": False, "joining": None}
     last = mine[-1]
@@ -185,12 +214,11 @@ def require_member(flow: FlowCore, agent_id: str) -> None:
 
 
 def seed_member(flow: FlowCore, agent_id: str, callsign: Optional[str] = None) -> Signal:
-    """A seed joins without an invite (admin script). Idempotent."""
+    """A seed joins without an invite (admin script). Idempotent; someone who left can be seeded again."""
     from kaori_api.validation import ensure_agent_registered
 
-    for signal in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED):
-        if signal.agent_id == agent_id:
-            return signal
+    for signal in _redemptions_of(flow, agent_id):
+        return signal
     ensure_agent_registered(flow, agent_id, role="observer")
     return _emit(
         flow, SignalTypes.REFERRAL_REDEEMED, agent_id, f"seed:{agent_id}",
@@ -318,9 +346,11 @@ def redeem_invite(flow: FlowCore, agent_id: str, body: Dict[str, Any]) -> Dict[s
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="name: " + str(exc))
     device_hash = _sha("device:" + device_id.strip())
+    ends = _ends(flow)
     for signal in flow.store.get_by_type(SignalTypes.REFERRAL_REDEEMED):
-        # a phone joins once; a request that was declined or ran out does not hold it
-        if signal.payload.get("device_id_hash") == device_hash and (_admitted(flow, signal) or _pending(flow, signal)):
+        # a phone joins once; a request that was declined or ran out, or a member who left, does not hold it
+        if signal.payload.get("device_id_hash") == device_hash and _current(signal, ends) \
+                and (_admitted(flow, signal) or _pending(flow, signal)):
             raise HTTPException(status_code=409, detail="This device already joined")
     ensure_agent_registered(flow, agent_id, role="observer")
     ip = issued.payload or {}
@@ -343,6 +373,8 @@ def _invite_view(flow: FlowCore, issued: Signal) -> Dict[str, Any]:
     chash = p.get("code_hash")
     red = _redemption(flow, chash)
     res = _resolution(flow, chash)
+    # the person who joined with it has since left: neither name for them is decrypted again
+    gone = red is not None and not _current(red, _ends(flow))
     expires_at = _parse_time(p.get("expires_at"))
     if res is not None:
         status = {SignalTypes.INVITE_CONFIRMED: "joined", SignalTypes.INVITE_DECLINED: "declined",
@@ -356,9 +388,9 @@ def _invite_view(flow: FlowCore, issued: Signal) -> Dict[str, Any]:
         "status": status,
         "created_at": issued.time.isoformat(),
         "expires_at": expires_at.isoformat() if expires_at else None,
-        "name_by_you": names.unseal(p.get("invitee_name_enc"), f"invite:{chash}"),
+        "name_by_you": None if gone else names.unseal(p.get("invitee_name_enc"), f"invite:{chash}"),
         # the name the person typed on their own phone, so the inviter can see who is joining
-        "joiner_name": names.unseal((red.payload or {}).get("name_enc"), f"member:{red.agent_id}") if red else None,
+        "joiner_name": names.unseal((red.payload or {}).get("name_enc"), f"member:{red.agent_id}") if red and not gone else None,
         "joined_at": res.time.isoformat() if res is not None and status == "joined" else None,
         "confirm_by": (red.time + CONFIRM_TTL).isoformat() if red is not None and status == "joining" else None,
     }
@@ -450,6 +482,53 @@ def resolve_invite(flow: FlowCore, agent_id: str, invite_id: str, action: str, b
     _emit(flow, kind, agent_id, f"invite:{invite_id}",
           {"code_hash": invite_id, "member": red.agent_id if red is not None else None, **extra})
     return _invite_view(flow, issued)
+
+
+# --------------------------------------------------------------------------------------------- leaving
+
+LEFT = "left"
+
+
+def leave(flow: FlowCore, agent_id: str) -> Dict[str, Any]:
+    """
+    The person deletes their account (DELETE /v1/me). Only new signals are appended:
+      INVITE_CANCELLED   for each invite of theirs nobody has used yet, or that someone is waiting on them to
+                         confirm, and for their own join request still waiting for their inviter
+      DEVICE_UNLINKED    for their linked phone, reason "left"
+      MEMBERSHIP_ENDED   reason "left", when they had joined or asked to
+    Idempotent: a second call finds nothing open and appends nothing. Someone who never joined gets the same
+    answer. Their reports and readings stay in the ledger under their agent id.
+    """
+    from kaori_api.devices import linked_devices
+
+    appended: List[str] = []
+    mine = _redemptions_of(flow, agent_id)
+    was_member = any(_admitted(flow, s) for s in mine)
+    # their own request to join, still waiting for the inviter
+    for red in mine:
+        if _pending(flow, red):
+            chash = red.payload.get("code_hash")
+            _emit(flow, SignalTypes.INVITE_CANCELLED, agent_id, f"invite:{chash}",
+                  {"code_hash": chash, "member": agent_id, "reason": LEFT})
+            appended.append(SignalTypes.INVITE_CANCELLED)
+    # invites they issued that are still open: unused, or someone waiting for them to confirm
+    for issued in flow.store.get_by_type(SignalTypes.INVITE_ISSUED):
+        if issued.agent_id != agent_id:
+            continue
+        view = _invite_view(flow, issued)
+        if view["status"] in ("waiting", "joining"):
+            red = _redemption(flow, view["id"])
+            _emit(flow, SignalTypes.INVITE_CANCELLED, agent_id, f"invite:{view['id']}",
+                  {"code_hash": view["id"], "member": red.agent_id if red is not None else None, "reason": LEFT})
+            appended.append(SignalTypes.INVITE_CANCELLED)
+    for device in [d for d in linked_devices(flow).values() if d.agent_id == agent_id]:
+        _emit(flow, SignalTypes.DEVICE_UNLINKED, agent_id, device.object_id, {"reason": LEFT})
+        appended.append(SignalTypes.DEVICE_UNLINKED)
+    if mine:
+        _emit(flow, SignalTypes.MEMBERSHIP_ENDED, agent_id, f"member:{agent_id}",
+              {"reason": LEFT, "was_member": was_member})
+        appended.append(SignalTypes.MEMBERSHIP_ENDED)
+    return {"agent_id": agent_id, "member": False, "left": True, "appended": appended}
 
 
 # --------------------------------------------------------------------------------------------- provenance
@@ -893,10 +972,12 @@ def assign(flow: FlowCore, observation_store: Any, agent_id: str, limit: int, rn
     my_keys = {s.object_id for s in flow.store.get_by_type(SignalTypes.OBSERVATION_SUBMITTED) if s.agent_id == agent_id}
     seen = {s.payload.get("evidence_sha256") for s in issued.values() if s.agent_id == agent_id}
     load: Dict[str, int] = {}
+    ends = _ends(flow)
     for oid, s in issued.items():
         if s.agent_id == AI_AGENT:
             continue                                    # the AI reads every photo; it takes no human slot
-        live = oid in answered or s.time + ASSIGNMENT_TTL > now
+        # an unanswered assignment of someone who has since left will never be answered: free its slot
+        live = oid in answered or (s.time + ASSIGNMENT_TTL > now and _current(s, ends))
         if live:
             load[s.payload.get("evidence_sha256")] = load.get(s.payload.get("evidence_sha256"), 0) + 1
     candidates = [p for p in _evidence_items(flow, observation_store)
@@ -960,6 +1041,7 @@ def submit_reading(flow: FlowCore, observation_store: Any, agent_id: str, assign
                    claim_types: Optional[Callable[[str], Any]] = None) -> Dict[str, Any]:
     from kaori_api.devices import require_device
 
+    require_member(flow, agent_id)
     require_device(flow, agent_id)
     signal = _own_assignment(flow, agent_id, assignment_id)
     if f"assignment:{assignment_id}" in _readings(flow):
@@ -981,6 +1063,31 @@ def submit_reading(flow: FlowCore, observation_store: Any, agent_id: str, assign
     vote = "REJECT" if unusable else vote_for(values, obs.payload if obs is not None else {}, cfg)
     vote_and_compile(agent_id, signal.payload["truthkey"], vote, values)
     return {"ok": True}
+
+
+# --------------------------------------------------------------------------------------------- progress
+
+def progress(observation_store: Any, truth_store: Any, claim_types: Callable[[str], Any], truth_key: str,
+             claim_type_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    How many people have reported at a TruthKey, for a reporter waiting on it (GET /v1/progress/{key}).
+    Read-only, and never 404: an unreported key has received 0. `required` is what /v1/compile asks for (the
+    ClaimType's minimum_observations), from the key's reports or ?claim_type_id= before anyone has reported;
+    None when neither is known. `status` is the TruthState's once one exists, otherwise PENDING. People who
+    have since left still count: their reports stay.
+    """
+    received = observation_store.count_distinct_reporters(truth_key)
+    observations = observation_store.get_for_truthkey(truth_key) if received else []
+    claim_id = observations[0].claim_type if observations else claim_type_id
+    required = None
+    if claim_id:
+        try:
+            required = claim_types(claim_id).minimum_observations()
+        except Exception:                   # an unknown ClaimType: progress still answers
+            required = None
+    stored = truth_store.get(truth_key)
+    status = (stored.get("status") if isinstance(stored, dict) else None) or "PENDING"
+    return {"truthkey": truth_key, "received": received, "required": required, "status": status}
 
 
 # --------------------------------------------------------------------------------------------- export
@@ -1077,9 +1184,19 @@ def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[...
                                   lambda a, k, v, r=None: vote_and_compile(app, a, k, v, r),
                                   claim_types=claim_type_resolver(app))
 
+    @app.get("/v1/progress/{truthkey:path}")
+    def truth_progress(truthkey: str, claim_type_id: Optional[str] = None, agent_id: str = Depends(require_agent)):
+        return progress(app.state.observation_store, app.state.truth_store, claim_type_resolver(app),
+                        truthkey, claim_type_id)
+
     @app.get("/v1/me")
     def whoami(agent_id: str = Depends(require_agent)):
         return devices.me(app.state.flow, agent_id)
+
+    @app.delete("/v1/me")
+    def leave_route(agent_id: str = Depends(require_agent)):
+        with lock:
+            return leave(app.state.flow, agent_id)
 
     @app.post("/v1/devices/challenge")
     def device_challenge(agent_id: str = Depends(require_agent)):

@@ -74,8 +74,15 @@ def accepted_summary() -> str:
 
 # --------------------------------------------------------------------------------------------- photo
 
+# A validator's phone shows the photo, and the AI's CLIP preprocessing scales it to 224 px anyway: a long edge
+# of 1600 px keeps what a reading needs and keeps the file small enough for a phone to decode (a full 12 MP
+# camera photo can render blank on Android)
+PHOTO_MAX_EDGE = 1600
+
+
 def strip_photo(raw: bytes) -> bytes:
-    """Re-encode as JPEG without metadata (EXIF GPS and time would reveal the place)."""
+    """Re-encode as JPEG without metadata (EXIF GPS and time would reveal the place), at most PHOTO_MAX_EDGE
+    on its long edge, aspect kept."""
     from PIL import Image, ImageOps
 
     try:
@@ -86,7 +93,7 @@ def strip_photo(raw: bytes) -> bytes:
         pass
     with Image.open(io.BytesIO(raw)) as img:
         img = ImageOps.exif_transpose(img).convert("RGB")
-        img.thumbnail((1600, 1600))
+        img.thumbnail((PHOTO_MAX_EDGE, PHOTO_MAX_EDGE))
         out = io.BytesIO()
         img.save(out, format="JPEG", quality=85)
     return out.getvalue()

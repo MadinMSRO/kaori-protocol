@@ -6,6 +6,7 @@ Thin FastAPI surface Liminal can call this week:
   POST /v1/validate
   GET  /v1/standing/{agent_id}
   GET  /v1/truth/{truthkey}
+  GET  /v1/progress/{truthkey}   reporters so far (Antalya service, antalya.progress)
 
 Wraps TruthOrchestrator.compile_observations and FlowCore.get_standing.
 Truth order: observe → validate → compile. Observe/record can stay async
@@ -591,7 +592,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins(),
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
     app.state.flow = flow
@@ -931,6 +932,8 @@ def create_app(
             if not 0.0 <= confidence <= 1.0:
                 raise HTTPException(status_code=400, detail="Invalid confidence")
 
+        if antalya.enabled():
+            antalya.require_member(request.app.state.flow, agent_id)
         artifact = vote_and_compile(request.app, agent_id, truth_key, vote, confidence)
         return JSONResponse(status_code=200, content=artifact)
 
