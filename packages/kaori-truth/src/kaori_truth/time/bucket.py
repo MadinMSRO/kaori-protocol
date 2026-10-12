@@ -135,7 +135,8 @@ def bucket_datetime(
         hour = (utc_dt.hour // 6) * 6
         return utc_dt.replace(hour=hour, minute=0, second=0, microsecond=0)
     
-    elif duration.startswith("P") and duration.endswith("D"):
+    elif duration == "PT24H" or (duration.startswith("P") and duration.endswith("D")):
+        # PT24H is a day, as earth.coastal_erosion.v1/v2 declare it
         # Daily or multi-day: truncate to day start
         return utc_dt.replace(hour=0, minute=0, second=0, microsecond=0)
     

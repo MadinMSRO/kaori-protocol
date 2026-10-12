@@ -8,11 +8,14 @@ This directory contains **ClaimType YAML contracts** that define validation rule
 schemas/
 ├── earth/
 │   ├── flood_v1.yaml            # Open Core example (no output_schema)
-│   ├── flood_water_v1.yaml      # product flood contract (Liminal)
+│   ├── flood_water_v1.yaml      # product flood contract (Liminal), res 8
+│   ├── flood_water_v2.yaml      # the same on the res 10 hexagon (what Liminal files now)
 │   ├── sky_cover_v1.yaml        # cloud cover and rain, doable anywhere (Liminal)
 │   ├── coastal_erosion_v1.yaml
+│   ├── coastal_erosion_v2.yaml  # res 10 (Liminal's shoreline)
 │   ├── infrastructure_v1.yaml
 │   ├── vegetation_v1.yaml
+│   ├── vegetation_v2.yaml       # res 10
 │   ├── nakaiy_v1.yaml
 │   ├── sentinel2_scene_v1.yaml
 │   └── sentinel1_sar_v1.yaml
@@ -40,7 +43,7 @@ Each YAML file specifies:
 
 | Section | Purpose |
 |---------|---------|
-| `truthkey` | How observations are bucketed (H3 resolution, time bucket) |
+| `truthkey` | How observations are bucketed (H3 resolution, time bucket); optional `position` (where a report may stand, below) |
 | `risk_profile` | `monitor` (AI can auto-verify) or `critical` (requires human) |
 | `evidence` | Required evidence types, min/max count |
 | `ai_validation_routing` | Bouncer → Generalist → Specialist pipeline |
@@ -48,6 +51,19 @@ Each YAML file specifies:
 | `confidence_model` | Component weights for composite confidence |
 | `human_gating` | When human approval is required |
 | `temporal_decay` | Confidence decay over time |
+
+## Hexagon sizes, parents and children
+
+Each ClaimType keeps the H3 resolution that suits it: sky cover is res 8 (~460 m), the ground claims
+(`earth.flood_water.v2`, `earth.vegetation.v2`, `earth.coastal_erosion.v2`) are res 10 (~66 m centre to
+edge). The Liminal map draws islands as res 10 hexagons; a truth lights every res 10 child of its cell
+(a res 8 truth lights its 49 children). `GET /v1/truths?cells=...` returns the truths whose cell is a
+requested cell, one of its ancestors or one of its descendants, each with `resolution` and `lights`.
+
+`truthkey.position` (optional) makes `POST /v1/compile` check each report's GPS fix against the key's
+hexagon: accepted inside the hexagon or its `ring` of neighbours (k=1: the 6 around it), or when the
+fix's accuracy circle (`geo.accuracy_m`, counted up to `max_accuracy_m`) reaches the hexagon. The key
+must also be a valid H3 cell at the ClaimType's resolution, for the ClaimType's domain and topic.
 
 ## Example: flood_v1.yaml
 

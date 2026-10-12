@@ -35,6 +35,9 @@
         },
         "packages/kaori-spec/schemas/earth/sky_cover_v1.yaml": {
             "sha256": "9a05b4e99dec3de0a0d5b9f731fdfe5978508c2ba24003873374e8299906e3c7"
+        },
+        "packages/kaori-spec/schemas/earth/flood_water_v2.yaml": {
+            "sha256": "ba2d82b378f128102e6a530310fe9f00b54712f792eae8b9b61ac37060bdfc50"
         }
     }
 }
