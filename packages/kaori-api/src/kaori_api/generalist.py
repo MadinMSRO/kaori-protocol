@@ -22,6 +22,7 @@ from kaori_truth.primitives.observation import Observation
 from kaori_truth.primitives.truthkey import parse_truthkey
 from pydantic import BaseModel, Field, field_validator
 
+from kaori_api.cells import is_cell, position_fits, position_rule
 from kaori_api.validation import GENERALIST_AGENT_ID
 
 LOGGER = logging.getLogger(__name__)
@@ -533,8 +534,22 @@ class ClipGeneralistValidator:
         return coords
 
     @staticmethod
+    def _accuracies_from_package(request: ValidatorRequest) -> Dict[Tuple[float, float], float]:
+        out: Dict[Tuple[float, float], float] = {}
+        for observation in request.observations:
+            geo = observation.geo if isinstance(observation.geo, dict) else {}
+            try:
+                lat, lon, acc = float(geo["lat"]), float(geo["lon"]), geo.get("accuracy_m", geo.get("accuracy"))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if isinstance(acc, (int, float)) and not isinstance(acc, bool) and math.isfinite(acc) and acc >= 0:
+                out[(lat, lon)] = float(acc)
+        return out
+
+    @staticmethod
     def _package_outside_truthkey_h3(request: ValidatorRequest, config: dict) -> bool:
-        """True when package lat/lon is present and outside the TruthKey H3 cell."""
+        """True when package lat/lon is present and outside the TruthKey H3 cell (or, for a ClaimType with
+        truthkey.position, outside the hexagon's ring and the fix's accuracy)."""
         coords = ClipGeneralistValidator._coords_from_package(request)
         if not coords:
             return False
@@ -549,6 +564,14 @@ class ClipGeneralistValidator:
             resolution = int(truthkey_cfg.get("resolution", 8))
         except (TypeError, ValueError):
             resolution = 8
+        rule = position_rule(config)
+        if rule is not None and is_cell(parsed.spatial_id):
+            # res 10 ground claims: the hexagon, its ring of neighbours, or within GPS accuracy (cells.py)
+            accuracies = ClipGeneralistValidator._accuracies_from_package(request)
+            return any(
+                not position_fits(parsed.spatial_id, lat, lon, accuracies.get((lat, lon)), rule)
+                for lat, lon in coords
+            )
         observed_cells = [
             ClipGeneralistValidator._h3_cell(lat, lon, resolution) for lat, lon in coords
         ]

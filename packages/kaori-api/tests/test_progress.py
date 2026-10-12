@@ -37,14 +37,16 @@ def _progress(client, key=KEY, who="madin", **params):
 def test_progress_counts_reporters_until_the_truth_compiles(env):
     client, flow = env
     signals = len(flow.store.get_all())
-    assert _progress(client) == {"truthkey": KEY, "received": 0, "required": None, "status": "PENDING"}
+    assert _progress(client) == {"truthkey": KEY, "cell": "883f6e36d3fffff", "resolution": 8,
+                                 "received": 0, "required": None, "status": "PENDING"}
     assert _progress(client, claim_type_id=CLAIM)["required"] == 3
     assert client.get(f"/v1/truth/{KEY}", headers=_h("madin")).status_code == 404
     assert len(flow.store.get_all()) == signals                              # read-only
 
     first = _report(client, "madin")
     assert first.status_code == 202
-    assert _progress(client, who="madin") == {"truthkey": KEY, "received": 1, "required": 3, "status": "PENDING"}
+    assert _progress(client, who="madin") == {"truthkey": KEY, "cell": "883f6e36d3fffff", "resolution": 8,
+                                              "received": 1, "required": 3, "status": "PENDING"}
     assert _report(client, "aisha").status_code == 202
     # the first reporter learns of the second without reporting again; any member may ask
     assert _progress(client, who="madin")["received"] == 2

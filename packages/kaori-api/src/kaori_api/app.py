@@ -45,7 +45,7 @@ from kaori_truth.primitives.truthstate import TruthState, TruthStatus
 from kaori_truth.signing import production_signing_required
 from pydantic import ValidationError
 
-from kaori_api import admin, antalya, devices, evidence_kinds
+from kaori_api import admin, antalya, cells, devices, evidence_kinds
 from kaori_api.auth import (
     AuthError,
     FirebaseCerts,
@@ -701,6 +701,12 @@ def create_app(
             )
         validate_evidence_refs(observations, claim_type)
         validate_payload_fields(observations, claim_type)
+        # ClaimTypes with truthkey.position (the res 10 ground claims): the key is their hexagon and each
+        # report stands in it, in its ring of neighbours, or within its GPS accuracy of it (kaori_api.cells)
+        try:
+            cells.check_report_position(claim_type.get_config() or {}, truth_key, observations)
+        except cells.PositionError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         try:
             for observation in observations:
                 for evidence_ref in observation.evidence_refs:
@@ -771,6 +777,7 @@ def create_app(
                 status_code=202,
                 content={
                     "truthkey": truth_key,
+                    **cells.cell_info(truth_key),
                     "status": "PENDING",
                     "observation_progress": {
                         "received": distinct_reporters,

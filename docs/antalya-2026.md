@@ -48,7 +48,8 @@ python -m kaori_api.antalya seed user:<firebase-uid> "<callsign>"
 | `GET /v1/export` | `Bearer $KAORI_EXPORT_TOKEN` | NDJSON: every Signal, then every TruthState |
 | `GET /v1/me` | signed in | `{agent_id, member, device, device_required}` |
 | `DELETE /v1/me` | signed in | `{agent_id, member: false, left: true, appended}`. Leaves: MEMBERSHIP_ENDED, DEVICE_UNLINKED, INVITE_CANCELLED for open invites and a waiting join. Idempotent |
-| `GET /v1/progress/{truthkey}` | signed in | `{truthkey, received, required, status}`. Reporters so far; `PENDING` until a TruthState exists. Read-only, never 404 |
+| `GET /v1/progress/{truthkey}` | signed in | `{truthkey, cell, resolution, received, required, status}`. Reporters so far; `PENDING` until a TruthState exists. `cell`/`resolution`: the key's H3 cell (null for a non-H3 key). Read-only, never 404 |
+| `GET /v1/truths?cells=<h3>,<h3>…` | signed in | `{cells, truths: [{truthkey, claim_type_id, cell, resolution, time_bucket, status, claim, confidence, lights}]}`. Truths whose cell is a requested cell, an ancestor of one or a descendant of one; `lights` = the requested cells it covers (a res 8 sky truth lights its res 10 children). Also `&cell=` (repeatable), `&claim_type_id=a,b`, `&since=<ISO time>` (time buckets starting then or later). Up to 5000 cells. Read-only |
 | `POST /v1/devices/challenge` | member | `{challenge, package, expires_in}`: single use, ten minutes, bound to the caller |
 | `POST /v1/devices/link` | member | `{challenge, chain: [base64 DER, leaf first]}` → `{device_id: "sensor:android-…", security_level, verified_boot_state, …}` or 403 with `reasons` |
 
@@ -56,6 +57,18 @@ python -m kaori_api.antalya seed user:<firebase-uid> "<callsign>"
 `{exif:{datetime_original, offset_time?, tz_offset_min?, gps:{lat,lon}}, capture_source:"camera", device:{platform, model, app_version}}`.
 It is recorded as `PROVENANCE_RECORDED`, with the checks behind the validator's badge: in-app capture, time within
 120 s, place within 150 m.
+
+### Hexagon sizes
+
+Each ClaimType keeps its own H3 resolution. Sky cover (`earth.sky_cover.v1`) is res 8. The ground claims are
+res 10 from their v2 on: `earth.flood_water.v2`, `earth.vegetation.v2`, `earth.coastal_erosion.v2` (the app's
+shoreline); their v1 types stay registered and their truths stay in the ledger. The map draws islands as res 10
+hexagons and lights each truth's res 10 children, from `GET /v1/truths`.
+
+A v2 ground claim's `truthkey.position` makes `/v1/compile` refuse (400) a key that is not a res 10 H3 cell of
+that claim's topic, and a report whose `geo` is not in the key's hexagon or one of the 6 around it (165-200 m from
+the centre). A fix just outside that ring still counts when `geo.accuracy_m` (counted up to 100 m) reaches the
+hexagon. v1 types are not checked.
 
 ## Where this differs from the plan
 

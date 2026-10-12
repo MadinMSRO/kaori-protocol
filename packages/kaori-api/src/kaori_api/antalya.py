@@ -59,7 +59,7 @@ from fastapi.responses import Response, StreamingResponse
 from kaori_flow import FlowCore
 from kaori_flow.primitives.signal import Signal, SignalTypes
 
-from kaori_api import devices, evidence_kinds, names
+from kaori_api import cells, devices, evidence_kinds, names
 from kaori_api.evidence_kinds import strip_photo
 from kaori_api.generalist_client import generalist_timeout_seconds
 
@@ -1075,6 +1075,8 @@ def progress(observation_store: Any, truth_store: Any, claim_types: Callable[[st
     ClaimType's minimum_observations), from the key's reports or ?claim_type_id= before anyone has reported;
     None when neither is known. `status` is the TruthState's once one exists, otherwise PENDING. People who
     have since left still count: their reports stay.
+    `cell` and `resolution` are the key's H3 cell (None for a non-H3 key), so the map can light its res 10
+    children.
     """
     received = observation_store.count_distinct_reporters(truth_key)
     observations = observation_store.get_for_truthkey(truth_key) if received else []
@@ -1087,7 +1089,8 @@ def progress(observation_store: Any, truth_store: Any, claim_types: Callable[[st
             required = None
     stored = truth_store.get(truth_key)
     status = (stored.get("status") if isinstance(stored, dict) else None) or "PENDING"
-    return {"truthkey": truth_key, "received": received, "required": required, "status": status}
+    return {"truthkey": truth_key, **cells.cell_info(truth_key), "received": received, "required": required,
+            "status": status}
 
 
 # --------------------------------------------------------------------------------------------- export
@@ -1115,7 +1118,7 @@ def check_export_token(request: Request) -> None:
 # --------------------------------------------------------------------------------------------- routes
 
 def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[..., Any]) -> None:
-    from fastapi import Depends
+    from fastapi import Depends, Query
 
     lock = threading.Lock()
 
@@ -1188,6 +1191,32 @@ def add_routes(app: Any, require_agent: Callable, vote_and_compile: Callable[...
     def truth_progress(truthkey: str, claim_type_id: Optional[str] = None, agent_id: str = Depends(require_agent)):
         return progress(app.state.observation_store, app.state.truth_store, claim_type_resolver(app),
                         truthkey, claim_type_id)
+
+    @app.get("/v1/truths")
+    def truths_by_cell(request: Request, cells_param: Optional[str] = Query(None, alias="cells"),
+                       cell: Optional[List[str]] = Query(None), claim_type_id: Optional[str] = None,
+                       since: Optional[datetime] = None, agent_id: str = Depends(require_agent)):
+        """
+        Truths for the island map: GET /v1/truths?cells=<h3>,<h3>...[&claim_type_id=a,b][&since=<ISO time>]
+        (or repeated &cell=). Every truth whose cell is a requested cell, an ancestor of one (a res 8 sky
+        truth for res 10 island cells) or a descendant of one, at its latest state, newest bucket first, each
+        with `lights`: the requested cells it covers. Read-only.
+        """
+        wanted = cells.parse_cells([cells_param or ""] + list(cell or []))
+        if not wanted:
+            raise HTTPException(status_code=400, detail="Give one or more H3 cells: ?cells=<h3>,<h3>")
+        if len(wanted) > cells.MAX_CELLS:
+            raise HTTPException(status_code=400, detail=f"At most {cells.MAX_CELLS} cells per request")
+        bad = [c for c in wanted if not cells.is_cell(c)]
+        if bad:
+            raise HTTPException(status_code=400, detail=f"Not an H3 cell: {bad[0]}")
+        if since is not None and since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+        claim_ids = [c.strip() for c in claim_type_id.split(",") if c.strip()] if claim_type_id else None
+        keys = [s.object_id for s in app.state.flow.store.get_by_type(SignalTypes.TRUTHSTATE_EMITTED)]
+        return {"cells": wanted,
+                "truths": cells.truths_for_cells(keys, app.state.truth_store, wanted,
+                                                 claim_type_ids=claim_ids, since=since)}
 
     @app.get("/v1/me")
     def whoami(agent_id: str = Depends(require_agent)):

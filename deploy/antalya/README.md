@@ -109,6 +109,15 @@ gives `received: 0`, so the first reporter's phone can see the second report arr
 Both are new in the API image: `./deploy/antalya/deploy.sh build`, then `./deploy/antalya/deploy.sh api`.
 Until then the app says account deletion needs a server update, and falls back to its old progress polling.
 
+### Res 10 ground claims
+
+`earth.flood_water.v2`, `earth.vegetation.v2` and `earth.coastal_erosion.v2` are the ground claims on H3 res 10
+hexagons (the v1 types stay). Progress answers also carry `cell` and `resolution`, and
+`GET /v1/truths?cells=<res 10 cells>` returns the truths that light those cells, including a res 8 sky truth
+over them (see docs/antalya-2026.md). ClaimTypes are files in both images, so this needs both rebuilt and
+both services redeployed: `./deploy/antalya/deploy.sh build`, `./deploy/antalya/deploy.sh generalist` (the AI
+reader loads the new YAMLs) and `./deploy/antalya/deploy.sh api`. No database migration.
+
 ## Getting the data out
 
 ```bash

@@ -13,7 +13,29 @@ AUTH_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 AGENT_ID = f"user:{AUTH_USER_ID}"
 TOKEN = "valid-supabase-token"
 
+# The ground claims on res 10 hexagons: a real H3 cell around the observations' geo (-8.3405, 115.0920)
+RES10 = "8a8db5804c5ffff"
+
 PRODUCT_CLAIMS = [
+    (
+        "earth.flood_water.v2",
+        f"earth:flood_water:h3:{RES10}:surface:2026-01-07T12:00Z",
+        {"water_present": True, "extent": "street"},
+    ),
+    (
+        "earth.coastal_erosion.v2",
+        f"earth:coastal_erosion:h3:{RES10}:surface:2026-01-07T00:00Z",
+        {"recession_m": 1.5, "scarp_present": True, "stake_readings": [0.1, 0.2]},
+    ),
+    (
+        "earth.vegetation.v2",
+        f"earth:vegetation:h3:{RES10}:surface:2026-01-07T00:00Z",
+        {
+            "health_assessment": "moderate",
+            "human_activity": False,
+            "transect_photos": ["gs://kaori-evidence/t1.jpg"],
+        },
+    ),
     (
         "earth.flood_water.v1",
         "earth:flood_water:h3:886142a8e7fffff:surface:2026-01-07T12:00Z",
