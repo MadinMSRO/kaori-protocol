@@ -192,7 +192,7 @@ validation_flow:
 # ----------------------------------------------------------------------------
 consensus_model:
   type: weighted_threshold
-  finalize_threshold: 15
+  finalize_threshold: 8            # two validators at starting standing (100 → weight ~4.5 each) who agree
   reject_threshold: -10
   weighted_roles:
     bronze: 1

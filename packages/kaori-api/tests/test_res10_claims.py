@@ -63,9 +63,11 @@ def test_v2_is_v1_on_res_10_with_a_position_rule(name):
     # verified by readings, as sky cover, and 2 reporters on the small hexagon; everything else is v1's
     assert v2["verification"] == {"rule": "weighted_readings"} and "verification" not in v1
     assert v2["implicit_consensus"]["min_observations"] == 2
+    assert v2["consensus_model"]["finalize_threshold"] == 8
     def strip(raw):
         out = {k: v for k, v in raw.items() if k not in ("id", "version", "truthkey", "verification")}
         out["implicit_consensus"] = {k: v for k, v in raw["implicit_consensus"].items() if k != "min_observations"}
+        out["consensus_model"] = {k: v for k, v in raw["consensus_model"].items() if k != "finalize_threshold"}
         return out
     assert strip(v2) == strip(v1)
     loaded = load_claim_type(SCHEMAS / "earth" / f"{name}_v2.yaml")
@@ -277,3 +279,17 @@ def test_truths_needs_cells_and_sign_in(env):
     assert client.get("/v1/truths", params={"cells": CELL10}).status_code == 401
     assert client.get("/v1/truths", headers=_h("v1")).status_code == 400
     assert client.get("/v1/truths", headers=_h("v1"), params={"cells": "nothex"}).status_code == 400
+
+
+def test_two_validators_who_agree_verify_a_key(env):
+    client, _ = env
+    # no AI reading: two people at the starting standing (weight ~4.5 each) reach the bar of 8 on their own
+    client.app.state.ai_reader = None
+    for who in ("madin", "amira"):
+        _report(client, who)
+    for validator in ("v1", "v2"):
+        for item in client.get("/v1/assignments?limit=5", headers=_h(validator)).json():
+            client.post(f"/v1/assignments/{item['assignment_id']}/reading", headers=_h(validator),
+                        json={"values": {"water_present": True, "extent": "street"}})
+    truth = client.get(f"/v1/truth/{FLOOD_KEY}", headers=_h("madin")).json()
+    assert truth["status"] == "VERIFIED_TRUE", truth
