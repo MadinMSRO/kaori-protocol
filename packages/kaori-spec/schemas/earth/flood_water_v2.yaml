@@ -170,6 +170,11 @@ autovalidation:
 # ----------------------------------------------------------------------------
 # Human Gating (Section 13 of SPEC)
 # ----------------------------------------------------------------------------
+# One rule for every reader, human or AI (kaori_truth.compiler), as sky cover: each validator's reading backs the
+# claim when its photo shows the claimed value; verified at consensus_model.finalize_threshold.
+verification:
+  rule: weighted_readings
+
 human_gating:
   always_require_human: false
   required_for_risk_profiles: ["critical"]
@@ -208,7 +213,7 @@ consensus_model:
 # to determine implicit consensus without requiring explicit votes.
 implicit_consensus:
   enabled: true
-  min_observations: 3              # Need at least 3 independent reports
+  min_observations: 2              # 2 independent reports: a res 10 hexagon is ~66 m across
   min_network_trust: 50.0          # Sum of reporter standings
   min_ai_confidence: 0.80          # Average AI confidence across observations
   max_ai_variance: 0.15            # Low variance = no contradiction

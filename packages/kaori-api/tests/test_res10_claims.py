@@ -60,12 +60,17 @@ def test_v2_is_v1_on_res_10_with_a_position_rule(name):
     assert v2["truthkey"]["position"] == {"ring": 1, "max_accuracy_m": 100}
     for field in ("spatial_system", "z_index", "time_bucket"):
         assert v2["truthkey"][field] == v1["truthkey"][field]
-    # everything else is v1's, unchanged
-    strip = lambda raw: {k: v for k, v in raw.items() if k not in ("id", "version", "truthkey")}  # noqa: E731
+    # verified by readings, as sky cover, and 2 reporters on the small hexagon; everything else is v1's
+    assert v2["verification"] == {"rule": "weighted_readings"} and "verification" not in v1
+    assert v2["implicit_consensus"]["min_observations"] == 2
+    def strip(raw):
+        out = {k: v for k, v in raw.items() if k not in ("id", "version", "truthkey", "verification")}
+        out["implicit_consensus"] = {k: v for k, v in raw["implicit_consensus"].items() if k != "min_observations"}
+        return out
     assert strip(v2) == strip(v1)
     loaded = load_claim_type(SCHEMAS / "earth" / f"{name}_v2.yaml")
     assert loaded.truthkey.resolution == 10
-    assert loaded.minimum_observations() == load_claim_type(SCHEMAS / "earth" / f"{name}_v1.yaml").minimum_observations()
+    assert loaded.minimum_observations() == 2
 
 
 def test_v1_types_stay_and_sky_cover_is_unchanged():
@@ -187,23 +192,25 @@ def test_a_report_is_filed_on_its_res_10_hexagon(env):
     assert r.json()["cell"] == CELL10 and r.json()["resolution"] == 10
     progress = client.get(f"/v1/progress/{FLOOD_KEY}", headers=_h("amira")).json()
     assert progress == {"truthkey": FLOOD_KEY, "cell": CELL10, "resolution": 10,
-                        "received": 1, "required": 3, "status": "PENDING"}
+                        "received": 1, "required": 2, "status": "PENDING"}
     # a res 8 key, a fix 1 km away, and a fix with no position are refused before anything is stored
     assert _report(client, "amira", key=f"earth:flood_water:h3:{CELL8}:surface:2026-10-05T09:00Z").status_code == 400
     far = _report(client, "amira", geo=_offset(HERE["lat"], HERE["lon"], metres_east=1000))
     assert far.status_code == 400 and "outside" in far.json()["detail"]
     assert client.get(f"/v1/progress/{FLOOD_KEY}", headers=_h("amira")).json()["received"] == 1
-    # GPS jitter into the next hexagon is still this hexagon's report
+    # GPS jitter into the next hexagon is still this hexagon's report (the second, so the key compiles)
     neighbour = h3.cell_to_latlng(next(c for c in h3.grid_ring(CELL10, 1)))
-    assert _report(client, "amira", geo={"lat": neighbour[0], "lon": neighbour[1], "accuracy_m": 12.0}).status_code == 202
+    second = _report(client, "amira", geo={"lat": neighbour[0], "lon": neighbour[1], "accuracy_m": 12.0})
+    assert second.status_code == 200, second.text
 
 
-def _three_reports_and_readings(client, claim, key):
-    assert _report(client, "madin", claim=claim, key=key).status_code == 202
-    assert _report(client, "amira", claim=claim, key=key).status_code == 202
-    third = _report(client, "omar", claim=claim, key=key)
-    assert third.status_code == 200, third.text
-    assert third.json()["claim"] == WATER and third.json()["claim_type"] == claim
+def _reports_and_readings(client, claim, key, reporters):
+    *first, last = reporters
+    for who in first:
+        assert _report(client, who, claim=claim, key=key).status_code == 202
+    final = _report(client, last, claim=claim, key=key)
+    assert final.status_code == 200, final.text
+    assert final.json()["claim"] == WATER and final.json()["claim_type"] == claim
     for validator in ("v1", "v2", "v3"):
         for item in client.get("/v1/assignments?limit=5", headers=_h(validator)).json():
             assert item["claim_type_id"] == claim
@@ -213,21 +220,20 @@ def _three_reports_and_readings(client, claim, key):
     return client.get(f"/v1/truth/{key}", headers=_h("madin")).json()
 
 
-def test_consensus_on_a_res_10_key_is_the_same_as_on_v1(env):
+def test_a_res_10_key_verifies_from_two_reports_and_the_readings(env):
     client, flow = env
     # the AI reads each photo as a validator does (it sees the same water), as in production
     client.app.state.ai_reader = lambda claim_type_id, image: {"values": dict(WATER), "probs": {}, "relevance": 0.95}
-    v2 = _three_reports_and_readings(client, FLOOD, FLOOD_KEY)
+    v2 = _reports_and_readings(client, FLOOD, FLOOD_KEY, ("madin", "amira"))
     votes = [(s.agent_id, s.payload["vote"]) for s in flow.store.get_by_type(SignalTypes.VALIDATION_VOTE)]
-    assert [v for a, v in votes if a.startswith("user:")] == ["RATIFY"] * 9
-    assert [v for a, v in votes if a == antalya.AI_AGENT] == ["RATIFY"] * 3
-    assert v2["consensus"]["finalized"] is True and v2["claim"] == WATER
+    assert [v for a, v in votes if a.startswith("user:")] == ["RATIFY"] * 6
+    assert [v for a, v in votes if a == antalya.AI_AGENT] == ["RATIFY"] * 2
+    assert v2["claim"] == WATER and v2["status"] == "VERIFIED_TRUE", v2
 
-    v1 = _three_reports_and_readings(client, "earth.flood_water.v1",
-                                     f"earth:flood_water:h3:{CELL8}:surface:2026-10-05T09:00Z")
-    for field in ("status", "claim", "confidence", "verification_basis"):
-        assert v2[field] == v1[field], field
-    assert (v2["consensus"]["score"], v2["consensus"]["finalized"]) == (v1["consensus"]["score"], v1["consensus"]["finalized"])
+    # v1 (no readings rule) still waits for an AI confidence the readings never give
+    v1 = _reports_and_readings(client, "earth.flood_water.v1",
+                               f"earth:flood_water:h3:{CELL8}:surface:2026-10-05T09:00Z", ("madin", "amira", "omar"))
+    assert v1["status"] != "VERIFIED_TRUE"
 
 
 def test_truths_light_res_10_cells_from_their_own_cell_and_ancestors(env):

@@ -185,6 +185,10 @@ def client() -> TestClient:
     return TestClient(create_app(flow=flow, verify_token=verify_token))
 
 
+# implicit_consensus.min_observations where it isn't 3: the res 10 ground claims (a ~66 m hexagon)
+MIN_REPORTS = {"earth.flood_water.v2": 2, "earth.vegetation.v2": 2, "earth.coastal_erosion.v2": 2}
+
+
 @pytest.mark.parametrize("claim_type_id,truth_key,payload", PRODUCT_CLAIMS)
 def test_product_claim_type_compiles_200(client: TestClient, claim_type_id, truth_key, payload):
     observation_ids = (
@@ -192,9 +196,11 @@ def test_product_claim_type_compiles_200(client: TestClient, claim_type_id, trut
         "22222222-2222-2222-2222-222222222222",
         "33333333-3333-3333-3333-333333333333",
     )
+    # as many reports as the claim type asks for (v2 ground claims on res 10 need 2), the last one by TOKEN
+    observation_ids = observation_ids[-MIN_REPORTS.get(claim_type_id, 3):]
     responses = []
     for index, observation_id in enumerate(observation_ids):
-        token = TOKEN if index == 2 else f"reporter-{index}"
+        token = TOKEN if index == len(observation_ids) - 1 else f"reporter-{index}"
         responses.append(
             client.post(
                 "/v1/compile",
@@ -206,8 +212,8 @@ def test_product_claim_type_compiles_200(client: TestClient, claim_type_id, trut
                 headers={"Authorization": f"Bearer {token}"},
             )
         )
-    assert [item.status_code for item in responses[:2]] == [202, 202]
-    response = responses[2]
+    assert [item.status_code for item in responses[:-1]] == [202] * (len(responses) - 1)
+    response = responses[-1]
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["claim_type"] == claim_type_id
