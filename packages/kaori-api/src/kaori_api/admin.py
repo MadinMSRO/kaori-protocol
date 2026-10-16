@@ -92,6 +92,7 @@ def members(flow: FlowCore) -> List[Dict[str, Any]]:
             "device": None if device is None else {
                 "device_id": device.object_id, "linked_at": _iso(device.time),
                 "security_level": device.payload.get("security_level"),
+                "platform": device.payload.get("platform", "android"),
             },
             "reports": reports.get(s.agent_id, 0),
             "readings": readings.get(s.agent_id, 0),
@@ -153,12 +154,13 @@ def truths(flow: FlowCore, truth_store: Any) -> List[Dict[str, Any]]:
 def device_report(flow: FlowCore) -> Dict[str, Any]:
     names = _callsigns(flow)
     linked = [{"device_id": s.object_id, "agent_id": s.agent_id, "callsign": names.get(s.agent_id),
-               "linked_at": _iso(s.time), **{k: s.payload.get(k) for k in
+               "linked_at": _iso(s.time), "platform": s.payload.get("platform", "android"), **{k: s.payload.get(k) for k in
                ("security_level", "verified_boot_state", "os_patch_level", "app_cert_ok")}}
               for s in devices.linked_devices(flow).values()]
     refused = [{"agent_id": s.agent_id, "callsign": names.get(s.agent_id), "at": _iso(s.time),
                 "reasons": (s.payload or {}).get("reasons", []),
-                "security_level": (s.payload or {}).get("security_level")}
+                "security_level": (s.payload or {}).get("security_level"),
+                "platform": (s.payload or {}).get("platform", "android")}
                for s in sorted(flow.store.get_by_type(SignalTypes.DEVICE_LINK_REFUSED), key=lambda s: s.time, reverse=True)]
     return {"linked": sorted(linked, key=lambda d: d["linked_at"] or "", reverse=True), "refused": refused}
 

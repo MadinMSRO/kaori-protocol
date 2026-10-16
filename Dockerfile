@@ -30,6 +30,7 @@ RUN pip install --no-cache-dir \
         "google-cloud-storage" \
         "google-auth>=2.30.0" \
         "cryptography>=42.0.0" \
+        "cbor2>=5.4.0" \
         "python-multipart" \
         "Pillow>=12.3.0" \
         "h3>=4.0.0" \

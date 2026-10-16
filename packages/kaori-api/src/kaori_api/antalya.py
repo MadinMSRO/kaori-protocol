@@ -39,8 +39,6 @@ the offline v5.0 analysis.
 """
 from __future__ import annotations
 
-import base64
-import binascii
 import hashlib
 import io
 import json
@@ -443,20 +441,19 @@ def _hold_evidence(flow: FlowCore, agent_id: str, chash: str, red: Signal, proof
     evidence: Dict[str, Any] = {"in_person": "nfc_hold", "hold_ms": hold_ms, "device_id": None, "device_verified": False}
     device = proof.get("device")
     if isinstance(device, dict):
-        from kaori_api import attestation
-        from kaori_api.devices import linked_devices
+        from kaori_api.devices import linked_devices, verify_signed
 
-        device_id, signature = device.get("device_id"), device.get("signature")
+        # Android sends {device_id, signature}; an iPhone {device_id, assertion} (App Attest)
+        device_id = device.get("device_id")
         linked = linked_devices(flow).get(device_id) if isinstance(device_id, str) else None
-        if linked is not None and linked.agent_id == agent_id and isinstance(signature, str):
+        if linked is not None and linked.agent_id == agent_id and \
+                isinstance(device.get("signature", device.get("assertion")), str):
             evidence["device_id"] = device_id
-            try:
-                spki = base64.b64decode(linked.payload["public_key_spki"])
-                sig = base64.b64decode(signature, validate=True)
-                text = HOLD_TEXT.format(invite=chash, nonce=nonce, hold_ms=hold_ms)
-                evidence["device_verified"] = attestation.verify_signature(spki, text.encode("utf-8"), sig)
-            except (KeyError, binascii.Error, ValueError):
-                pass
+            text = HOLD_TEXT.format(invite=chash, nonce=nonce, hold_ms=hold_ms)
+            ok, _, counter = verify_signed(flow, linked, text.encode("utf-8"), device)
+            evidence["device_verified"] = ok
+            if counter is not None:
+                evidence["device_counter"] = counter
     return evidence
 
 

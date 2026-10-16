@@ -4,12 +4,18 @@ KAORI_DEV_FAKE_PHONE=1). It makes EC P-256 keys and attestation chains under its
 like a real Android Keystore's: secure hardware (TEE), verified boot, a locked bootloader, made by
 mv.msro.liminal signed with FAKE_APP_CERT. The dev server trusts only this root; a deployed Kaori trusts
 only Google's.
+
+FakeAppAttest is the same for iPhones (App Attest does not work in the iOS Simulator): keys attested for
+FAKE_APPLE_APP_ID under its own root, and assertions with a counter that goes up. A deployed Kaori trusts
+only Apple's App Attestation root.
 """
 from __future__ import annotations
 
 import base64
 import datetime as dt
 import hashlib
+
+import cbor2
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -18,6 +24,8 @@ from cryptography.x509.oid import NameOID
 
 KEY_DESCRIPTION_OID = "1.3.6.1.4.1.11129.2.1.17"
 FAKE_APP_CERT = hashlib.sha256(b"liminal dev signing certificate").hexdigest()
+FAKE_APPLE_APP_ID = "DEVTEAM000.mv.msro.liminal"
+APP_ATTEST_NONCE_OID = "1.2.840.113635.100.8.2"
 
 
 def _der(tag: int, body: bytes, cls: int = 0, constructed: bool = False) -> bytes:
@@ -92,3 +100,43 @@ class FakeChip:
 
     def sign(self, alias: str, text: str) -> str:
         return base64.b64encode(self.keys[alias].sign(text.encode(), ec.ECDSA(hashes.SHA256()))).decode()
+
+
+class FakeAppAttest:
+    """DCAppAttestService, shaped like the real one: attestKey and generateAssertion, base64 in and out."""
+
+    def __init__(self, app_id: str = FAKE_APPLE_APP_ID):
+        self.app_id = app_id
+        self.root = _Ca("Liminal dev App Attest root (not Apple)")
+        self.inter = _Ca("Liminal dev App Attest CA", issuer=self.root)
+        self.keys: dict[str, ec.EllipticCurvePrivateKey] = {}
+        self.counters: dict[str, int] = {}
+
+    def attest(self, alias: str, challenge: bytes) -> dict:
+        """attestKey(keyId, clientDataHash: SHA256(challenge)) for a new key: {keyId, attestationObject}."""
+        key = ec.generate_private_key(ec.SECP256R1())
+        self.keys[alias], self.counters[alias] = key, 0
+        point = key.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+        key_id = hashlib.sha256(point).digest()
+        cose = cbor2.dumps({1: 2, 3: -7, -1: 1, -2: point[1:33], -3: point[33:]})
+        auth = (hashlib.sha256(self.app_id.encode()).digest() + b"\x40" + (0).to_bytes(4, "big")
+                + b"appattest" + b"\x00" * 7 + len(key_id).to_bytes(2, "big") + key_id + cose)
+        nonce = hashlib.sha256(auth + hashlib.sha256(challenge).digest()).digest()
+        now = dt.datetime.now(dt.timezone.utc)
+        leaf = (x509.CertificateBuilder().subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, key_id.hex())]))
+                .issuer_name(self.inter.name).public_key(key.public_key()).serial_number(x509.random_serial_number())
+                .not_valid_before(now - dt.timedelta(minutes=1)).not_valid_after(now + dt.timedelta(days=3))
+                .add_extension(x509.UnrecognizedExtension(x509.ObjectIdentifier(APP_ATTEST_NONCE_OID),
+                                                          _seq(_tagged(1, _oct(nonce)))), critical=False)
+                .sign(self.inter.key, hashes.SHA256()))
+        obj = cbor2.dumps({"fmt": "apple-appattest", "authData": auth, "attStmt": {
+            "x5c": [leaf.public_bytes(serialization.Encoding.DER), self.inter.der], "receipt": b""}})
+        return {"keyId": base64.b64encode(key_id).decode(), "attestationObject": base64.b64encode(obj).decode()}
+
+    def assertion(self, alias: str, text: str) -> str:
+        """generateAssertion(keyId, clientDataHash: SHA256(text)), base64."""
+        self.counters[alias] += 1
+        auth = hashlib.sha256(self.app_id.encode()).digest() + b"\x00" + self.counters[alias].to_bytes(4, "big")
+        nonce = hashlib.sha256(auth + hashlib.sha256(text.encode()).digest()).digest()
+        signature = self.keys[alias].sign(nonce, ec.ECDSA(hashes.SHA256()))
+        return base64.b64encode(cbor2.dumps({"signature": signature, "authenticatorData": auth})).decode()

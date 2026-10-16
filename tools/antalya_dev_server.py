@@ -4,6 +4,8 @@ no AI service, and stand-in logins: "Bearer tok-X" is user:X, "Bearer ai-general
 Seeds from KAORI_DEV_SEEDS (comma-separated names, default "S"). Export token: KAORI_EXPORT_TOKEN (default dev-export).
 KAORI_DEV_FAKE_PHONE=1 adds a stand-in secure chip at /__fake_phone/* (tools/fake_phone.py) and trusts only its
 test root for linking phones, so the app's link and signing code can run end to end without an Android phone.
+It also adds a stand-in App Attest at /__fake_phone/ios/* for iPhones (and the Simulator, which has no App
+Attest), for the App ID DEVTEAM000.mv.msro.liminal, trusting only its own root in place of Apple's.
 
     KAORI_SCHEMA_PATH=packages/kaori-spec/schemas python tools/antalya_dev_server.py
 """
@@ -59,11 +61,14 @@ if os.environ.get("KAORI_DEV_FAKE_PHONE") == "1":
     from kaori_api import attestation, devices
 
     sys.path.insert(0, str(Path(__file__).parent))
-    from fake_phone import FAKE_APP_CERT, FakeChip
+    from fake_phone import FAKE_APP_CERT, FAKE_APPLE_APP_ID, FakeAppAttest, FakeChip
 
     chip = FakeChip()
     devices.TRUST = attestation.TrustData([chip.root.spki], {})
     os.environ["KAORI_ANDROID_CERT_SHA256"] = FAKE_APP_CERT
+    app_attest = FakeAppAttest()
+    devices.APPLE_ROOTS = [app_attest.root.cert]
+    os.environ["KAORI_APPLE_APP_ID"] = FAKE_APPLE_APP_ID
 
     @app.post("/__fake_phone/generate")
     def fake_generate(body: dict = Body(...)):
@@ -72,6 +77,16 @@ if os.environ.get("KAORI_DEV_FAKE_PHONE") == "1":
     @app.post("/__fake_phone/sign")
     def fake_sign(body: dict = Body(...)):
         return {"signature": chip.sign(body["alias"], body["text"])}
+
+    @app.post("/__fake_phone/ios/attest")
+    def fake_attest(body: dict = Body(...)):
+        """{alias, challenge} -> {keyId, attestationObject}: send these to /v1/devices/link with platform "ios"."""
+        return app_attest.attest(body["alias"], body["challenge"].encode())
+
+    @app.post("/__fake_phone/ios/assert")
+    def fake_assert(body: dict = Body(...)):
+        """{alias, text} -> {assertion}: the device_proof's assertion for that signed text."""
+        return {"assertion": app_attest.assertion(body["alias"], body["text"])}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("PORT", "8787")), log_level="warning")

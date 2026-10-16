@@ -101,6 +101,41 @@ Certificates are read with Kaori's own DER reader, not a strict X.509 parser: so
 certificates with harmless encoding quirks. It is tested on Google's real sample chains
 (`tests/data/attestation`).
 
+### iPhones (Apple App Attest)
+
+An iPhone links through the same two endpoints. `POST /v1/devices/challenge` is unchanged. The app calls
+`DCAppAttestService.generateKey()`, then `attestKey(keyId, clientDataHash: SHA256(challenge as UTF-8))`, and
+sends `POST /v1/devices/link` with `{"platform": "ios", "challenge", "keyId", "attestationObject"}` (base64;
+`key_id` / `attestation_object` are accepted too). Kaori follows Apple's steps (`app_attest.py`):
+
+- the attestation is CBOR, format `apple-appattest`, and its `x5c` chain (credential certificate, then
+  intermediate) ends at Apple's App Attestation Root CA, bundled with the package; every certificate is in date;
+- the nonce in the credential certificate (OID 1.2.840.113635.100.8.2) is SHA256(authData || SHA256(challenge));
+- SHA256 of the certificate's public key is the `keyId`, and so is the credential id in authData;
+- authData's rpIdHash is SHA256 of the App ID, `KAORI_APPLE_APP_ID` (`<TEAM_ID>.mv.msro.liminal`); unset, no
+  iPhone can link;
+- the counter is 0, and the AAGUID is `appattest` (production: TestFlight, App Store). `appattestdevelop`
+  (an Xcode build) is refused unless `KAORI_APPLE_ALLOW_DEVELOP=1`.
+
+The phone becomes `sensor:ios-<first 24 hex of keyId>`; `DEVICE_LINKED` holds its public key, `key_id`, `app_id`
+and `counter` 0, with `platform: "ios"` and `security_level: "secure_enclave"`. Everything else is as for
+Android: one phone per person (an iPhone replaces an Android phone and the other way round), refusals recorded,
+and `KAORI_REQUIRE_DEVICE` applies unchanged.
+
+Reports: the iPhone signs the same JSON text an Android phone signs, with
+`generateAssertion(keyId, clientDataHash: SHA256(text))`, and sends
+`device_proof: {"platform": "ios", "device_id", "signed": text, "assertion": base64}` (an assertion sent as
+`signature` is accepted too; the platform is taken from the linked phone, not the proof). Kaori checks the
+assertion's signature over SHA256(authenticatorData || SHA256(text)) with the linked key, that its rpIdHash is the
+App ID, and its counter. Reports are signed when sealed and may upload later, out of order (the offline outbox),
+so the counter need not be the highest yet: it must never have been accepted for that key before (an exact replay
+never counts) and must be within 1000 of the highest seen (older is refused as stale, which keeps the set of
+remembered counters bounded). Accepted counters are kept in the ledger (`device_proof.counter` in
+`PROVENANCE_RECORDED`, `device_counter` in `INVITE_CONFIRMED`), so a replay is refused after a restart and on other
+instances too. NFC holds are signed the same way: `device: {"platform": "ios", "device_id", "assertion"}` over
+`liminal-hold:v1:<invite>:<nonce>:<hold_ms>`. The
+verifier is tested on a real iPhone's attestation and assertion (`tests/data/app_attest`) and on a test CA.
+
 ## The AI reads every photo as a validator does
 
 Every accepted photo is also assigned to `ai:generalist_v1`. Kaori sends `kaori-generalist` (`POST /read`) the

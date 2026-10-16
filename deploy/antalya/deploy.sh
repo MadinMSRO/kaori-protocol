@@ -29,6 +29,10 @@ REGION=${REGION:-asia-southeast1}
 SQL_TIER=${SQL_TIER:-db-g1-small}
 # Reports and readings need a phone linked by hardware attestation (set REQUIRE_DEVICE=0 to only record it)
 REQUIRE_DEVICE=${REQUIRE_DEVICE:-1}
+# iPhones are linked by Apple App Attest for this App ID, "<TEAM_ID>.<bundle id>" (empty: iPhones cannot link).
+# APPLE_ALLOW_DEVELOP=1 also accepts keys from development (Xcode) builds; TestFlight and the App Store are production.
+APPLE_APP_ID=${APPLE_APP_ID:-}
+APPLE_ALLOW_DEVELOP=${APPLE_ALLOW_DEVELOP:-0}
 # Who may use the admin panel (verified Firebase emails, comma-separated), and the web addresses it runs at
 ADMIN_EMAILS=${ADMIN_EMAILS:-madin.maseeh@gmail.com}
 ADMIN_ORIGINS=${ADMIN_ORIGINS:-https://kind-keepsake-kingdom.lovable.app,https://id-preview--3edd781a-00a9-4e58-88be-c21405c611ee.lovable.app,https://3edd781a-00a9-4e58-88be-c21405c611ee.lovableproject.com}
@@ -491,7 +495,7 @@ step_api() {
     --service-account="$API_SA" --allow-unauthenticated --set-cloudsql-instances="$SQL_CONN" \
     --cpu=1 --memory=1Gi --min-instances=1 --max-instances=1 --concurrency=40 --timeout=120 \
     --no-cpu-throttling --cpu-boost \
-    --set-env-vars="^|^KAORI_ANTALYA=1|KAORI_ENVIRONMENT=production|KAORI_SIGNING_KEY_ID=$SIGNING_KEY_ID|KAORI_OBSERVATIONS_BUCKET=$BUCKET|KAORI_GENERALIST_URL=$gen_url|FIREBASE_PROJECT_ID=$PROJECT_ID|KAORI_ANDROID_PACKAGE=$ANDROID_PACKAGE|KAORI_ANDROID_CERT_SHA256=$app_cert|KAORI_REQUIRE_DEVICE=$REQUIRE_DEVICE|KAORI_ADMIN_EMAILS=$ADMIN_EMAILS|KAORI_CORS_ORIGINS=$ADMIN_ORIGINS|KAORI_JOIN_URL=https://storage.googleapis.com/$DL_BUCKET/join.html" \
+    --set-env-vars="^|^KAORI_ANTALYA=1|KAORI_ENVIRONMENT=production|KAORI_SIGNING_KEY_ID=$SIGNING_KEY_ID|KAORI_OBSERVATIONS_BUCKET=$BUCKET|KAORI_GENERALIST_URL=$gen_url|FIREBASE_PROJECT_ID=$PROJECT_ID|KAORI_ANDROID_PACKAGE=$ANDROID_PACKAGE|KAORI_ANDROID_CERT_SHA256=$app_cert|KAORI_REQUIRE_DEVICE=$REQUIRE_DEVICE|KAORI_APPLE_APP_ID=$APPLE_APP_ID|KAORI_APPLE_ALLOW_DEVELOP=$APPLE_ALLOW_DEVELOP|KAORI_ADMIN_EMAILS=$ADMIN_EMAILS|KAORI_CORS_ORIGINS=$ADMIN_ORIGINS|KAORI_JOIN_URL=https://storage.googleapis.com/$DL_BUCKET/join.html" \
     --set-secrets="KAORI_SIGNING_KEY=$SECRET_SIGNING:latest,KAORI_VALIDATOR_SIGNING_KEY=$SECRET_VALIDATOR:latest,KAORI_EXPORT_TOKEN=$SECRET_EXPORT:latest,DATABASE_URL=$SECRET_DB:latest,KAORI_NAME_KEY=$SECRET_NAMES:latest"
   local url; url=$(service_url "$API_SERVICE")
   # Some organisations forbid public (allUsers) access; Cloud Run can skip its own check instead.
